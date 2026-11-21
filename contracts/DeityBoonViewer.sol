@@ -31,7 +31,8 @@ import {RngTags} from "./libraries/RngTags.sol";
 /// @dev Data source interface for deity boon state from the game contract.
 interface IDeityBoonDataSource {
     /// @notice Raw boon state for a deity wallet ID: the preceding day's finalized word for
-    ///         today's boons, the current day, today's used-slot mask and two eligibility flags.
+    ///         today's boons, the current day, today's used-slot mask, and whether the decimator
+    ///         window is open and deity-pass supply remains (neither affects a menu).
     function deityBoonDataById(uint32 id) external view returns (uint256, uint24, uint8, bool, bool);
 
     /// @notice Get the finalized RNG word for a game day (zero until available).
@@ -133,7 +134,13 @@ contract DeityBoonViewer {
         day = d;
         usedMask = mask;
 
-        if (_hasMenu(game, deityId)) slots = _slotsForDay(deityId, day, dailySeed);
+        if (!_hasMenu(game, deityId)) return (slots, usedMask, day);
+        // A protocol draw with no predecessor word (deployment day) takes its menu from the
+        // award day's own word (DegenerusGameBoonModule.resolveProtocolBoonDraws).
+        if (dailySeed == 0 && (deityId == VAULT_WALLET_ID || deityId == SDGNRS_WALLET_ID)) {
+            dailySeed = IDeityBoonDataSource(game).rngWordForDay(day);
+        }
+        slots = _slotsForDay(deityId, day, dailySeed);
     }
 
     /// @notice Preview the three deity boon slots available on the next game day.

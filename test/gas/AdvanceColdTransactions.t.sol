@@ -158,42 +158,51 @@ abstract contract ColdSubscriberFixture is DeployProtocol {
     ///      call succeeds, so each admitted chunk fits its declared admission (bound plus tail:
     ///      a chunk over it would fail the meter's WorkGasBound check or run out of gas), each
     ///      admission requirement and each measured chunk is <= 10M, and the same work completes.
+    ///      The chunked drive runs first: its calls and allowance probes are measured cold only
+    ///      before the test's first state-diff recording.
     function _check(bytes32 workEvent, uint256 minimum, uint256 maximum) internal {
         uint256 snap = vm.snapshotState();
-        (uint256 work, uint8 stage, uint256 calls,) = _drive(workEvent, false);
-        emit log_named_uint("realistic_10m_calls", calls);
-        emit log_named_uint("completed_items", work);
-        assertEq(stage, _complete() ? 1 : 11, "full subscriber work and expected continuation must run");
-        assertGe(work, minimum, "fixture did not exercise the full subscriber set");
-        assertLe(work, maximum, "subscriber work exceeded its item count");
-        vm.revertToState(snap);
-
-        uint256 maxChunk;
-        (work, stage, calls, maxChunk) = _drive(workEvent, true);
+        (uint256 work, uint8 stage, uint256 calls, uint256 maxChunk) = _drive(workEvent, true);
         emit log_named_uint("admitted_chunks", calls);
         emit log_named_uint("max_chunk_gas_including_intrinsic", maxChunk);
         assertEq(stage, _complete() ? 1 : 11, "chunked subscriber work reaches the same continuation");
         assertGe(work, minimum, "chunked drive did not complete the subscriber set");
         assertLe(work, maximum, "chunked subscriber work exceeded its item count");
+        assertTrue(vm.revertToState(snap));
+
+        (work, stage, calls,) = _drive(workEvent, false);
+        emit log_named_uint("realistic_10m_calls", calls);
+        emit log_named_uint("completed_items", work);
+        assertEq(stage, _complete() ? 1 : 11, "full subscriber work and expected continuation must run");
+        assertGe(work, minimum, "fixture did not exercise the full subscriber set");
+        assertLe(work, maximum, "subscriber work exceeded its item count");
     }
 
     /// @dev Calls mineFlip until the expected continuation's Advance marker is emitted. Every
     ///      call must succeed and change Game storage. `tight` runs each call at its exact
     ///      minimum admission allowance and bounds the admission and the measured chunk at 10M.
+    ///      The calls run unrecorded; the storage-change check then replays each call, recorded,
+    ///      from its pre-state at its allowance, last call first.
     function _drive(bytes32 workEvent, bool tight)
         private returns (uint256 work, uint8 stage, uint256 calls, uint256 maxChunk)
     {
         uint8 target = _complete() ? 1 : 11;
         stage = 255;
+        uint256[] memory pre = new uint256[](2000);
+        uint256[] memory allowances = new uint256[](2000);
         for (; calls < 2000 && stage != target; ++calls) {
-            uint256 allowance = tight ? _minimumAllowance() : REALISTIC_ALLOWANCE;
-            if (tight) assertLe(allowance, CHUNK_GAS_TARGET, "next chunk admitted under a realistic 10M allowance");
+            uint256 allowance = REALISTIC_ALLOWANCE;
+            if (tight) {
+                (allowance, pre[calls]) = _minimumAllowance();
+                assertLe(allowance, CHUNK_GAS_TARGET, "next chunk admitted under a realistic 10M allowance");
+            } else {
+                pre[calls] = vm.snapshotState();
+            }
+            allowances[calls] = allowance;
             vm.recordLogs();
-            vm.startStateDiffRecording();
             uint256 before = gasleft();
             game.mineRun{gas: allowance}(0);
             uint256 used = before - gasleft() + INTRINSIC;
-            assertTrue(_storageChanged(vm.stopAndReturnStateDiff()), "a successful call makes engine progress");
             Vm.Log[] memory logs = vm.getRecordedLogs();
             for (uint256 i; i < logs.length; ++i) {
                 if (logs[i].emitter != address(game) || logs[i].topics.length == 0) continue;
@@ -205,14 +214,22 @@ abstract contract ColdSubscriberFixture is DeployProtocol {
                 if (used > maxChunk) maxChunk = used;
             }
         }
+        for (uint256 i = calls; i != 0; --i) {
+            assertTrue(vm.revertToState(pre[i - 1]));
+            vm.startStateDiffRecording();
+            game.mineRun{gas: allowances[i - 1]}(0);
+            assertTrue(_storageChanged(vm.stopAndReturnStateDiff()), "a successful call makes engine progress");
+            vm.deleteStateSnapshot(pre[i - 1]);
+        }
     }
 
     /// @dev Exact (5k-granular) smallest allowance that admits the next chunk, probed on a
     ///      snapshot. Every smaller allowance must be refused with InsufficientExecutionGas.
-    function _minimumAllowance() private returns (uint256 hi) {
+    ///      Returns the snapshot, which holds the current (pre-call) state.
+    function _minimumAllowance() private returns (uint256 hi, uint256 snap) {
         uint256 lo = 200_000;
         hi = REALISTIC_ALLOWANCE;
-        uint256 snap = vm.snapshotState();
+        snap = vm.snapshotState();
         (bool ok,) = address(game).call{gas: hi}(abi.encodeWithSignature("mineRun(uint32)", uint32(0)));
         vm.revertToState(snap);
         assertTrue(ok, "next chunk admitted under a realistic 10M allowance");

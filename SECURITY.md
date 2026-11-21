@@ -10,11 +10,11 @@ handoff](docs/AUDIT.md), not a live deployment claim.
 | --- | --- |
 | Vault owner | Fixed DGVE governance executor. Admin actions require proposal approval assigned before the execution block exceeding **50.1% of live DGVE supply**. Direct Vault gameplay requires that majority under one caller’s control in deposits from earlier blocks; exactly 50.1% fails. No wallet has direct owner access. |
 | Voting delegate | May assign or clear an owner's escrowed DGVE votes; a majority under one caller's control also permits direct Vault gameplay and restricted-budget purchases. Cannot withdraw, redeem or transfer that owner's tokens, change their delegate, or use their player account. |
-| Comp delegate | Owner-set FLIP-value spending limit. May grant any supported comp to any recipient. Cannot set prices, refill the shared budget or authorize delegates. Setting an allowance replaces it; zero revokes it. |
+| Comp delegate | Owner-set FLIP-value spending limit. May grant any supported comp to any recipient and donate to a battle pool still taking entries (`crapsCompDonate`). Cannot set prices, refill the shared budget or authorize delegates. Setting an allowance replaces it; zero revokes it. |
 | Battle creator | Owner-authorized custom-battle creation within contract bounds. No comp-budget authority. |
-| sDGNRS governance | Emergency VRF coordinator-swap proposals and votes under stall, threshold and recovery-cancellation rules; balance-weighted charity voting through `GNRUS.castBallot`, once per slot per level, with multiple slots allowed. |
+| sDGNRS governance | Emergency VRF coordinator-swap proposals and votes under stall, threshold and recovery-cancellation rules; balance-weighted charity voting through `GNRUS.castBallot`, once per slot per level, with multiple slots allowed; a ballot counts the sDGNRS balance its voter holds when it is cast and keeps that weight if the voter burns afterwards. |
 | Player-approved operator | Only the authority granted through the Game's operator mechanism; permissionless settlement alone grants no spending or withdrawal rights. |
-| CREATOR | Initial allocations; one-time installation of each icon path/name quadrant. This bootstrap closes on completion or the first successful governance icon write/finalization. Later icon changes require governance and remain possible only before finalization. |
+| CREATOR | Initial allocations; the one-time registration of the Vault and sDGNRS genesis deity passes (`initProtocolDeity`, level 0 only); one-time installation of each icon path/name quadrant. This bootstrap closes on completion or the first successful governance icon write/finalization. Later icon changes require governance and remain possible only before finalization. |
 
 Each owner can withdraw their escrow at any time or revoke delegation while clearing support. Voting
 delegation grants full voting trust over that position. Same-block exclusion prevents atomic
@@ -23,16 +23,17 @@ blocks. Proposals expire after seven days. See [DGVE owner approval](docs/OWNER_
 
 ## Vault-owner powers
 
-- Spend/manage vault positions through its game, coinflip, subscription and redemption interfaces;
-  set operator approvals and the liquidation-buyer fallback (on/off and its ETH floor).
-- Grant comps and set delegate limits. Create custom battles, authorize creators, choose the vault's
-  default craps board and amend its open slips.
+- Spend/manage vault positions through its game, coinflip, subscription and redemption interfaces,
+  including deposits and gifts that credit any account; set operator approvals and the
+  liquidation-buyer fallback (on/off and its ETH floor).
+- Grant comps, donate comp budget to open battle pools and set delegate limits. Create custom
+  battles, authorize creators, choose the vault's default craps board and amend its open slips.
 - Mint WWXRP for free to any nonzero recipient up to the uint256 supply ceiling; set the
   whole-number multiplier on WWXRP the game contracts award (`setGameMintScale`: default 1x, 0 stops
   game awards, no upper bound); register or revoke trusted WWXRP minters, each of which may mint or
   credit amounts within the uint256 ceilings, burn any holder's WWXRP and consume any player's WWXRP
   boon ([WWXRP boons](docs/WWXRP-BOONS.md#future-ecosystem-applications)). Distribute AFKing seats
-  within the token's tranche/lock rules; manage eligible vault seats and recover foreign
+  within the token's free-tranche and seat-cap rules; manage eligible vault seats and recover foreign
   tokens/NFTs. The foreign-token sweep excludes stETH backing. Share redemption still burns the
   relevant shares.
 - Set lootbox RNG threshold and midday basefee ceiling. Declare Thanos scaling at least three levels
@@ -44,12 +45,22 @@ blocks. Proposals expire after seven days. See [DGVE owner approval](docs/OWNER_
   transport request ID while preserving its logical day, kind, committed cohort and original
   timeout. It cannot replace a word already accepted by the Game. This recovery power does not prove
   that a privileged actor with advance knowledge of an undelivered VRF result cannot prefer a
-  replacement request.
+  replacement request. A coordinator swap that re-issues a daily request spends this retry; a swap
+  that re-issues a mid-day request does not, so an owner who has not yet used the retry can replace
+  the re-issued mid-day request once on the new coordinator.
 - Propose a VRF coordinator swap after 44 hours of stall. The community proposal path opens only
   after a seven-day stall and requires the proposer to hold at least 0.5% of sDGNRS voting supply;
   there is no post-proposal delay. Execution still needs the decaying vote threshold; recovery
-  cancels applicable proposals. Retry retired-subscription cancellation with prescribed recovery
-  destinations.
+  cancels applicable proposals. A vote counts the sDGNRS weight its voter held when it was cast and
+  keeps that weight if the voter burns afterwards; a proposal's denominator is the larger of the
+  voting supply at its creation and the voting supply when a vote or execution check reads it, so
+  sDGNRS that reaches a holder after creation (pool rewards such as whale-pass purchases) votes
+  against a denominator that includes it. The Vault's DGNRS unwrap is refused while the daily RNG
+  lock is held or any VRF request, daily or mid-day, is unanswered or still being consumed. The
+  threshold is 50% of the denominator for the first 48 hours, then 40%, 30%, 20%, 10% and 5% after
+  each further 24 hours; approvals execute once they reach it and exceed rejections, and rejections
+  kill the proposal once they reach the same threshold and exceed approvals. Retry
+  retired-subscription cancellation with prescribed recovery destinations.
 - Manage permitted charity slots; after the final sweep and the sDGNRS year sweep, redeem any GNRUS
   holder's full balance to that holder at what its own burn would pay (`vaultRedeemFor`); burn or
   unwrap the Vault's DGNRS under its restrictions (the level-vested release is permissionless and
@@ -65,7 +76,10 @@ external VRF coordinator endpoint and the owner can change the controls listed a
 
 Chainlink VRF v2.5 supplies randomness. Requests are paid in native ETH from the subscription, which
 yield surplus, sDGNRS balances and `donateVrf` donations fund; there is no LINK token or price feed.
-Healthy Lido stETH behavior is assumed for external asset accounting.
+Healthy Lido stETH behavior is assumed for external asset accounting. stETH moves whole shares: a
+transfer or a stake can deliver up to 2 wei less than its nominal amount, and a balance can keep a
+few wei that no transfer moves. Sweeps and payouts accept that residue, and their events report
+nominal amounts.
 
 A failed stETH balance read can be treated as zero. The Game's bounded read (`_boundedStethBalance`)
 returns zero for a failed or malformed response, so the one-shot final sweep can close while stETH
@@ -87,8 +101,9 @@ answered ID. The callback relies on Chainlink VRF v2.5 deleting the request comm
 calling back, so each request can be fulfilled only once.
 
 A coordinator that delivered the same request twice could overwrite `rngWordCurrent` while boxes,
-bets, Craps or Decimator consumers remain unresolved; later reads of the shared session word would
-use the second word. The accepted trust assumption is the coordinator's one-fulfillment guarantee.
+bets, Craps or Decimator consumers, or the remaining quadrants of an unfinished terminal jackpot,
+remain unresolved; later reads of the shared session word would use the second word. The accepted
+trust assumption is the coordinator's one-fulfillment guarantee.
 Separately, a superseded or dropped request could match a later retained ID through a low-64-bit
 collision. Assuming independent, uniformly distributed IDs, the chance of that match is 2^-64 per
 late delivery against a retained nonzero ID. Coordinator authentication still applies; truncation

@@ -5,6 +5,7 @@ import {TicketQueueStorage as TQ} from "./helpers/TicketQueueStorage.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {DegenerusGameWhaleModule} from "../../contracts/modules/DegenerusGameWhaleModule.sol";
 import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
+import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {GameSlotKeys} from "../helpers/GameSlots.sol";
 
 /// @title LazyPassOverWhale
@@ -88,5 +89,47 @@ contract LazyPassOverWhale is DeployProtocol {
         (uint8 passType, uint24 frozenUntil) = _pass();
         assertEq(passType, 1);
         assertEq(frozenUntil, 10, "ten levels from level 1");
+    }
+
+    /// @dev One whole ticket bought by alice at the routed ticket level.
+    function _buyTicket() private {
+        uint256 price = game.mintPrice();
+        vm.prank(alice);
+        game.purchaseOrderFor{value: price}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+    }
+
+    /// @dev A ticket for the level after the pass's last level keeps the pass while the game level is still that
+    ///      last level; the pass fields clear on the first whole ticket once the game level has passed it.
+    function _passSurvivesNextLevelTicket(uint8 passType) private {
+        _setLevel(2);
+        _setPass(passType, 2);
+        (uint256 before,) = game.playerActivityScore(alice);
+        _buyTicket();
+        (uint8 keptType, uint24 keptUntil) = _pass();
+        assertEq(keptType, passType, "pass type kept through its last level");
+        assertEq(keptUntil, 2, "freeze kept through its last level");
+        (uint256 afterBuy,) = game.playerActivityScore(alice);
+        assertGe(afterBuy, before, "pass bonus and floors still count");
+        if (passType == 3) {
+            vm.prank(alice);
+            vm.expectRevert(DegenerusGameWhaleModule.PassNotExpired.selector);
+            game.purchaseLazyPass{value: 1 ether}(0, bytes32(0));
+        }
+        _setLevel(3);
+        _buyTicket();
+        (uint8 clearedType, uint24 clearedUntil) = _pass();
+        assertEq(clearedType, 0, "pass type cleared once the level has passed it");
+        assertEq(clearedUntil, 0, "freeze cleared once the level has passed it");
+    }
+
+    /// @dev Whale pass: a purchase-phase ticket on its last level (recorded for the next level) does not end it,
+    ///      and the lazy pass is still refused there.
+    function test_nextLevelTicketKeepsWhalePassThroughItsLastLevel() public {
+        _passSurvivesNextLevelTicket(3);
+    }
+
+    /// @dev Lazy pass: the same rule.
+    function test_nextLevelTicketKeepsLazyPassThroughItsLastLevel() public {
+        _passSurvivesNextLevelTicket(1);
     }
 }

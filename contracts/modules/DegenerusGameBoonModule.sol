@@ -45,7 +45,8 @@ import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
  * @dev Rolls and delivers box-drawn boons (`rollBoxBoons`), lets a
  *      deity-pass holder issue a daily boon to another player (`_issueDeityBoon`), consumes
  *      boons through the inherited GameBoonActions and GamePurchaseBoon helpers, and clears expired
- *      coinflip, lootbox, purchase, decimator, whale, deity-pass, and lazy-pass boons.
+ *      coinflip, lootbox, purchase, decimator, whale, deity-pass, lazy-pass, craps, Degenerette
+ *      and WWXRP boons.
  *      Called via `delegatecall` from DegenerusGame -- all storage reads/writes
  *      operate on the game contract's storage.
  *
@@ -399,9 +400,10 @@ abstract contract DegenerusGameBoonModule is GameBoxInternals, GamePurchaseBoon,
     uint256 private constant BOON_PPM_SCALE = 1_000_000;
 
     /// @dev Exact closed form of the weighted max-value table used to normalize boon frequency.
-    ///      Every fixed-price family contributes 1568 ETH of weight*value; the FLIP-priced
+    ///      The fixed-price families (lootbox, purchase, whale and deity-pass discounts, whale pass,
+    ///      ETH Degenerette) together contribute 1568 ETH of weight*value; the FLIP-priced
     ///      families collapse to BOON_PRICE_WEIGHT = 4182 times the live ticket price (3270
-    ///      coinflip/whale-pass/degenerette + 912 craps); lazy discounts collapse to
+    ///      coinflip/decimator/FLIP-degenerette + 912 craps); lazy discounts collapse to
     ///      6 times the ten-level lazy-pass value. Activity, quest-shield and WWXRP boons
     ///      carry weight but contribute zero nominal value to this box-budget model.
     ///
@@ -555,7 +557,8 @@ abstract contract DegenerusGameBoonModule is GameBoxInternals, GamePurchaseBoon,
     }
 
     /// @dev Keep-or-discard delivery filter for a lootbox-drawn boon. The TYPE is already
-    ///      fixed (static table); live state may only decide whether the known outcome is
+    ///      drawn (static table, the hit roll scaled by the box's chance, which reads the open
+    ///      level and the EV-scaled amount); live state here only decides whether it is
     ///      delivered. A discard writes nothing — occupying the category slot with a dead
     ///      boon would block a later useful one under upgrade-only semantics — and emits
     ///      `BoonDiscarded` so indexers keep the full draw history.

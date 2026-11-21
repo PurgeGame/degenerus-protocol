@@ -117,7 +117,7 @@ contract DeadVrfTallyParityHarness is DegenerusGameGameOverModule, WalletSeed {
                         uint256 packSlot = _foilSlot(dd - 1, idx);
                         assembly ("memory-safe") { pack := sload(packSlot) }
                     }
-                    if (uint24(pack >> 160) == lvl) {
+                    if (uint24(pack >> 160) == lvl && _foilRecordWord(uint32(pack >> 192), lvl) & _FOIL_READY == 0) {
                         uncreated += FOIL_PACK_ENTRIES * QTY_SCALE;
                     }
                     unchecked {

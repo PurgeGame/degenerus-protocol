@@ -2,7 +2,7 @@
 # counted ETH-obligation terms and every call of their canonical mutator helpers.
 #
 # The counted terms are exactly the obligation set the protocol totals in
-# DegenerusGameJackpotModule.distributeYieldSurplus (and the EthSolvency oracle
+# DegenerusGameStorage._untrackedYield (and the EthSolvency oracle
 # mirrors in test/fuzz/helpers/SolvencyObligations.sol):
 #   currentPrizePool + next/future (prizePoolsPacked) + claimablePool
 #   + yieldAccumulator + pending next/future (prizePoolPendingPacked).
@@ -78,7 +78,7 @@ DECL	claimablePool	<file-scope>	storage/DegenerusGameStorage.sol	DECL	counted-te
 PAIRED-CREDIT	claimablePool	_addClaimableEth	modules/DegenerusGameDegeneretteModule.sol	WRITE	aggregate + per-player in tandem; funded by the running pool debit in _distributePayout
 VALUE-OUT	claimablePool	_claimWinningsInternal	modules/GameActions.sol	WRITE	player withdrawal: aggregate falls as ETH leaves (CEI); per-player claimable zeroed in tandem
 POOL-TO-POOL	claimablePool	_consolidatePoolsAndRewardJackpots	modules/DegenerusGameAdvanceModule.sol	WRITE	BAF + decimator claimableDelta: future -> claimable; rounds thereby PRE-COUNTED for later per-player claims
-VALUE-IN	claimablePool	_creditAfkingValue	storage/DegenerusGameStorage.sol	WRITE	overpay/bare-send and funded-subscribe ETH deposits, plus an atomic stETH fallback receipt verified by pullAfkingSteth before credit; per-player afking half in tandem (SOLVENCY-01 identity), with fallback uint128 bounds checked before the mutator
+VALUE-IN	claimablePool	_creditAfkingValue	storage/DegenerusGameStorage.sol	WRITE	overpay/bare-send and funded-subscribe ETH deposits, plus an atomic stETH fallback receipt verified by pullAfkingSteth before credit; per-player afking half in tandem (SOLVENCY-01 identity), with fallback uint128 bounds checked before the mutator. _borrow also calls it to return a loan's non-ticket principal to the borrower's afking half: an internal move paired with the lender debit, not value in
 POOL-TO-POOL	claimablePool	_runSubscriberWork	modules/GameAfkingModule.sol	WRITE	chunk-end release of the STAGE's summed delivery costs (both legs debited from the subscriber's balance word in _deliverAfkingBuy); the same sum credits the prize pools via _routeAfkingPoolEth
 POOL-TO-POOL	claimablePool	_handleGameOverDrain	modules/DegenerusGameGameOverModule.sol	WRITE	two sites: deity pass refund total moves distributable ETH into claimable; and the one-shot Degenesis release (the Vault budget and all sDGNRS AFKing funding, which sat inside claimablePool, leave it for the final prizes before the prize budget is fixed)
 POOL-TO-POOL	claimablePool	payGoldenTicket	modules/DegenerusGameJackpotDrawModule.sol	WRITE	golden-ticket ETH rung aggregate: future -> claimable; per-player credit paired below
@@ -106,7 +106,7 @@ MUTATOR-DEF	prizePoolsPacked	_setPrizePools	storage/DegenerusGameStorage.sol	WRI
 POOL-TO-POOL	prizePoolsPacked	_unfreezePool	modules/DegenerusGameAdvanceModule.sol	WRITE	pending accumulators fold into the live pools at unlock: each half adds into its own, saturating independently, one RMW
 POOL-TO-POOL	prizePoolPendingPacked	_unfreezePool	modules/DegenerusGameAdvanceModule.sol	WRITE	the folded buffer is emptied to the bit-255 sentinel (no value), paired with the live-pool fold above
 DECL	yieldAccumulator	<file-scope>	storage/DegenerusGameStorage.sol	DECL	counted-term state variable declaration
-POOL-TO-POOL	yieldAccumulator	_consolidatePoolsAndRewardJackpots	modules/DegenerusGameAdvanceModule.sol	WRITE	insurance skim in (from next), x00 half-dump out (to future) - both intra-set
+POOL-TO-POOL	yieldAccumulator	_consolidatePoolsAndRewardJackpots	modules/DegenerusGameAdvanceModule.sol	WRITE	insurance skim in (from next), x00 dump of 40% out (to future) - both intra-set
 DRAIN-ZERO	yieldAccumulator	_handleGameOverDrain	modules/DegenerusGameGameOverModule.sol	WRITE	yield accumulator folded into the drained total and zeroed
 POOL-TO-POOL	yieldAccumulator	_startDailyEth	modules/DegenerusGameJackpotModule.sol	WRITE	purchase-phase drip insurance skim (2% of the 4% slice, the 75/23/2 split): credited here and debited from future in the same packed write above — intra-set, obligation sum preserved
 VALUE-IN	yieldAccumulator	_distributeYieldSurplus	modules/DegenerusGameJackpotModule.sol	WRITE	23% surplus share retained as the yield buffer
@@ -123,11 +123,11 @@ MUTATOR-DEF	_creditClaimableLogged	_creditClaimableLogged	storage/DegenerusGameS
 PAIRED-CREDIT	_creditClaimableLogged	_handleGameOverDrain	modules/DegenerusGameGameOverModule.sol	READ	per-owner deity refunds credited by wallet ID; aggregate into totalRefunded, which the drain adds to claimablePool
 PAIRED-CREDIT	_creditClaimableLogged	_queueWhalePassClaimCore	modules/DegenerusGamePayoutUtils.sol	READ	sub-half-pass remainder credited and RETURNED for the caller to fold into its claimableDelta (single aggregate bump + source-pool debit)
 PAIRED-CREDIT	_creditClaimableLogged	claimDeadVrf	modules/DegenerusGameGameOverModule.sol	READ	deterministic-ending share credited to the holding's owner ID; paired with its own claimablePool increment
-VALUE-IN	_creditClaimableLogged	creditRedemptionDirect	modules/DegenerusGameLootboxModule.sol	READ	direct redemption credits the player from the redemption reserve, which already sits inside claimablePool; the pool total is unchanged
+PRE-COUNTED	_creditClaimableLogged	creditRedemptionDirect	modules/DegenerusGameLootboxModule.sol	READ	direct redemption credits the player from the redemption reserve, which already sits inside claimablePool; the pool total is unchanged
 VALUE-IN	_creditClaimableLogged	_distributeYieldSurplus	modules/DegenerusGameJackpotModule.sol	READ	recognized stETH yield surplus: runs only when balance+stETH exceeds the full obligation set; three sink credits (vault, sDGNRS, GNRUS IDs)
 PAIRED-CREDIT	_creditClaimableLogged	_sweepAccounts	modules/GamePurchase.sol	READ	Internal consolidation to the current main ID; exact claimable/prepaid source debits preserve claimablePool and custody
 PAIRED-CREDIT	_creditClaimableLogged	_autoRepayLoan	modules/DegenerusGameAdvanceModule.sol	READ	Automatic loan repayment (full term at the due level; the current repayment price at a VRF-alive game over) moves the borrower's own claimable and prepaid funding to its lender; exact source debit, claimablePool unchanged
-VALUE-OUT	claimablePool	_borrow	modules/GamePurchase.sol	WRITE	Lender principal leaves claimablePool; cash pays the borrower in ETH/stETH and the late-purchase ticket portion moves to prize pools; borrow atomic
+POOL-TO-POOL	claimablePool	_borrow	modules/GamePurchase.sol	WRITE	Lender principal leaves claimablePool; the non-ticket part returns to it as the borrower's prepaid afking (_creditAfkingValue) and the late-purchase ticket portion moves to prize pools; no ETH or stETH leaves the Game (net claimablePool change -ticketWei); borrow atomic
 POOL-TO-POOL	_addPrizeContribution	_borrow	modules/GamePurchase.sol	READ	Late-level loan: the ticket half of the lender's principal stays in the Game and lands in the pools with the ticket-buy split; the claimablePool debit above carries the whole principal
 VALUE-IN	claimablePool	_repay	modules/GamePurchase.sol	WRITE	Fresh repayment ETH (msg.value up to the amount owed) rises with the lender's credit; the claimable-funded share moves from the account to the lender
 PAIRED-CREDIT	_creditClaimableLogged	_repay	modules/GamePurchase.sol	READ	Lender credited the amount owed: paired by the fresh-ETH claimablePool rise plus the account's matching claimable debit

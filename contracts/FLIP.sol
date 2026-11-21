@@ -30,7 +30,7 @@ pragma solidity 0.8.38;
  * @notice ERC20 in-game token (FLIP, 0 decimals) with minting, burning, and supply management.
  *
  * @dev ARCHITECTURE:
- *      - ERC20 standard with game contract transfer bypass
+ *      - ERC20 standard; transferFrom needs an allowance from every caller
  *      - Mint/burn interface for game contract, coinflip contract, and vault
  *      - Coinflip integration: claims via Coinflip.sol for transfer shortfall coverage
  *      - Decimator burns: Burn-to-participate for decimator jackpot eligibility
@@ -101,7 +101,7 @@ contract FLIP {
     /// @param amount The amount added to vault mint allowance (0 decimals).
     event VaultEscrowRecorded(address indexed sender, uint256 amount);
     /// @notice Emitted when the vault spends from its mint allowance (may or may not mint tokens).
-    /// @param spender The account tied to the allowance decrease: VAULT when any burn routed at the vault (burnCoin_g27673, burnCoinForCraps_g292454) spends the virtual allowance through _burn's VAULT branch, or the FLIP contract (address(this)) when minted out via vaultMintTo.
+    /// @param spender The account tied to the allowance decrease: VAULT when any burn routed at the vault (burnCoin_g27673, burnCoinForCraps_g292454, burnForCoinflip, decimatorBurn) spends the virtual allowance through _burn's VAULT branch, or the FLIP contract (address(this)) when minted out via vaultMintTo.
     /// @param amount The amount consumed from allowance (0 decimals).
     event VaultAllowanceSpent(address indexed spender, uint256 amount);
 
@@ -304,9 +304,8 @@ contract FLIP {
     /*+======================================================================+
       |                       ERC20 FUNCTIONS                                |
       +======================================================================+
-      |  Standard ERC20 interface with game-contract bypass for transferFrom.|
-      |  The game contract can transfer on behalf of players without prior   |
-      |  approval (trusted contract pattern).                                |
+      |  Standard ERC20 interface. transferFrom needs an allowance from      |
+      |  every caller, the game contract included.                           |
       +======================================================================+*/
 
     /// @notice Approve `spender` to transfer up to `amount` tokens on behalf of caller.
@@ -334,25 +333,20 @@ contract FLIP {
     }
 
     /// @notice Transfer `amount` tokens from `from` to `to` on behalf of caller.
-    /// @dev Standard ERC20 transferFrom with game-contract bypass.
-    ///      SECURITY: DegenerusGame can transfer without approval (trusted contract pattern).
-    ///      No Game code path calls it.
+    /// @dev Standard ERC20 transferFrom; every caller needs an allowance.
     /// @param from The source address.
     /// @param to The destination address.
     /// @param amount The amount to transfer (0 decimals).
     /// @return True on success.
     function transferFrom(address from, address to, uint256 amount) external returns (bool) {
-        // Game contract bypass: no allowance check needed for trusted game operations
-        if (msg.sender != ContractAddresses.GAME) {
-            uint256 allowed = allowance[from][msg.sender];
-            // Infinite approval optimization: skip allowance update for max value
-            if (allowed != type(uint256).max && amount != 0) {
-                if (allowed < amount) revert InsufficientAllowance();
-                uint256 newAllowance;
-                unchecked { newAllowance = allowed - amount; }
-                allowance[from][msg.sender] = newAllowance;
-                emit Approval(from, msg.sender, newAllowance);
-            }
+        uint256 allowed = allowance[from][msg.sender];
+        // Infinite approval optimization: skip allowance update for max value
+        if (allowed != type(uint256).max && amount != 0) {
+            if (allowed < amount) revert InsufficientAllowance();
+            uint256 newAllowance;
+            unchecked { newAllowance = allowed - amount; }
+            allowance[from][msg.sender] = newAllowance;
+            emit Approval(from, msg.sender, newAllowance);
         }
         _transfer(from, to, amount);
         return true;
@@ -734,7 +728,8 @@ contract FLIP {
       |  participation for the decimator jackpot.                            |
       +======================================================================+*/
 
-    /// @notice Enter sDGNRS once per window, limited by the previous original-field average.
+    /// @notice Enter sDGNRS once per window, up to four times the previous sealed round's average
+    ///         original entry (8,000 FLIP before one has sealed), held inside the round's aggregate.
     /// @dev GAME calls this on the opening day's advance, after coinflip settlement and
     ///      before the craps seat. Uses the claimable -> carry consume path;
     ///      the caller has settled the backing even while the game RNG lock is up.
@@ -745,7 +740,8 @@ contract FLIP {
     ///      FLIP latch is needed.
     /// @param lvl Resolution level for the opening window (current game level + 1).
     /// @param cap Whole-FLIP spending cap computed by Game from the previous sealed round.
-    /// @return amount FLIP backing consumed, or zero when skipped.
+    /// @return amount FLIP entered, or zero when no entry is made (backing consumed below the
+    ///         entry minimum is retired without an entry).
     function autoDecimatorBurn(uint24 lvl, uint256 cap) external onlyGame returns (uint256 amount) {
         address player = ContractAddresses.SDGNRS;
         if (cap < DECIMATOR_MIN) return 0;

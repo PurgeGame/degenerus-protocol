@@ -53,7 +53,7 @@ contract RedemptionAccounting is RedemptionFixture {
             if (id == settling) {
                 expected += uint256(payout) - handler.paidRolled(id);
             } else {
-                // After the cursor drains, rounding dust is released; only parked claims remain.
+                // After the cursor drains, rounding dust is released and no claim stays live: adds zero.
                 for (uint256 a; a < handler.getActorCount(); ++a) {
                     uint256 pending = _claimTokens(handler.getActor(a), id);
                     expected += uint256(payout) * pending / tokens;

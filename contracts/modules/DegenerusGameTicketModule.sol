@@ -428,7 +428,9 @@ contract DegenerusGameTicketModule is GameJackpotEvents, DegenerusGameJackpotDra
             if (_ticketQueueLength(readKey) != 0) return (readKey, false, true);
             uint24 futureKey = _tqFarFutureKey(old);
             if (_ticketQueueLength(futureKey) != 0) {
-                // A future queue is consumable only if this request committed it.
+                // A future queue is consumable only if this request committed it. A pack's
+                // level is at most level + 1, so `old` is below the mint ceiling and a
+                // non-empty future queue here reverts.
                 if (!_frozenPoolDue() || old != _mintCeiling()) revert E();
                 return (futureKey, false, true);
             }

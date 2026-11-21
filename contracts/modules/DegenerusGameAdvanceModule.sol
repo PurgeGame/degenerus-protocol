@@ -146,8 +146,9 @@ abstract contract DegenerusGameAdvanceModule is GameDailyInternals, DegenerusGam
             );
 
             // Spend sDGNRS's settled backing on the opening-day decimator before the
-            // craps seat. Roll today's quests first so both actions credit the right day.
-            // The recorded-word return makes this once per day, and the next fresh
+            // craps seat. Roll today's quests first so the entry's quest credit lands on today;
+            // the craps seat burns through the plain burn and reports no quest action.
+            // The recorded-word revert above makes this once per day, and the next fresh
             // request clears _decDayOneActive(). FLIP only sizes and records the entry.
             // On this opening-day path, lvl is the request-promoted level.
             if (decDayOne) coin.autoDecimatorBurn(lvl + 1, _decAutomaticCap(lvl + 1));
@@ -461,8 +462,8 @@ abstract contract DegenerusGameAdvanceModule is GameDailyInternals, DegenerusGam
             if (!okDeg) _revertDelegate(degData);
         }
         uint24 psd = purchaseStartDay;
-        // The early turbo waits for the main launch; the first request after Degenesis qualifies
-        // whenever it lands.
+        // The early turbo waits for the main launch. The first request after Degenesis is logical
+        // day MAIN_LAUNCH_DAY, level 0's purchaseStartDay, so the purchase-age test also admits it.
         if (day >= GameTimeLib.MAIN_LAUNCH_DAY && !jackpotPhaseFlag && !lastPurchaseDay && day >= psd
             && _lrRead(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK) != 1) {
             if ((dailyIdx < GameTimeLib.MAIN_LAUNCH_DAY || day - psd <= 1)
@@ -514,8 +515,9 @@ abstract contract DegenerusGameAdvanceModule is GameDailyInternals, DegenerusGam
 
         // Increment level at RNG request time when lastPurchaseDay = true.
         // lvl is already purchaseLevel (= level + 1), so set directly.
-        // Only on a fresh daily request - a daily retry would double-increment, and an
-        // in-flight mid-day lootbox request must not suppress this increment.
+        // Only a fresh daily request reaches this boundary: a retry re-sends the request
+        // alone, and a fresh request needs the read certificate, so no mid-day request
+        // is in flight here.
         if (isTicketJackpotDay) {
             // Snapshot affiliate reward before level increment.
             // Scores routed to lvl (= level + 1) during the purchase phase just ended.
@@ -750,7 +752,7 @@ abstract contract DegenerusGameAdvanceModule is GameDailyInternals, DegenerusGam
         // of the pool alone; that sum leaves futurePool and is reserved in claimablePool
         // here, so every later step reads the settled values. The award stage then
         // draws and pays from the reservation and returns what no candidate took to
-        // futurePool. On a losing flip the bracket is marked skipped, the pool
+        // futurePool. When the gate loses the bracket is marked skipped, the pool
         // stays whole in futurePool (the x00 incinerator pays FLIP, not ETH), and
         // pre-skip winning-flip credit is filtered out of future claims via the
         // lastBafResolvedDay bump.
@@ -768,8 +770,9 @@ abstract contract DegenerusGameAdvanceModule is GameDailyInternals, DegenerusGam
                 // Century BAF incinerator: level-x99 WWXRP burners bet on this
                 // exact skip. WWXRP draws one burn-weighted winner and credits
                 // it a share of the FLIP the armed BAF day's direct depositors
-                // burned and just lost on tails (flip credit, from the
-                // coinflip's draw book). The would-be BAF pool rolls forward
+                // burned (flip credit, from the coinflip's draw book) when that
+                // day's own coinflip lost; the gate is independent of it, so a
+                // day that won pays nothing. The would-be BAF pool rolls forward
                 // whole in futurePool, as on any skip.
                 if (prevMod100 == 0) wwxrpIncinerator.resolveIncinerator(lvl, rngWord);
             }
@@ -907,7 +910,8 @@ abstract contract DegenerusGameAdvanceModule is GameDailyInternals, DegenerusGam
     ///      funding age, the purchase age at which the closure latched; a first-day fill is age 1.
     ///      Levels after genesis bank more the faster they fill: 45% at ages 0-1, 35% at age 2,
     ///      30% at age 3. The skim then slides from the age-3 value to 15% at age 8 and rises to
-    ///      45% at the purchase timeout, capped at 100%. Every step but the 15% trough adds the
+    ///      45% at the purchase timeout. A closure latches by purchase day 32 at the latest, so the
+    ///      age is at most 32 and the 100% cap does not bind. Every step but the 15% trough adds the
     ///      decade bonus, +1% per tens digit of the level within its century (+9% at x90-x99).
     ///      Genesis (purchaseLevel 1) uses its own offset curve from the 30% base.
     function _nextToFutureBps(uint32 purchaseAge, uint24 purchaseLevel) internal pure returns (uint16) {
@@ -927,8 +931,9 @@ abstract contract DegenerusGameAdvanceModule is GameDailyInternals, DegenerusGam
             return uint16(bps > 10_000 ? 10_000 : bps);
         }
 
-        // Level 0 (purchaseLevel 1): a seven-day offset, then 30% down to 13% and back to 30%
-        // over four weeks, then +0.14% per day.
+        // Level 0 (purchaseLevel 1): a seven-day offset, then 30% down to 13% at elapsed 14 and
+        // back up. Funding age is at most 32 (elapsed 25, 26.35%), so the rise never returns to
+        // 30% and the +0.14%-per-day tail does not run.
         uint32 elapsed = purchaseAge > 7 ? purchaseAge - 7 : 0;
         if (elapsed <= 1) {
             bps = NEXT_TO_FUTURE_BPS_FAST;

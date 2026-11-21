@@ -2,9 +2,10 @@
 pragma solidity 0.8.38;
 
 import {Test} from "forge-std/Test.sol";
-import {Vm} from "forge-std/Vm.sol";
+import {Vm, VmSafe} from "forge-std/Vm.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {GameSlots} from "../helpers/GameSlots.sol";
+import {GlamsterdamReprice} from "../helpers/GlamsterdamReprice.sol";
 
 /// @dev Uses the actual Game runtime and a fixed cold-storage callback fixture.
 ///      Constructor, coordinator bookkeeping and purchase setup are outside the measurement.
@@ -45,6 +46,37 @@ contract StackSpillCallbackGasTest is Test {
         assertEq(_fulfill(REQUEST), 8_158, "callback execution gas changed");
         assertEq(uint256(vm.load(TARGET, bytes32(uint256(3)))), WORD);
         assertEq(uint256(vm.load(TARGET, bytes32(0))), FLAGS);
+    }
+
+    /// @notice The callback's one SSTORE overwrites the never-zero waiting sentinel, so it creates no
+    ///         slot: Glamsterdam adds only the first-change repricing to the cold Osaka frame.
+    function test_FulfillmentGlamsterdamFitsCallbackLimit() public {
+        uint256 snap = vm.snapshotState();
+        uint256 osaka = _fulfill(REQUEST);
+        assertTrue(vm.revertToState(snap));
+        assertEq(uint256(vm.load(TARGET, bytes32(GameSlots.RNG_WORD_CURRENT))), 1, "waiting sentinel");
+        vm.startStateDiffRecording();
+        _fulfill(REQUEST);
+        VmSafe.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
+        vm.stopMappingRecording();
+        uint256 count;
+        for (uint256 i; i < acc.length; ++i) {
+            if (acc[i].account == address(vm)) continue;
+            acc[count++] = acc[i];
+        }
+        assembly ("memory-safe") { mstore(acc, count) }
+        GlamsterdamReprice.Result memory r = GlamsterdamReprice.reprice(osaka, acc, TARGET);
+        // DegenerusGameGameOverModule.VRF_CALLBACK_GAS_LIMIT, the callback gas wired at deployment.
+        uint256 limit = 150_000;
+        emit log_named_uint("osaka", osaka);
+        emit log_named_uint("glamsterdam_exec", r.glamsterdamExec);
+        emit log_named_uint("glamsterdam_state", r.stateGas);
+        emit log_named_uint("glamsterdam_total", r.glamsterdamExec + r.stateGas);
+        emit log_named_uint("bound", limit);
+        assertEq(r.sstores, 1, "one callback SSTORE");
+        assertEq(r.newSlots, 0, "the callback creates no slot");
+        assertEq(r.stateGas, 0, "no state gas");
+        assertLe(r.glamsterdamExec + r.stateGas, limit, "Glamsterdam callback fits VRF_CALLBACK_GAS_LIMIT");
     }
 
     function test_StaleRequestGasPin() public {

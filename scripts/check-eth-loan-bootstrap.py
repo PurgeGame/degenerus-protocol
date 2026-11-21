@@ -30,10 +30,18 @@ SOURCES = (
 # Reviewed 2026-11-08: WhaleModule refuses a lazy pass over an active whale pass and Storage's
 # lazy activation always records the lazy type; whale-pass awards, loan rates and prices are
 # unchanged, so the loan model is unaffected.
+# Reviewed 2026-11-20: MintStreakUtils clears a pass's fields once the game level has passed its
+# last level instead of at the first ticket for a later level; whale-pass awards, loan rates and
+# prices are unchanged, so the loan model is unaffected.
+# Reviewed 2026-11-20: WhaleModule counts the prepaid AFKing draw of a whale or lazy pass purchase
+# in the fresh-rate affiliate basis, and whale, lazy and deity pass purchases clear a curse; pass
+# prices, whale-pass awards and loan rates are unchanged, so the loan model is unaffected.
+# Reviewed 2026-11-20: Storage, MintStreakUtils and WhaleModule comment and NatSpec text only (the
+# sources are token-identical once comments are stripped); the loan model is unaffected.
 SOURCE_SHA256 = {
-    "contracts/storage/DegenerusGameStorage.sol": "9a002f022c65978ea157b8698da1ff7ff642f09a4a0893dfde8f03781419b48a",
-    "contracts/modules/DegenerusGameMintStreakUtils.sol": "d6abac94f9dada75f272d6eeb16788f221cca61925ca90bceb334e1754ac9dd7",
-    "contracts/modules/DegenerusGameWhaleModule.sol": "92efaa1b78518510f71a1cf02aef0769d4231a4edb6c3dbfdea4e48b37d5bbc5",
+    "contracts/storage/DegenerusGameStorage.sol": "761be6b8de5e20d3affbbb419784326127a6b430dc2a796edebe186a348e88a1",
+    "contracts/modules/DegenerusGameMintStreakUtils.sol": "d16d213649e5aa1e2dbd89ddb96400114c4d70e7b8cf79c7326a986dbbff150f",
+    "contracts/modules/DegenerusGameWhaleModule.sol": "25d46da1ca7cfc183046a788f2cd037afb247f74233380ec11246904ac8ce01f",
     "contracts/libraries/PriceLookupLib.sol": "cbec28472ed02519f3bce1e3ffc809eb9a4cab87311c37a016dc7390c92d9a46",
 }
 

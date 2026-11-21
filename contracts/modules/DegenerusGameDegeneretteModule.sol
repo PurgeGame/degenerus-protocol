@@ -49,7 +49,7 @@ import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
  * @title DegenerusGameDegeneretteModule
  * @author Burnie Degenerus
  * @notice Delegate-called module handling Degenerette symbol-roll bets.
- * @dev Uses lootbox RNG index/word for randomness. All storage reads/writes operate
+ * @dev Uses the RNG buffer's session word for randomness. All storage reads/writes operate
  *      on the inherited DegenerusGameStorage. Player-funded bets support ETH and FLIP;
  *      internal box and foil reward spins also support WWXRP.
  *      FLIP payouts face a per-bet survival flip (double-or-nothing) at resolution,
@@ -65,7 +65,8 @@ abstract contract DegenerusGameDegeneretteModule is GameBoxInternals,
 
     /// @notice Emitted once per resolved Degenerette bet, carrying every spin.
     /// @param playerId The reward account's wallet ID.
-    /// @param index The lootbox RNG index the bet resolved against.
+    /// @param index The physical RNG buffer (0 or 1) the bet resolved from; `(index, betId)`
+    ///        repeats once the buffer is reused.
     /// @param betId The bet's id within `index` (queue position + 1).
     /// @param totalPayout Total payout across all spins. For a FLIP bet the summed spin
     ///        payouts double or zero on the bet's survival flip, then collapse to a whole-FLIP
@@ -94,7 +95,8 @@ abstract contract DegenerusGameDegeneretteModule is GameBoxInternals,
     );
 
     /// @notice A stake resolved as a Degenerette spin outside the ordinary bet flow — a lootbox
-    ///         roll (WWXRP / FLIP×3 / ETH) or a biggest-spin record bounty (FLIP×3) — the single
+    ///         roll or foil tier payout (WWXRP / FLIP×3 / ETH; the two share spin types) or a
+    ///         biggest-spin record bounty (FLIP×3) — the single
     ///         self-contained record of that outcome (placed bets report through
     ///         DegeneretteResolved instead). Every reel + every output reward is here or, for
     ///         the ETH recirc, in the fresh box's own events.
@@ -234,8 +236,8 @@ abstract contract DegenerusGameDegeneretteModule is GameBoxInternals,
         uint32 ownerId; // whose payouts ethClaimable / flipMint currently hold
         uint256 ownerElement; // loaded only by a referral lookup or token payout
         address payee; // shared by the current owner's token payouts
-        uint256 ethClaimable; // summed ETH claimable across all bets
-        uint256 flipMint; // summed FLIP mint across all bets
+        uint256 ethClaimable; // summed ETH claimable for the current owner
+        uint256 flipMint; // summed FLIP mint for the current owner
         bool poolLoaded; // running pool local initialized?
         uint256 runningFuture; // running futurePrizePool
     }
@@ -504,8 +506,7 @@ abstract contract DegenerusGameDegeneretteModule is GameBoxInternals,
         }
 
         // Affiliate reward: 4.26% of the box value from high-match (s>=5) ETH spins, as FLIP
-        // to the player's referrer by wallet ID (VAULT when unreferred; 0, a no-op credit, for a
-        // referrer not yet registered).
+        // to the player's referrer by wallet ID (VAULT when unreferred).
         if (c.totals.affiliateBoxShare > 0) {
             uint256 refFlip = (c.totals.affiliateBoxShare * PRICE_COIN_UNIT) /
                 PriceLookupLib.priceForLevel(level + 1);
@@ -570,9 +571,9 @@ abstract contract DegenerusGameDegeneretteModule is GameBoxInternals,
     /// @param currency The currency type (0=ETH, 1=FLIP).
     /// @param betAmount The per-ticket bet amount (uint128) — the tier-threshold reference.
     /// @param payout The total payout amount (uint256).
-    /// @param acc Cross-bet accumulator: ETH claimable + the running prize-pool
-    ///        local accumulate here (flushed once per runDegeneretteWork call); FLIP
-    ///        mint totals accumulate here too.
+    /// @param acc Accumulator: ETH claimable and FLIP mint accumulate per owner (flushed at
+    ///        each owner change and by the caller at the end); the running prize-pool local
+    ///        is written back once by the caller.
     /// @return lootboxShare The ETH lootbox-share for this spin (0 for FLIP),
     ///         summed by the caller into the per-bet box.
     /// @return paid What this spin actually pays out across both legs.
@@ -625,7 +626,8 @@ abstract contract DegenerusGameDegeneretteModule is GameBoxInternals,
             }
             acc.runningFuture = pool;
 
-            // Accumulate ETH claimable cross-bet (flushed once). The lootbox-share
+            // Accumulate ETH claimable for the current owner (flushed at the owner change or
+            // by the caller). The lootbox-share
             // is returned to the caller, summed per betId, and resolved once per bet.
             // Bounded far below 2^256 (see totalPayout note), so the accumulation is safe.
             unchecked {

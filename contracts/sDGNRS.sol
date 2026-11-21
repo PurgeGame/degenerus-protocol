@@ -60,7 +60,8 @@ interface IDegenerusGamePlayer {
     function rngConsumerStage_g379() external view returns (uint8);
     /// @notice Check if game is over.
     function gameOver() external view returns (bool);
-    /// @notice Game-over timestamp; 0 while the game is live.
+    /// @notice Terminal payout completion time (`GO_TIME`); 0 until the terminal payout completes,
+    ///         including after the game-over latch.
     function gameOverTimestamp() external view returns (uint48);
     /// @notice Whether the Game's one-shot final sweep has run.
     function isFinalSwept() external view returns (bool);
@@ -168,8 +169,8 @@ contract sDGNRS {
     ///         registers one).
     error NoWalletId();
 
-    /// @notice Thrown when the year sweep is called before game over + 365 days or before the
-    ///         Game's final sweep.
+    /// @notice Thrown when the year sweep is called before terminal payout completion + 365 days
+    ///         or before the Game's final sweep.
     error SweepNotReady();
 
     /// @notice Thrown when a burn or redemption claim comes after the year sweep has ended them.
@@ -284,8 +285,9 @@ contract sDGNRS {
 
     /// @dev Total reserved redemption ETH value across closed batches and their unpaid claims: a
     ///      close adds min(the batch's 175% share, free backing), resolution lowers it to the rolled total,
-    ///      each paid claim releases its rolled share and a finished batch releases its rounding
-    ///      dust. Backed live by the Game's redemption reserve, which the close moves out of the
+    ///      each paid claim releases its rolled share and a batch that finishes live settlement
+    ///      releases its rounding dust; the dust of a batch claimed after game over stays reserved
+    ///      until the first year sweep zeroes this value. Backed live by the Game's redemption reserve, which the close moves out of the
     ///      Game claimable; after game over by custody and the claimable. uint96 holds 7.9e28 wei (~658x the total ETH supply) —
     ///      real-ETH-bounded, safe. Packed into slot 0.
     uint96 private _pendingRedemptionEthValue;
@@ -951,14 +953,15 @@ contract sDGNRS {
         emit CenturyRecycled(completedLevel, refillPercent, burned, minted, whale, affiliate, lootbox, reward);
     }
 
-    /// @notice One year after game over, send everything sDGNRS holds to GNRUS and the Vault, half
-    ///         each, so no backing is stranded. This covers DGNRS's backing, unburned holders and
-    ///         uncollected redemption claims alike.
+    /// @notice One year after the terminal payout completes (the Game's `GO_TIME`), send everything
+    ///         sDGNRS holds to GNRUS and the Vault, half each, so no backing is stranded. This covers
+    ///         DGNRS's backing, unburned holders and uncollected redemption claims alike.
     /// @dev Permissionless and repeatable: anything that reaches sDGNRS later is swept by a later
     ///      call. Opens only after the Game's final sweep, which pays sDGNRS its last Game-side
     ///      balance. The first sweep ends every holder claim: native and wrapped burns and
     ///      redemption claims revert from then on. stETH goes first, ETH last.
-    /// @custom:reverts SweepNotReady Before game over + 365 days or before the Game's final sweep.
+    /// @custom:reverts SweepNotReady Before terminal payout completion + 365 days or before the
+    ///         Game's final sweep.
     function yearSweep() external {
         uint48 goTime = game.gameOverTimestamp();
         if (goTime == 0 || block.timestamp < uint256(goTime) + 365 days || !game.isFinalSwept()) {
@@ -1295,11 +1298,13 @@ contract sDGNRS {
     ///      chosen at pay time — the two are at par protocol-wide, so it is reported as one
     ///      wei-denominated figure. GameOver burns pay no FLIP.
     /// @param amount Amount of sDGNRS to burn
-    /// @return ethOut Total value that would be received, in wei (paid as ETH and/or stETH)
+    /// @return ethOut Total value that would be received, in wei (paid as ETH and/or stETH); 0 once
+    ///         the year sweep has ended burns
     /// @return flipOut FLIP that would be received (0 during gameOver)
     function previewBurnValue(uint256 amount) external view returns (uint256 ethOut, uint256 flipOut) {
         uint256 supply = uint256(_totalSupply) + _escrowedSupply - 1;
-        if (amount == 0 || amount > supply) return (0, 0);
+        // The year sweep ends every burn, so nothing would be received after it.
+        if (amount == 0 || amount > supply || yearSweptAt != 0) return (0, 0);
 
         bool over = game.gameOver();
         ethOut = _holderValue(amount, over);

@@ -193,4 +193,34 @@ contract QuestStreakRequestWindow is DeployProtocol {
         assertEq(streakAfterWindowBuy, builtStreak, "window buy neither syncs nor completes the quest");
         assertGt(builtStreak, 0, "fixture: a real streak was built");
     }
+
+    /// @notice A foil pack bought in the request window (dailyIdx = D, quests still on D-1) floors
+    ///         the quest streak on the Game day. The pack is one per level, so this purchase is
+    ///         the buyer's only one of it. Full protocol: a real ticket purchase builds the streak
+    ///         and the window is a real VRF request awaiting its word.
+    function test_FoilPackInRequestWindowFloorsTheStreak() public {
+        _settle();
+        (,,,, uint256 priceWei) = game.purchaseInfo_g1027();
+        vm.prank(p);
+        game.purchaseOrderFor{value: priceWei}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        id = game.walletIdOf_g3120(p);
+        assertGt(_rawStreak(), 0, "fixture: a primary completion");
+        assertLt(_rawStreak(), 12, "fixture: below the foil floor");
+        uint256 anchor = _lastActive();
+
+        uint24 d = _toRequestWindow();
+        assertEq(_activeQuestDay(), d - 1, "window: quest record still carries D-1");
+        assertEq(_lastActive(), anchor, "window: no quest action yet");
+
+        vm.prank(p);
+        game.purchaseOrderFor{value: 1 ether}(0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true);
+        assertEq(_rawStreak(), 12, "window foil pack floors the streak");
+        assertEq(_lastActive(), d, "the floor anchors on the Game day");
+
+        _settle();
+        assertEq(_activeQuestDay(), d, "word applied: quest day rolled to D");
+        assertEq(_rawStreak(), 12, "the roll keeps the floored streak");
+        _nextDay();
+        assertEq(quests.effectiveBaseStreak(id), 12, "the floored streak scores from the next day");
+    }
 }

@@ -32,7 +32,9 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     error NoSuchBet();
     /// @notice Only the bet's owner may amend it.
     error NotYourBet();
-    /// @notice The bet's slot has closed: its table is bound, its word is in flight.
+    /// @notice The bet's slot has closed: its table is bound, its word is in flight. Also a board
+    ///         change while the Game's RNG lock is held, and a house or vault pass-bank call while
+    ///         scheduled admissions are closed.
     error BetLocked();
     /// @notice The entry multiple is neither one copy of the run nor the field's high-roller
     ///         multiple. Nothing between the two is a legal entry.
@@ -658,9 +660,10 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     ///      balance in the Game would mean a cross-contract write on every application. Here the
     ///      debit and the reservation are one contract's storage and atomic by construction.
     ///
-    ///      Credits never expire and are not transferable. They are AWARDED only by the pinned
-    ///      game and spent only for their account. CrapsPreferenceLib pins this mapping's slot for
-    ///      the Game's jackpot battle batch read.
+    ///      Credits never expire and are not transferable, and they are spent only for their
+    ///      account. Besides the awards above, the Vault's comp door, the unopened-day refund,
+    ///      `upgradeReservedDay` and the deployment seed bank them. CrapsPreferenceLib pins this
+    ///      mapping's slot for the Game's jackpot battle batch read.
     mapping(uint32 => uint256) internal _passCreditsById;
 
     /// @dev THE PROGRESSIVE. One balance, shared by every scheduled window of every day.
@@ -675,16 +678,19 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
 
     /// @dev THE SCHEDULED CURSOR: the oldest scheduled slot the protocol may still owe work on.
     ///      Every scheduled slot strictly below it is completely finalized, an armed field with
-    ///      no seats, a LAPSED day whose reservations were credited back, or the remainder-zero
-    ///      separator — nothing of value is ever left behind it. Born in the constructor at
+    ///      no seats, a LAPSED day whose reservations were credited back, the remainder-zero
+    ///      separator, or a slot past the `_SETTLEMENT_DAYS` deadline, which is skipped without
+    ///      payment or refund. Born in the constructor at
     ///      the first window day's separator: no earlier day has windows, so that is the first
     ///      day that can owe anything.
     ///
-    ///      It only ever moves FORWARD, and only past a slot proven spent. A day the advance
-    ///      never opened — a protocol stall — is not replayed: nobody could have entered it (the
-    ///      doors check the live clock and the word), so all it can hold is prepaid reservations,
-    ///      and the cursor hands each of those its pass credit back before crossing. Late work is
-    ///      finished; dead days are refunded in kind; nothing is stranded either way.
+    ///      It only ever moves FORWARD: past a slot proven spent, or, once it is more than
+    ///      `_SETTLEMENT_DAYS` logical days behind, straight to the oldest day still inside the
+    ///      deadline. A day the advance never opened — a protocol stall — is not replayed: nobody
+    ///      could have entered it (the doors check the live clock and the word), so all it can
+    ///      hold is prepaid reservations, and the cursor refunds each before crossing: a day seat
+    ///      as one pass credit of its lane, a window-ahead comp seat to the comp allowance. Late
+    ///      work inside the deadline is finished; dead days are refunded; expired work is skipped.
     uint64 internal _minerSlot;
 
     /// @dev Paid-craps burn encoding: the low byte holds flags and bits 8..255 hold
@@ -904,7 +910,8 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     /// @param upgradedMask Only the bits NEWLY set by this call, bit `p` for period `p` — a bit
     ///        already high was neither charged nor counted again and is not restated here.
     /// @param burned The exact delta charged for them: `(bankroll + bounty) * (H - 1)`, summed
-    ///        over the newly upgraded windows. ZERO with the full mask is `upgradeReservedDay`:
+    ///        over the newly upgraded windows, plus 5% when a newcomer account pays it at the
+    ///        paid door. ZERO with the full mask is `upgradeReservedDay`:
     ///        a future reservation swapped to the high lane for a banked high credit.
     event CrapsDayWindowsUpgraded(uint32 indexed playerId, uint24 indexed day, uint8 upgradedMask, uint256 burned);
 
@@ -1204,6 +1211,18 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
         if (held < count) revert InsufficientPassCredits();
         unchecked { held -= count; }
         _passCreditsById[id] = (word & ~(_PASS_MAX << shift)) | (held << shift);
+    }
+
+    /// @dev The house and the vault are seated from their pass bank when a day opens
+    ///      (`_seatBody`), at a multiple drawn from that day's word. Scheduled admissions are
+    ///      closed from the wall-clock reset, through the request, until the word is applied, and
+    ///      the caller-driven doors that spend, convert or comp either body's passes refuse it in
+    ///      between: the high passes a day opens on are the ones held before its word was
+    ///      requested. `_reservableDay` shuts `upgradeReservedDay` over the same interval. A
+    ///      whale-pass purchase can still bank normal passes for either body then; mining-chain
+    ///      credits and the opening's own debit do not come through here.
+    function _vetBodyBank(uint32 id) internal view {
+        if ((id == _VAULT_ID || id == _SDGNRS_ID) && !_scheduledAdmissionsOpen()) revert BetLocked();
     }
 
     /// @dev Split one protocol-funded award between pass credit and liquid FLIP: HALF of it is

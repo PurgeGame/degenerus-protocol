@@ -224,8 +224,10 @@ interface IDegenerusGame {
     /// @return dailySeed Yesterday's finalized RNG word for today's boons (0 if unavailable).
     /// @return day Current day index.
     /// @return usedMask Bitmask of slots already used (bit i = slot i used).
-    /// @return decimatorOpen Whether decimator boons are available.
-    /// @return deityPassAvailable Whether deity pass boons can be generated.
+    /// @return decimatorOpen Whether the decimator burn window is open; no deity menu holds a
+    ///         decimator boon.
+    /// @return deityPassAvailable Whether fewer than 32 deity passes exist; no deity menu holds a
+    ///         deity-pass boon.
     function deityBoonData(
         address deity
     ) external view returns (
@@ -245,7 +247,8 @@ interface IDegenerusGame {
     /// @dev Authorized (account rule): `deityId == 0` is the caller; otherwise the caller must be the
     ///      deity account's payee or an approved operator. The deity account must hold
     ///      HAS_DEITY_PASS. The recipient is a third party: an existing ID, never 0. Self
-    ///      boons are compared by ID. Boon state is written for the recipient ID; no value moves.
+    ///      boons are compared by ID. Writes the recipient's boon lane or credits an instant award
+    ///      (activity, quest shield, two half passes); no ETH or token moves.
     /// @param deityId Deity account issuing the boon (0 = caller).
     /// @param recipientId Recipient account (nonzero, allocated).
     /// @param slot Slot index (0-2).
@@ -398,7 +401,8 @@ interface IDegenerusGame {
 
     /// @notice Spendable Degenesis credit accrued by a player.
     /// @param player Player to query.
-    /// @return credit Remaining credit (consumed 1:1 by Degenesis purchases).
+    /// @return credit Remaining credit (consumed 1:1 by Degenesis purchases); 0 once the credit
+    ///         window has closed.
     function degenesisCreditOf(address player) external view returns (uint256 credit);
 
     /// @notice Place single-symbol Degenerette bets for account `id`.
@@ -424,7 +428,7 @@ interface IDegenerusGame {
     ) external payable;
 
     /// @notice View a queued Degenerette bet word (zero once resolved or unknown).
-    /// @param index Lootbox RNG index the bet was placed at.
+    /// @param index Physical RNG buffer (0 or 1) the bet was placed in.
     /// @param betId Bet id within `index` (queue position + 1).
     /// @return packed Compact lane: owner32, symbol5, spins5, currency1, record1, activity16, stake64.
     function degeneretteBetInfo(
@@ -820,6 +824,6 @@ interface IDegenerusGame {
     /// @notice Raw claimable balance, including its 1-wei sentinel.
     function claimableWinningsOf(address player) external view returns (uint256);
 
-    /// @notice Prepaid AFKing ETH belonging to a wallet.
+    /// @notice Prepaid AFKing ETH belonging to a wallet; 0 after the final sweep.
     function afkingFundingOf(address player) external view returns (uint256);
 }

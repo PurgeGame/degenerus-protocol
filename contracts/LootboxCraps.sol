@@ -27,16 +27,17 @@ interface IGameSlotReader {
 ///      Terminal entry ends unfinished battles. Settled battles never consult a reused
 ///      tag again; historical replay uses event positions.
 ///
-///      The word and physical tag determine the shared shooter, rather than the
-///      player or board. All players in one session see the same sequence of dice.
+///      The word and the field's slot determine the shared shooter, rather than the
+///      player or board. All players in one field see the same sequence of dice.
 ///      A domain tag separates craps seeds from other consumers of that word.
 ///      Shared shooters correlate payouts across players; their exposure remains
 ///      limited to their stakes, while the house bears the table's correlated variance.
 ///
 ///      This base supplies randomness binding and resolution, without escrow or
 ///      payouts. The protocol's bounded miner chain settles the preceding session
-///      before allowing a fresh request. Craps requests waive the lootbox volume
-///      threshold, while retaining the completion, daily-priority and funding gates.
+///      before allowing a fresh request. Craps requests waive the pending-value,
+///      threshold and subscription-balance gates and take a fourfold basefee ceiling,
+///      while retaining the completion and daily-priority gates.
 contract LootboxCraps is Craps {
     /// @notice No word has landed on this index yet, so nothing can be resolved from it.
     error RngNotReady();

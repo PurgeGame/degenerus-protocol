@@ -247,10 +247,14 @@ contract DegenesisCredit is DegenesisFixture {
         _buyTickets(alice, 4);
         assertEq(_credit(alice), 2 * price, "calendar reset does not close logical cohort 7");
         _driveDay(9);
-        uint256 before = _credit(alice);
+        // The stored figure is not cleared; the view reports what can still be spent, which is none.
+        uint256 stored = _creditOfId(_idOf(alice));
+        assertEq(stored, 2 * price, "the stored credit is untouched by the launch");
+        assertEq(_credit(alice), 0, "no spendable credit once the window has closed");
         vm.deal(alice, 1 ether);
         _buyTickets(alice, 4);
-        assertEq(_credit(alice), before, "logical main launch closes credit");
+        assertEq(_creditOfId(_idOf(alice)), stored, "logical main launch closes credit");
+        assertEq(_credit(alice), 0, "the view stays at zero after a later purchase");
     }
 
     // ------------------------------------------------------------------ Degenesis buy itself

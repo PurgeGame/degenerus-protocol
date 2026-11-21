@@ -111,6 +111,10 @@ check-write-owners:
 check-gasleft:
 	@bash scripts/check-gasleft.sh
 
+.PHONY: check-compiler-bugs
+check-compiler-bugs:
+	@python3 scripts/check-compiler-bugs.py
+
 .PHONY: check-memory-guard
 check-memory-guard:
 	@if [ -z "$(CHECK_ARTIFACTS)" ]; then FOUNDRY_DISABLE_NIGHTLY_WARNING=1 forge build --skip test >/dev/null; fi

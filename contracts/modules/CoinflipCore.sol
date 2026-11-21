@@ -222,7 +222,8 @@ abstract contract CoinflipCore {
     error OnlyDegenerusGame();
     /// @notice Thrown when the caller is not the craps table.
     error OnlyCraps();
-    /// @notice Thrown when a take-profit or off action targets a player without auto-rebuy enabled.
+    /// @notice Thrown when a take-profit change or carry claim targets an account without auto-rebuy
+    ///         enabled.
     error AutoRebuyNotEnabled();
     /// @notice Thrown when an enable call targets an account that already has auto-rebuy on.
     error AutoRebuyAlreadyEnabled();
@@ -1520,9 +1521,9 @@ abstract contract CoinflipCore {
 
     /// @notice Process coinflip payout for a day (called by game contract).
     /// @dev The reward percent comes from FlipRoundLib.coinflipRewardPercent. `bonus` is
-    ///      precomputed by the caller from frozen protocol state (not a player-flippable flag),
-    ///      sized so a recycling player nets ~99.9% / ~101.9% RTP after the recycle bonus
-    ///      compounds.
+    ///      precomputed by the caller from frozen protocol state (not a player-flippable flag).
+    ///      With the 0.75% recycle bonus, recycled stake returns about 99.2% on a normal day,
+    ///      100.2% on a +2 day and 102.2% on a +6 day.
     /// @param bonus Reward-percent bonus for this day: 0 = normal day, 2 = bonus day (a level-0
     ///        day, the second day of a level's jackpot phase, or the first purchase day after a
     ///        turbo collapse), 6 = the same on an x0 BAF level (10, 20, 30, …).
@@ -1741,7 +1742,8 @@ abstract contract CoinflipCore {
         return daily + state.claimableStored + carry;
     }
 
-    /// @notice Get player's current coinflip stake for next day, the VAULT and sDGNRS seed included.
+    /// @notice Get player's deposited coinflip stake for the next day, the VAULT and sDGNRS seed
+    ///         included. An auto-rebuy carry is not included (`coinflipAutoRebuyInfo` reports it).
     function coinflipAmount(address player) external coinflipContext view returns (uint256 amount) {
         return coinflipAmountById(_viewWalletId(player));
     }

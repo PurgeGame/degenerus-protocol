@@ -81,8 +81,9 @@ contract DegenerusGameDegenesisModule is DegenerusGameStorage {
     /// @dev Bytes 0..2 are draw slots, zero if unused; ignored/discarded draws remain present.
     event DegenesisBoonsRolled(uint32 indexed id, uint8 degenesisDay, uint32 orderIndex, uint24 boonTypes);
 
-    /// @notice A sealed cohort funds future prizes, the insurance accumulator, the Vault budget
-    ///         and sDGNRS AFKing, 25% each.
+    /// @notice A cohort's volume funds future prizes, the insurance accumulator, the Vault budget
+    ///         and sDGNRS AFKing, 25% each: at the request that seals it, or at terminal setup for
+    ///         the current day's cohort.
     event DegenesisCohortSplit(uint8 indexed degenesisDay, uint256 volume);
     /// @notice A sealed cohort was priced and bound to `boundDay`'s daily word.
     event DegenesisCohortPriced(uint8 indexed degenesisDay, uint256 volume, uint256 payoutBudget, uint24 boundDay);
@@ -134,8 +135,8 @@ contract DegenerusGameDegenesisModule is DegenerusGameStorage {
     /// @dev Sale-day, size and Vault gates, 1:1 credit consume, payment, then the whole amount is
     ///      held in claimablePool until the cohort split and the order joins today's cohort. No
     ///      affiliate, quest, streak or activity work at purchase; a settlement boon may grant
-    ///      activity or quest shields in addition to the exclusive primary reward. Raw msg.data
-    ///      target of Game.purchaseDegenesisBox.
+    ///      activity or quest shields in addition to the exclusive primary reward. Delegatecall
+    ///      target of Game.purchaseDegenesisBox, which re-encodes its arguments under this selector.
     /// @param id Account receiving the order (0 = caller; account rule).
     /// @param amount Degenesis ETH: at least 0.01 ETH in whole 0.0001-ETH units, within the
     ///        per-order bound.
@@ -259,7 +260,8 @@ contract DegenerusGameDegenesisModule is DegenerusGameStorage {
     ///      back what the purchase did not take. The purchase may lower the Vault's balance word
     ///      by at most `maxCost`, from claimable alone, so the net move is exactly the cost and
     ///      none of the budget stays withdrawable. No explicit affiliate code: the recipient's
-    ///      existing referral applies.
+    ///      stored referral applies, and a recipient without one is locked to no referrer, as by
+    ///      its own uncoded purchase.
     /// @param recipientId Allocated recipient account; 0 selects the Vault.
     /// @param whalePass True for whale passes, false for tickets and lootboxes.
     /// @param quantity Whale passes, or ticket purchase units (400 = one whole ticket).
@@ -514,7 +516,8 @@ contract DegenerusGameDegenesisModule is DegenerusGameStorage {
     }
 
     /// @dev Pay an order's non-batched legs and announce it. Returns the sDGNRS paid; a transfer
-    ///      that finds the pool empty pays the WWXRP consolation instead.
+    ///      that pays nothing pays the WWXRP consolation instead. Pricing keeps the cohort's awards
+    ///      within the pool, so an empty pool reaches here as a zero award (Q = 0).
     function _resolveDegenesisOrder(DegenesisCohort memory g, DegenesisOutcome memory o, uint256 index)
         private
         returns (uint256 paid)

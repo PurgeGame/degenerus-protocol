@@ -148,7 +148,10 @@ abstract contract DegenerusGameJackpotDrawModule is GameJackpotEvents, Degenerus
     uint256 private constant COIN_DRAW_SHARES = 50;
     /// @dev Return gas kept by the battle stage around its settlement call.
     uint256 private constant JACKPOT_BATTLE_SETTLE_TAIL = 100_000;
-    /// @dev The settlement worker's own first-batch admission plus its resolver's reserve.
+    /// @dev The settlement worker's own first-batch admission plus the 30,000 it keeps around its
+    ///      resolver call. The nested call reserves and the resolver's setup reads are not counted,
+    ///      so just above this admission the worker or its resolver can refuse; nothing settles in
+    ///      that call and settlement starts in a later one.
     uint256 private constant JACKPOT_BATTLE_SETTLE_ADMISSION = GasBounds.CRAPS_SEAT_GAS_MAX
         + GasBounds.CRAPS_SETTLE_TAIL_GAS + GasBounds.CRAPS_CREDIT_GAS_MAX + GasBounds.CRAPS_WORK_TAIL_GAS + 30_000;
 
@@ -384,8 +387,9 @@ abstract contract DegenerusGameJackpotDrawModule is GameJackpotEvents, Degenerus
     ///      wallets keep separate seats. Cursor: next visit ordinal [0:31], eligible-level bitset
     ///      [32:130], active level offset [131:137], next queue position [138:169], positions left
     ///      in the visit [170:201]. A chunk boundary never starts a new visit or changes its draw.
-    ///      All registries and queues remain frozen under the daily lock, including across
-    ///      midnight and retries. Packed queue words are loaded once per group of up to eight.
+    ///      Registries and queues are frozen under the daily lock, including across midnight and
+    ///      retries; the CREATOR's level-0 `initProtocolDeity` is the one writer without that test.
+    ///      Packed queue words are loaded once per group of up to eight.
     function _collectJackpotChunkWithLevels(
         uint24 lvl, uint256 word, uint256 cursor, uint256 remaining, JackpotDrawLevels memory snapshot
     )

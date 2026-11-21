@@ -66,15 +66,20 @@ python3 scripts/check-docs.py
 make check-audit-snapshot
 make check-delegatecall check-raw-selectors check-rng-window check-pool-writes \
   check-array-delete check-advance-calls check-rng-taint check-rng-shape \
-  check-unchecked check-write-owners check-gasleft check-recipient-calls
+  check-unchecked check-write-owners check-gasleft check-recipient-calls check-compiler-bugs
 make test-assurance-tools
 python3 scripts/check-eth-loan-bootstrap.py --json-output "$AUDIT_SCRATCH/loan-bootstrap.json"
 ```
 
-Compiler-AST gates need the pinned compiler installed. Manifests detect unclassified or changed
-sites; passing a classification gate does not prove its annotations correct. Documentation
-references can be regenerated and checked with `scripts/generate-audit-references.py` as described
-in [Module map](MODULE-MAP.md) and [Storage packing](STORAGE-PACKING.md).
+`check-compiler-bugs` pins the compiler release and the bugs Solidity has published for it, and
+re-checks from source that no struct type reaches itself through a dynamic array, directly or
+through other structs, the precondition of the one bug published for 0.8.38 (SOL-2026-8, listed for
+both the legacy and via-IR pipelines); `python3 scripts/check-compiler-bugs.py --online` also
+compares the pinned list with Solidity's current one. Compiler-AST gates need the pinned compiler
+installed. Manifests detect unclassified or changed sites; passing a classification gate does not
+prove its annotations correct. Documentation references can be regenerated and checked with
+`scripts/generate-audit-references.py` as described in [Module map](MODULE-MAP.md) and [Storage
+packing](STORAGE-PACKING.md).
 
 ## Test selection
 

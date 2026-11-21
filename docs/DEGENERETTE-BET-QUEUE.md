@@ -46,8 +46,10 @@ accepts only ETH (0) and FLIP (1); any other currency reverts `UnsupportedCurren
 unit (1 gwei for ETH, 1 whole FLIP for FLIP) and at least the currency's minimum bet (0.005 ETH /
 100 FLIP). A spin-count or amount violation, a symbol above 23, an ETH `msg.value` above the total
 bet, or a boosted stake above 64 bits reverts `InvalidBet`; any bet after the liveness trigger
-reverts `GameOver`. Every bet binds to the current write buffer, whose word is not yet requested, so
-no bet can target a revealed word. A self- or operator-funded bet may also consume a per-currency
+reverts `GameOver`. ETH sent with a FLIP bet is credited to the funding account's prepaid AFKing
+balance (the caller's own account for a gifted bet). Every bet binds to the current write buffer,
+whose word is not yet requested, so no bet can target a revealed word. A self- or operator-funded
+bet may also consume a per-currency
 stake boon, which raises the effective stake per spin by a percentage of the (capped) total bet,
 spread across the spins and then floored to the stake unit; the player never spins on an unfunded
 fractional unit. A gifted bet never consumes the recipient's boon.

@@ -11,7 +11,7 @@ import {claimableBalance} from "../helpers/ClaimableBalance.sol";
 /// @notice Coinflip surface mirror (interface-only) so the submit FLIP leg (settled backing read
 ///         + backing withdraw) is mockable without importing the coinflip contract. With
 ///         redeemableFlipBacking forced to 0 the escrowed slice is 0, so the claim-time FLIP leg
-///         is skipped and the focus stays on the live-game ETH-forward path.
+///         is skipped and the focus stays on the live claim's reserve settlement.
 interface IFlipCoinflipPlayerMock {
     function previewClaimCoinflips(address player) external view returns (uint256);
     function redeemableFlipBacking() external returns (uint256 backing);

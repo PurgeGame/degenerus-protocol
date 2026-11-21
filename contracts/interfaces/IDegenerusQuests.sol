@@ -66,8 +66,9 @@ struct PlayerQuestView {
 ///      has no player entry points and resolves no address (level-quest eligibility reads the
 ///      ID's mint word from the Game). Wallet ID 0 means
 ///      "no wallet". Callers always pass a nonzero ID they hold (Game modules, Coinflip's
-///      Game registry lookup, FLIP after registration, Affiliate's stored IDs, Parimutuel's
-///      `marketBetGates`). Handlers do not reject unallocated IDs themselves; caller checks
+///      Game registry lookup, FLIP after registration, Affiliate's stored IDs, Parimutuel after
+///      `marketBetGates`); the `marketBetGates` view may receive 0 and then reports `mayBet`
+///      false. Handlers do not reject unallocated IDs themselves; caller checks
 ///      still apply. A view of an untouched ID
 ///      (including 0) returns its zero/default result.
 interface IDegenerusQuests {
@@ -126,7 +127,8 @@ interface IDegenerusQuests {
     ///      and streak floor. Credits the foil-quest reward itself by ID and floors an afking
     ///      buyer's streak through Game `floorAfkingStreakBase(id, ...)`.
     /// @param id Wallet ID of the buyer
-    /// @param ethMintSpendWei Gross ETH-denominated foil spend in wei (credited 1:1 to MINT_ETH)
+    /// @param ethMintSpendWei Gross ETH-denominated foil spend in wei (credited to MINT_ETH:
+    ///        daily progress in milli-ETH after per-action truncation, level progress in wei)
     /// @param flipMintQty FLIP-paid ticket-equivalent mint units
     /// @param lootBoxAmount ETH spent on lootbox in wei
     /// @param mintPrice Current ticket price in wei (daily targets)
@@ -166,7 +168,8 @@ interface IDegenerusQuests {
     /// @param id Wallet ID of the funder
     /// @param amount The bet amount (wei for ETH, base units for FLIP)
     /// @param paidWithEth True if the bet was paid with ETH, false if paid with FLIP
-    /// @param mintPrice Current ticket price in wei (0 for FLIP bets)
+    /// @param mintPrice The next level's ticket price, priceForLevel(level + 1), in wei (0 for
+    ///        FLIP bets); it prices this bet's daily and level quest targets
     /// @param day The Game's current logical day
     /// @return reward The quest reward amount earned (0 if quest not completed)
     /// @return questType The type of quest that was completed
@@ -183,7 +186,8 @@ interface IDegenerusQuests {
     /// @param day The Game's current logical day
     /// @param id Wallet ID of the buyer
     /// @param ethMintSpendWei Gross ETH-denominated spend on tickets + lootbox in wei
-    ///        (fresh + recycled), credited 1:1 to MINT_ETH quest
+    ///        (fresh + recycled), credited to the MINT_ETH quest (daily progress in milli-ETH
+    ///        after per-action truncation; level progress in wei)
     /// @param flipMintQty FLIP-paid ticket-equivalent mint units
     /// @param lootBoxAmount ETH spent on lootbox in wei (full amount, fresh + recycled)
     /// @param mintPrice Current ticket price in wei (purchaseLevel price for daily targets)

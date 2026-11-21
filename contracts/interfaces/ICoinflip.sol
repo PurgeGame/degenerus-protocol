@@ -131,7 +131,8 @@ interface ICoinflip {
 
     /// @notice Consume coinflip winnings via FLIP for burns without minting new tokens.
     /// @dev Access restricted to FLIP contract only. Reduces claimable balance, then — for a
-    ///      player ID once today's flip is applied — the auto-rebuy carry, without minting.
+    ///      player ID other than VAULT, sDGNRS and GNRUS once today's flip is applied — the
+    ///      auto-rebuy carry, without minting.
     ///      Address-keyed: a holder with no wallet ID consumes 0, as an empty ledger does.
     /// @param player The player whose balance to consume.
     /// @param amount Amount to consume.

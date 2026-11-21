@@ -166,4 +166,41 @@ contract ActivityAffiliateCacheTest is ActivityAffiliateCacheFixture {
         assertEq(game.mintPackedFor(PLAYER), 0);
     }
 
+    function _passWord(uint8 passType, uint24 frozenUntil, uint24 lastLevel, uint24 count) private pure returns (uint256) {
+        return (uint256(passType) << BitPackingLib.WHALE_PASS_TYPE_SHIFT)
+            | (uint256(frozenUntil) << BitPackingLib.FROZEN_UNTIL_LEVEL_SHIFT)
+            | (uint256(count) << BitPackingLib.LEVEL_COUNT_SHIFT)
+            | uint256(lastLevel);
+    }
+
+    function _passFields(uint256 packed) private pure returns (uint256 passType, uint256 frozenUntil) {
+        passType = (packed >> BitPackingLib.WHALE_PASS_TYPE_SHIFT) & 3;
+        frozenUntil = (packed >> BitPackingLib.FROZEN_UNTIL_LEVEL_SHIFT) & BitPackingLib.MASK_24;
+    }
+
+    /// @dev A whole ticket for the level after the pass's last level, recorded while the game level is still that
+    ///      last level, keeps the pass fields and counts the level; the fields clear once the game level has passed it.
+    function test_RecordMintKeepsPassUntilGameLevelPassesIt() public {
+        uint24 last = 24;
+        host.seed(PLAYER, _passWord(3, last, last, 5), last);
+        uint256 scoreBefore = host.score(PLAYER, 0, last);
+
+        host.record(PLAYER, last + 1, 400);
+        uint256 packed = host.packedOf(PLAYER);
+        (uint256 passType, uint256 frozenUntil) = _passFields(packed);
+        assertEq(passType, 3, "whale pass type kept at its last level");
+        assertEq(frozenUntil, last, "freeze kept at its last level");
+        assertEq((packed >> BitPackingLib.LEVEL_COUNT_SHIFT) & BitPackingLib.MASK_24, 6, "level past the freeze counts");
+        assertEq(packed & BitPackingLib.MASK_24, last + 1, "last level is the ticket level");
+        assertGe(host.score(PLAYER, 0, last), scoreBefore, "pass bonus still scored at the game level");
+
+        host.seed(PLAYER, packed, last + 1);
+        host.record(PLAYER, last + 2, 400);
+        packed = host.packedOf(PLAYER);
+        (passType, frozenUntil) = _passFields(packed);
+        assertEq(passType, 0, "pass type cleared once the game level passed the freeze");
+        assertEq(frozenUntil, 0, "freeze cleared once the game level passed the freeze");
+        assertEq((packed >> BitPackingLib.LEVEL_COUNT_SHIFT) & BitPackingLib.MASK_24, 7);
+        assertEq(packed & BitPackingLib.MASK_24, last + 2);
+    }
 }

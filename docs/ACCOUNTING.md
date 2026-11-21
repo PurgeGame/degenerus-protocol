@@ -95,11 +95,11 @@ reservations inside `claimablePool`.
 | Assertion | Test |
 | --- | --- |
 | Split is exact in wei at the first request after the cohort's day | `test/fuzz/DegenesisAccounting.t.sol::test_Split_ExactInWei_AtFirstRequestAfterItsDay`, `::testFuzz_Split_ExactInWei` |
-| Repeated processing splits nothing twice | `test/fuzz/DegenesisAccounting.t.sol::test_MissedCohorts_FrozenSplit_EmptyAndRepeatedProcessing` ("repeated processing adds nothing"); `test/fuzz/DegenesisBusyWeekIntegration.t.sol::testFuzz_BusyWeekExactlyOnceAndSolvent` ("each cohort split once") |
+| Repeated processing splits nothing twice | `test/fuzz/DegenesisAccounting.t.sol::test_MissedCohorts_FrozenSplit_EmptyAndRepeatedProcessing` ("repeated processing adds nothing"); `test/fuzz/DegenesisBusyWeekIntegration.t.sol::testFuzz_BusyWeekExactlyOnceAndSolvent` (`_onSplit`: "each cohort splits once") |
 | Unsplit volume stays reserved until its own split | `test/fuzz/DegenesisAccounting.t.sol::test_UnsplitVolumeStaysReservedUntilItsOwnSplit` |
 | Budget conservation | `test/fuzz/invariant/DegenesisSolvency.inv.t.sol::invariant_degenesisEthConservation` ("Vault budget + spends + release != split volume / 4") |
 | Solvency through the sale | `test/fuzz/invariant/DegenesisSolvency.inv.t.sol::invariant_backingCoversObligations` ("ETH + stETH < obligations") |
-| Budget spend leaves no cashout; arbitrary recipients | `test/fuzz/DegenesisVaultSpend.t.sol::testFuzz_SpendLeavesNoCashout`, `::test_SpendTickets_ExactCost_SentinelMaxCostEqualsCost` |
+| Budget spend leaves no cashout; arbitrary recipients | `test/fuzz/DegenesisVaultSpend.t.sol::testFuzz_SpendLeavesNoCashout`, `::test_SpendTickets_ExactCost_SentinelMaxCostEqualsCost` (Vault as recipient); `::test_GiftTickets_NoApproval_NoCreditLoop`, `::test_GiftBoxes_ResolveForRecipient_NoCreditLoop`, `::test_GiftCombined_ResolveForRecipient_NoCreditLoop`, `::test_GiftWhale_CoverageRewardsAndBox_NoCreditLoop` (another recipient: "recipient ETH ledgers untouched") |
 
 ## Live game
 
@@ -124,7 +124,7 @@ reservations inside `claimablePool`.
 | --- | --- |
 | Repayment from claimable keeps the sentinel and the pool | `test/fuzz/AccountLoans.t.sol::test_RepayFromClaimableKeepsSentinelAndConservesPool` ("internal move") |
 | Loan accounting | `test/fuzz/invariant/LoanAccounting.inv.t.sol::invariant_lenderLedger`, `::invariant_borrowCredit`, `::invariant_closedLoansPaidSpecOrSeized`, `::invariant_solvency` |
-| BAF credits plus residue equal the reservation | `test/fuzz/BafStagedResume.t.sol::test_RealConsolidationArmsTheScheduleReserve` ("credits plus residue equal the reservation", "claimablePool releases exactly the residue"); `::test_EmptyBafSlotForfeitsToResidue` |
+| BAF credits plus residue equal the reservation | `test/fuzz/BafStagedResume.t.sol::test_RealConsolidationArmsTheScheduleReserve` ("every slot filled: credits equal the reservation"); `::test_EmptyBafSlotForfeitsToResidue` (`_drainAll`: "credits plus residue equal the reservation"); `::test_EmptyHeadSlotReturnsItsTermToThePendingFuturePool`, `::test_EmptyBracketReturnsTheWholeReservation` (`_checkResidue`: "credits plus residue equal the reservation", "claimablePool releases exactly the residue") |
 | Redemption reserve counted once | `test/repro/RedemptionReserve.t.sol::testSettlingReserveCountsOnceInBackingPreview`; `test/invariant/RedemptionAccounting.t.sol::invariant_INV_02_EthConservationExact` |
 
 ### sDGNRS redemption properties
@@ -135,17 +135,18 @@ session; real request integration is covered by `RedemptionForwardBatches` and t
 
 | Property | Tests |
 | --- | --- |
-| A burn leaves supply at once and records raw token weight and the first activity score; escrow keeps the holder's share of the base until a daily or mid-day request closes and prices the batch | `test/fuzz/RedemptionForwardBatches.t.sol::test_BurnLeavesSupplyAtOnceAndCloseEmitsNoTransfer`, `::test_ClosePricesOverTheHolderBaseWithEqualPerTokenBases`; `test/fuzz/StakedStonkRedemption.t.sol::testFuzz_BurnRecordsTokensAndAggregates`, `::test_PriceIsFixedAtCloseNotBurn`; `test/fuzz/RedemptionEdgeCases.t.sol::test_ActivityScoreFrozenOnFirstBurn` |
-| Exact batch token conservation; no daily or supply cap (burns accumulate across days and a batch can exceed half the supply); exact reserves including cursor rounding dust and parked claims | `test/invariant/RedemptionAccounting.t.sol::invariant_INV_04_TokenConservation`, `::invariant_INV_02_EthConservationExact`, `::invariant_balanceCoversPendingRedemptionEth`; `test/fuzz/RedemptionEdgeCases.t.sol::test_NoDailyCapAcrossBatches`, `::test_UncappedBurnsAccumulateAcrossDays`, `::test_BatchCanExceedHalfSupply` |
+| A burn leaves supply at once and records raw token weight and the first activity score; escrow keeps the holder's share of the base until a daily or mid-day request closes and prices the batch | `test/fuzz/RedemptionForwardBatches.t.sol::test_BurnLeavesSupplyAtOnceAndCloseEmitsNoTransfer`, `::test_ClosePricesOverTheHolderBaseWithEqualPerTokenBases`, `::test_LockedAndInFlightBurnsJoinTheNextBatchAndMiddayWordSettles` ("the mid-day request closed bob's batch"); `test/fuzz/StakedStonkRedemption.t.sol::testFuzz_BurnRecordsTokensAndAggregates`, `::test_PriceIsFixedAtCloseNotBurn`; `test/fuzz/RedemptionEdgeCases.t.sol::test_ActivityScoreFrozenOnFirstBurn` |
+| Exact batch token conservation; no daily or supply cap (burns accumulate across days and a batch can exceed half the supply); an exact sDGNRS reserve ledger (`pendingRedemptionEthValue`) including cursor rounding dust | `test/invariant/RedemptionAccounting.t.sol::invariant_INV_04_TokenConservation`, `::invariant_INV_02_EthConservationExact`, `::invariant_balanceCoversPendingRedemptionEth`; `test/fuzz/RedemptionEdgeCases.t.sol::test_NoDailyCapAcrossBatches`, `::test_UncappedBurnsAccumulateAcrossDays`, `::test_BatchCanExceedHalfSupply` |
 | The batch's FLIP leg pays on a tagged synthetic flip, independent of the daily coinflip bit | `test/fuzz/RedemptionForwardBatches.t.sol::test_SyntheticFlipBitIsIndependentOfDailyCoinflipBit`; `test/fuzz/StakedStonkRedemption.t.sol::testFuzz_FlipWinOrLossUsesBatchSyntheticResult`; `test/fuzz/RedemptionBatching.t.sol::test_EscrowUsesBatchSyntheticResultWithoutDailyResultRead` |
-| The lootbox leg resolves as one box order of at most 20 boxes, with cold gas bounds | `test/fuzz/RedemptionForwardBatches.t.sol::test_RedemptionLootboxLegResolvesAsOneBoundedOrder`; `test/gas/RedemptionBatchGas.t.sol::test_ColdTwentyBoxBeneficiaryThroughRouter`, `::testFuzz_ColdLargeLootboxFitsOrderBound`; `test/fuzz/RandomnessSeedInputs.t.sol::testFuzz_BoxAmountDoesNotRerollIdentity` |
-| The close moves the batch's maximum (175%) payout, capped at free backing, from sDGNRS's Game claimable into the redemption reserve; live legs pay only from that reserve, a stETH transfer failure cannot block the close or settlement, and token donations wait for the ending | `test/fuzz/RedemptionStethFallback.t.sol::test_StethTransferFailureCannotBlockReserveCloseOrSettlement`, `::test_TokenDonationWaitsForTheEndingAndGameReserveFundsClaim`, `::test_LargeTokenDonationCannotDropALiveClaim`, `::testFuzz_CloseAndClaimFundingMix`; `test/repro/RedemptionReserve.t.sol::testLargeGameBackingCapsBatchWithoutTruncating` |
+| The lootbox leg resolves as one box order of at most 20 boxes, with cold gas bounds | `test/fuzz/RedemptionForwardBatches.t.sol::test_RedemptionLootboxLegResolvesAsOneBoundedOrder` ("the whole leg drains the reserve"); `test/gas/RedemptionBatchGas.t.sol::testFuzz_ColdLargeLootboxFitsOrderBound` (cold legs of 20 ETH to 120M ETH inside the 20-box admission), `::testFuzz_ColdWholeClaimFitsItsReservation` ("whole beneficiary fits admission bound"), `::test_ColdTwentyBoxBeneficiaryThroughRouter`; `test/fuzz/RandomnessSeedInputs.t.sol::testFuzz_BoxAmountDoesNotRerollIdentity` |
+| The close moves the batch's maximum (175%) payout, capped at free backing, from sDGNRS's Game claimable into the redemption reserve; live legs pay only from that reserve, the close and live settlement move no ETH or stETH out of the Game, and token donations wait for the ending | `test/fuzz/RedemptionStethFallback.t.sol::testFuzz_CloseAndClaimFundingMix` ("the close sends sDGNRS no ETH", "no ETH moves": Game ETH plus stETH unchanged through settlement), `::test_TokenDonationWaitsForTheEndingAndGameReserveFundsClaim`, `::test_LargeTokenDonationCannotDropALiveClaim`; `test/fuzz/RedemptionBackingCap.t.sol::test_EntireSupplyFitsPackedAmountAndPayoutCannotExceedBacking` ("175% roll capped at close backing"); `test/repro/RedemptionReserve.t.sol::testLargeGameBackingCapsBatchWithoutTruncating` |
 | Open escrow stays in the holder base until its batch closes; pending and resolved claims survive century refills | `test/economics/SdgnrsCenturyRecycle.t.sol::testPendingAndResolvedClaimsSurviveRefillsAndSettle`, `::testOpenBatchRemainsUnpricedAcrossRefill` |
-| Both endings resolve an unrolled settling batch at 100; a batch resolved live keeps its roll; the open batch unwinds at the terminal burn price | `test/fuzz/RedemptionForwardBatches.t.sol::test_TerminalWordResolvesTheSettlingBatchAndOpenBatchUnwinds`, `::test_DeadEndingResolvesTheSettlingBatchAtExpectedValue`, `::test_OpenBatchUnwindsAtTheGameOverBurnPrice`; `test/fuzz/DeadVrfEnding.t.sol::test_pendingRedemptionResolvesAtExpectedValue` |
-| Terminal claims pay exactly once until the sDGNRS year sweep ends them; operators claim for the owner only | `test/fuzz/RedemptionEdgeCases.t.sol::testFuzz_TerminalClaimPaysExactlyOnce`, `::test_OperatorCanClaimTerminalForOwnerOnly` |
+| Both endings resolve an unrolled settling batch at 100; a batch resolved live keeps its roll; the open batch unwinds at the terminal burn price | `test/fuzz/RedemptionForwardBatches.t.sol::test_TerminalWordResolvesTheSettlingBatchAndOpenBatchUnwinds`, `::test_DeadEndingResolvesTheSettlingBatchAtExpectedValue`, `::test_OpenBatchUnwindsAtTheGameOverBurnPrice`; `test/fuzz/DeadVrfEnding.t.sol::test_pendingRedemptionResolvesAtExpectedValue` (the ending calls `resolveTerminalRedemptions`) |
+| Terminal claims pay exactly once until the sDGNRS year sweep ends them; operators claim for the owner only | `test/fuzz/RedemptionEdgeCases.t.sol::testFuzz_TerminalClaimPaysExactlyOnce`, `::test_OperatorCanClaimTerminalForOwnerOnly`; `test/fuzz/RedemptionAccounts.t.sol::test_Stranger_Unauthorized_UnallocatedE_NonBurnerNoClaim`; `test/fuzz/invariant/RedemptionInvariants.inv.t.sol::test_claimRedemptionRevertsOnceSwept` |
 
-The redemption suites also cover real payable forwarding, stETH-before-ETH reentrancy, protection of
-other claims' reserves, settlement order, parked retries and operator authorization.
+The redemption suites also cover live claims that settle from the reserve with no ETH forwarded,
+stETH-before-ETH reentrancy, protection of other claims' reserves, settlement order and operator
+authorization.
 
 ## Liveness triggered and terminal processing
 
@@ -154,7 +155,7 @@ obligation equation still holds until `gameOver` is set.
 
 | Step | Function | Effect |
 | --- | --- | --- |
-| Decision (purchase timeout, VRF alive) | `DegenerusGameGameOverModule` terminal entry | Latches the terminal level; a staged BAF reservation releases its uncredited part (`if (jackpotWork.kind == 7) claimablePool −= jackpotWork.paid`) into the distributable total |
+| Decision (either ending) | `DegenerusGameGameOverModule` terminal entry | Latches the terminal level; a staged BAF reservation releases its uncredited part (`if (jackpotWork.kind == 7) claimablePool −= jackpotWork.paid`) into the distributable total |
 | Purchase-timeout loan settlement (until a hard stall) | `DegenerusGameAdvanceModule._settleTerminalLoans` (stage 20) | Each loan repays at the current price (internal move) or is seized; no Game ETH moves |
 | Drain | `_handleGameOverDrain` | Splits all Degenesis cohorts (`splitDegenesis`); `available = custody − claimablePool`; on the deterministic ending only, credits deity refunds (levels below 10, `claimablePool += refunded`); a normal ending refunds nothing; releases `degenesisVaultBudget` and sDGNRS AFKing (`claimablePool −= both`, `DegenesisFundsReleased`); sets `gameOver`; burns unallocated GNRUS/sDGNRS inventory and clears `degenesisActive`; zeroes current/next/future, `yieldAccumulator` and the pending buffer |
 | Payout | `_startJackpotWork` / `_resumeTerminalPayout` (VRF alive) or `deadPot` + `claimDeadVrf` (hard stall) | `available = custody − claimablePool` goes to the terminal ticket jackpot, or is fixed as `deadPot` and credited to `claimablePool` claim by claim. Empty-bucket leftovers stay in custody for the final sweep |
@@ -175,8 +176,9 @@ The Game-held redemption reserve stays inside `claimablePool` through the drain;
 ## Terminal and post-game-over
 
 After `gameOver`, the obligation is `claimablePool` alone: deity refunds (deterministic ending
-below level 10 only), earned claims, credited terminal awards, the redemption reserve and the
-protocol sinks' balances. The live pools are zero.
+below level 10 only), earned claims, credited terminal awards, the redemption reserve, the
+protocol sinks' balances and the reservation of a sealed Decimator round left unpaid (it cannot be
+paid after terminal entry; the final sweep releases it). The live pools are zero.
 The uncredited part of the terminal pot (an unfinished terminal jackpot or unclaimed `deadPot`) is
 custody above `claimablePool`, not a separate obligation.
 
@@ -205,16 +207,18 @@ After the sweep, `claimWinnings`/`claimClaimable` revert `AlreadySwept`, AFKing 
 `sweepAccounts` revert, `claimDeadVrf` reverts, and `claimablePoolView()` returns 0. sDGNRS terminal
 redemption claims are held by sDGNRS until its year sweep.
 
-Year sweep (`sDGNRS.yearSweep`, from game over + 365 days, after the final sweep; permissionless and
+Year sweep (`sDGNRS.yearSweep`, from `GO_TIME` + 365 days, after the final sweep; permissionless and
 repeatable): sends all ETH and stETH sDGNRS holds, half to GNRUS and half to the Vault, stETH first.
-The first call stamps `yearSweptAt` and zeroes the redemption reserve; from then on sDGNRS native and
+The first call stamps `yearSweptAt` and zeroes sDGNRS's reserved redemption value
+(`_pendingRedemptionEthValue`; the final sweep releases the Game-held reserve); from then on sDGNRS native and
 wrapped burns, DGNRS burns and redemption claims revert `Swept`. GNRUS's `vaultRedeemFor` opens only after that stamp.
 
 | Assertion | Test |
 | --- | --- |
 | Post-game claimable within backing | `test/fuzz/invariant/WhaleSybil.inv.t.sol::invariant_gameOverTerminal` ("WhaleSybil: post-game claimable exceeds backing") |
 | Sweep pays all three receivers, stETH first, pro rata when short | `test/fuzz/FinalSweepPayoutLegs.t.sol::test_ethOnlySweepPaysAllThreeReceiversThroughTheRawCall` ("every wei reached the three receivers"), `::test_mixedSweepPaysStethFirstThenEth`, `::test_aShortfallSplitsWhatExistsProRata`, `::test_emptySweepCompletes` |
+| GNRUS `onFinalSweep` runs also when custody is zero | `test/gas/GnrusFinalSweepGas.t.sol::test_emptyGameStillCashesOutGnrusTokens` (GNRUS `sweptAt` stamped; its sDGNRS and DGNRS cashed out) |
 | Sweep shuts down the subscription | `test/fuzz/FinalSweepPayoutLegs.t.sol::test_sweepShutsDownTheSubscription`, `::test_sweepSurvivesACoordinatorThatRefusesTheCancel` |
-| Claims close at the sweep | `test/fuzz/DeadVrfEnding.t.sol::test_claimsCloseAtTheFinalSweep` |
+| Claims close at the sweep | `test/fuzz/DeadVrfEnding.t.sol::test_claimsCloseAtTheFinalSweep` (`claimDeadVrf` reverts); `test/repro/FinalSweepBoundary.t.sol::test_AtTheBoundaryTheSweepRunsOnce` (AFKing withdrawal reverts `AlreadySwept`; "claimablePool zero after the sweep") |
 | Failed stETH read leaves stETH in place | `test/repro/V08StethDeadSweep.t.sol::test_revertingSteth_sweepCompletesAndLeavesStethInPlace` |
 | Sweep not reachable before 30 days | `test/edge/GameOver.test.js` ("mineFlip before 30 days reports NoWork and preserves the unexpired claim window") |

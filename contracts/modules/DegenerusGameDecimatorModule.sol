@@ -137,8 +137,9 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
         // Round once to whole FLIP. The uint64 aggregate bound keeps every accepted numerator below 2^138.
         uint256 credited = baseAmount * (factor * multBps) / (1 ether * 10_000);
         if (credited == 0) revert E();
-        // The wallet slot finds a top-up; a new window's first burn overwrites it. Settlement reads
-        // only the entry, so an older round still in the queue keeps its own.
+        // The wallet slot finds a top-up; a new window's first burn overwrites it. Entries are
+        // stored by ID alone, and no older round is still queued then: a window opens only at a
+        // request, which needs an empty queue.
         uint256 latest = decBattlePlayers[playerId];
         uint256 stack;
         if (uint24(latest >> 64) == lvl) {
@@ -466,6 +467,7 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
         );
         emit DecimatorRun(lvl, id, run.peakBankroll);
         uint256 score = (entry >> STACK_SHIFT) * run.peakBankroll;
+        // `retained` is the heap size after the insert, not the retained flag.
         (uint256 retained,) = _insert(word, capacity, winners, (score << 64) | id);
         return retained;
     }

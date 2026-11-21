@@ -345,6 +345,18 @@ contract VaultPlayerActionsTest is SeatFixture {
         _reject(address(game), hex"123456");
     }
 
+    /// @dev The year sweep is listed on sDGNRS only: the allowlist admits its selector there, the Vault's
+    ///      call reaches the sweep's own gate, and the same selector on the DGNRS wrapper is refused.
+    function test_yearSweepIsAllowedOnSdgnrsOnly() public {
+        bytes4 sweep = sdgnrs.yearSweep.selector;
+        assertTrue(VaultPlayerActions.isAllowed(ContractAddresses.SDGNRS, sweep), "allowed on sDGNRS");
+        assertFalse(VaultPlayerActions.isAllowed(ContractAddresses.DGNRS, sweep), "not allowed on DGNRS");
+        vm.prank(owner);
+        vm.expectRevert(bytes4(keccak256("SweepNotReady()")));
+        abi.decode(OwnerTargetCall.call(address(vault), abi.encodeCall(vault.playerAction, (address(sdgnrs), abi.encodeCall(sdgnrs.yearSweep, ()), 0)), 0), (bytes));
+        _reject(ContractAddresses.DGNRS, abi.encodeCall(sdgnrs.yearSweep, ()));
+    }
+
     function test_budgetedVaultControlsHaveOnlyTheirDedicatedRoute() public {
         _reject(ContractAddresses.GAME, abi.encodeCall(IDegenerusGame.spendDegenesis, (0, false, 0, 0, 1)));
         _reject(ContractAddresses.DGNRS, abi.encodeWithSignature("unwrapTo(address,uint256)", owner, 1e12));

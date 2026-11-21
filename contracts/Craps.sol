@@ -227,7 +227,7 @@ contract Craps {
 
     /// @notice Why a bet slip stopped playing.
     enum SlipStop {
-        Bust, // fell below half a round, or lost the mid-run second-chance flip
+        Bust, // stopped before the goal: below half a round, a lost second-chance flip or a hard bound
         Goal // the bankroll reached the chosen target
     }
 
@@ -505,9 +505,9 @@ contract Craps {
         unchecked {
             // A board with no line bet runs the no-pass-line specialization — the same point
             // machine without the pass-line bookkeeping; every other shape runs the general one.
-            // A line-ONLY board is not worth a third machine: the dice place
-            // three of the ten chips uniformly over ten legs, so one board in 1,000 stays
-            // line-only even when all seven picked chips are on the line.
+            // A line-ONLY board is not worth a third machine: a ticket names at most three
+            // chips on the pass line, so the dice must place at least seven of the ten there,
+            // at most one board in ten million.
             if (st & ST_PASS_LIVE == 0) {
                 return _runSideSettlement(b, seed, logPos, st, wins);
             }
@@ -762,7 +762,9 @@ contract Craps {
     ///      FLIP figure to a small one and rank it WORSE; saturating can only ever fail to
     ///      separate two runs that are already past the horizon, and the comparison then falls
     ///      through to the next field. A custom bankroll is at most 25 x 16,777,215 FLIP, so
-    ///      reaching the 44-bit ceiling takes a run of over 40,000x that bankroll.
+    ///      reaching the 44-bit ceiling takes a run of over 40,000x that bankroll. A bust's
+    ///      33-bit high point saturates at 8,589,934,591 FLIP, about 20.5x that bankroll, so two
+    ///      busts of a custom goal above it can tie on the high point and rank on the remainder.
     uint256 internal constant _SC_GOAL_BIT = 1 << 104;
     uint256 internal constant _SC_PRIMARY_SHIFT = 60;
     uint256 internal constant _SC_PRIMARY_MASK = 0xFFFFFFFFFFF;

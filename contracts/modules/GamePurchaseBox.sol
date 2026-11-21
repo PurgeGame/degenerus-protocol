@@ -6,7 +6,9 @@ import {RECORD_KIND_LUCKBOX} from "../interfaces/ICoinflip.sol";
 import {ActivityCurveLib} from "../libraries/ActivityCurveLib.sol";
 
 abstract contract GamePurchaseBox is DegenerusGameStorage {
-    /// @notice Emitted when a lootbox-boost boon is consumed by a buy.
+    /// @notice Emitted when a lootbox-boost boon is consumed by a buy. `boostedAmount` adds the
+    ///         capped uplift in wei; a queued entry keeps it as whole basis points of the order,
+    ///         rounded down.
     event BoostUsed(
         uint32 indexed player, uint24 indexed day, uint256 originalAmount, uint256 boostedAmount, uint16 boostBps
     );

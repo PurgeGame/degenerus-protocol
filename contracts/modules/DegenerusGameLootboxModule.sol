@@ -70,6 +70,8 @@ interface ICrapsPassDelivery {
  * ## Functions
  *
  * - Box opening (resolveHumanBoxOrder, resolveAfkingBox, resolveLootboxDirect, resolveRedemptionLootbox)
+ * - Pass-purchase box entries (recordCoverBox)
+ * - Redemption direct-half credit (creditRedemptionDirect)
  */
 abstract contract DegenerusGameLootboxModule is GameBoxInternals, GamePurchaseBox {
     // =========================================================================
@@ -127,8 +129,9 @@ abstract contract DegenerusGameLootboxModule is GameBoxInternals, GamePurchaseBo
     ///      ONE ticket outcome (196.78%), before the variance tiers (~0.941x mean) and the
     ///      EV-neutral near/far distance weighting. After the variance mean that is ~185% of the
     ///      main amount per ticket outcome, so a neutral 1 ETH box (0.9 ETH main) carries
-    ///      ~1.67 ETH of ticket face on a ticket roll. Ticket outcomes are 40% of direct-box rolls
-    ///      and 45% of recirculated-box rolls (roll 19 pays tickets there instead of the ETH spin).
+    ///      ~1.67 ETH of ticket face on a ticket roll. Ticket outcomes are 40% of the rolls of
+    ///      boxes that allow the ETH spin (queued, redemption and AFKing) and 45% of
+    ///      `resolveLootboxDirect` rolls (roll 19 pays tickets there instead of the ETH spin).
     uint16 private constant LOOTBOX_TICKET_ROLL_BPS = 19_678;
     /// @dev Budget weighting by target-level distance, applied to the ticket roll budget.
     ///      Far-future ticket rolls (20% of ticket rolls) capture 30% of the aggregate
@@ -348,7 +351,7 @@ abstract contract DegenerusGameLootboxModule is GameBoxInternals, GamePurchaseBo
         BoxAcc acc; // the entry's shared reward accumulator
         uint16 score;
         uint256 nonce; // boxes rolled so far — also each box's seed nonce
-        uint256 boonSeed; // each box's draw is (boonSeed, its nonce)
+        uint256 boonSeed; // the order's boon draws use (boonSeed, 0 .. count - 1): box n at n - 1
     }
 
     /// @dev Draw the order's EV allowance, then resolve its `count` boxes of `size` wei each for
@@ -519,12 +522,12 @@ abstract contract DegenerusGameLootboxModule is GameBoxInternals, GamePurchaseBo
     uint48 private constant QUEUED_ENTRY_TAG = uint48(1) << 46;
 
     /// @notice Settle one queued entry atomically.
-    /// @dev The AFKing box worker owns queue order and stores the
-    ///      advanced cursor before this call, so an entry settles at most once. The entry's
-    ///      root hashes the buffer's session word with the entry's position under BOX_ORDER;
-    ///      the position is fixed at append, before that word is requested. Every box and boon
-    ///      seed derives from that root. Token recipients are decoded only when a payout
-    ///      transfers tokens.
+    /// @dev The human box worker (`_runHumanBoxWork`, in the AFKing module) owns queue order
+    ///      and stores the advanced cursor before this call, so an entry settles at most once.
+    ///      The entry's root hashes the buffer's session word with the entry's position under
+    ///      BOX_ORDER; the position is fixed at append, before that word is requested. Every box
+    ///      and boon seed derives from that root. Token recipients are decoded only when a
+    ///      payout transfers tokens.
     /// @param buffer Physical read buffer (0/1).
     /// @param position The entry's zero-based position in that buffer.
     /// @param entry The stored 85-bit entry (LB_* layout).
@@ -803,7 +806,7 @@ abstract contract DegenerusGameLootboxModule is GameBoxInternals, GamePurchaseBo
     /// @param activityScore Frozen whole-point activity score threaded to the Degenerette spin rolls
     ///        (WWXRP / FLIP-spins / ETH-spin); identical to the score the box committed.
     /// @param allowEthSpin When false (recirc entry), the 5% ETH-spin roll awards tickets
-    ///        instead — see `_resolveLootboxRoll`. Directly-opened boxes pass true.
+    ///        instead — see `_resolveLootboxRoll`. Queued, redemption and AFKing boxes pass true.
     /// @param acc Running reward accumulator the caller flushes after all of a box's rolls settle.
     function _resolveLootboxCommon(
         uint32 id,
@@ -843,8 +846,9 @@ abstract contract DegenerusGameLootboxModule is GameBoxInternals, GamePurchaseBo
     }
 
     /// @dev Settle ONE reward roll: the reward-type draw, then (for a ticket roll) the distress
-    ///      bonus + single Bernoulli whole-collapse + queue at `rollLevel`, the whole-FLIP
-    ///      floor + creditFlip, and one LootBoxOpened. `rollAmount` drives the reward calc;
+    ///      bonus + single Bernoulli whole-collapse, adding the whole tickets (at `rollLevel`)
+    ///      and the FLIP to `acc`, which `_flushBoxAcc` queues and credits once per entry; and
+    ///      one LootBoxOpened. `rollAmount` drives the reward calc;
     ///      `fullAmount` fills the event's amount field. One box resolves here exactly once.
     /// @param id Wallet ID receiving rewards.
     /// @param index Entry tag (see `LootBoxOpened.lootboxIndex`) — event tag only.
@@ -956,11 +960,11 @@ abstract contract DegenerusGameLootboxModule is GameBoxInternals, GamePurchaseBo
     ///      40% tickets, 15% DGNRS, 15% WWXRP-spin, 5% FLIP (flat),
     ///      10% Craps day passes, 10% FLIP-spins ×3, 5% ETH-spin. The three spin rolls dispatch into the
     ///      Degenerette module; their sub-seeds are hash2-tagged off `seed` (no primary-
-    ///      chunk bits consumed). The ETH-spin only fires on directly-opened boxes
-    ///      (`allowEthSpin`); on recirc boxes roll 19 awards tickets instead, which keeps
-    ///      every box resolved inside a bet resolution (the sweep's `runDegeneretteWork_g670`, the
-    ///      ETH-pool memory-accumulator context) free of an ETH-pool
-    ///      read-modify-write.
+    ///      chunk bits consumed). The ETH-spin only fires on queued, redemption and AFKing
+    ///      boxes (`allowEthSpin`); on `resolveLootboxDirect` boxes roll 19 awards tickets
+    ///      instead, which keeps every box resolved inside a bet resolution (the sweep's
+    ///      `runDegeneretteWork_g670`, the ETH-pool memory-accumulator context) free of an
+    ///      ETH-pool read-modify-write.
     /// @param id Wallet ID receiving the reward
     /// @param amount The roll's main amount (box amount less the boon budget)
     /// @param targetPrice Price at the rolled target level (ticket legs only)
@@ -1048,10 +1052,10 @@ abstract contract DegenerusGameLootboxModule is GameBoxInternals, GamePurchaseBo
                 wasSpin = true;
             }
         } else {
-            // 5% chance: one ETH Degenerette spin (direct boxes only). On recirc boxes
-            // (allowEthSpin=false) this awards tickets instead, so no ETH-pool RMW occurs
-            // inside a deferred-flush context. Stake = the ticket budget it replaces
-            // (EV-equal to those tickets), in wei.
+            // 5% chance: one ETH Degenerette spin (queued, redemption and AFKing boxes only). On
+            // `resolveLootboxDirect` boxes (allowEthSpin=false) this awards tickets instead, so no
+            // ETH-pool RMW occurs inside a deferred-flush context. Stake = the ticket budget it
+            // replaces (EV-equal to those tickets), in wei.
             if (allowEthSpin) {
                 uint256 ethStake = (_ticketBudget(amount, isFarFuture) * _ticketVarianceBps(seed)) / 10_000;
                 if (ethStake != 0) {
@@ -1201,7 +1205,7 @@ abstract contract DegenerusGameLootboxModule is GameBoxInternals, GamePurchaseBo
     ///      The within-tier position reuses the SAME varianceRoll that selects the tier
     ///      (uniform within the tier's chance window), so no extra entropy is drawn.
     ///      Bit budget (consumed from `seed`):
-    ///        - varianceRoll: bits[96..119] via uint24(seed >> 96) % 10_000 (bias 0.045%)
+    ///        - varianceRoll: bits[96..119] via uint24(seed >> 96) % 10_000 (bias 0.043%)
     /// @param budgetWei ETH budget for tickets
     /// @param priceWei Price per ticket at target level (a non-zero price-table constant)
     /// @param seed Per-resolution 256-bit keccak seed (sliced inline; no advance)
@@ -1271,7 +1275,7 @@ abstract contract DegenerusGameLootboxModule is GameBoxInternals, GamePurchaseBo
     /// @dev Calculate DGNRS reward amount from the lootbox pool.
     ///      49.7% small tier, 36.7% medium, 13.1% large, 0.5% mega.
     ///      Bit budget (consumed from `entropy` — the threaded per-resolution seed):
-    ///        - tierRoll: bits[56..79] via uint24(entropy >> 56) % 1000 (bias 0.0024%)
+    ///        - tierRoll: bits[56..79] via uint24(entropy >> 56) % 1000 (bias 0.0013%)
     /// @param amount ETH amount for calculation
     /// @param entropy Per-resolution 256-bit seed (sliced inline; no advance)
     /// @param poolBalance Remaining DGNRS lootbox-pool balance; the award clamps to this ceiling.

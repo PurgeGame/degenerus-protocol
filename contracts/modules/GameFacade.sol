@@ -436,7 +436,8 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
     /// @notice Approve or revoke `operator` for account `id` (0 = the caller's own account).
     /// @dev The caller's own account must already hold an ID. A nonzero `id` must be allocated
     ///      and the caller must be its payee: an ordinary account's key or an acquired
-    ///      account's lender (operators cannot approve operators).
+    ///      account's lender (operators cannot approve operators). Approvals take effect only on
+    ///      ordinary accounts: one recorded on an acquired account authorizes nothing.
     /// @custom:reverts ZeroAddress If operator is the zero address.
     function setOperatorApproval(uint32 id, address operator, bool approved) external {
         _gameSetOperatorApproval(id, operator, approved);
@@ -479,10 +480,11 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
         return !_livenessTriggered() && !_dailyRequestDue() && _recordedDailyWord(dailyIdx) != 0;
     }
 
-    /// @notice Update lootbox RNG request threshold (wei).
-    /// @dev Access: vault owner only (DGVE governance executor).
+    /// @notice Update lootbox RNG request threshold (wei, kept in 0.001 ETH units, rounded down).
+    /// @dev Access: vault owner only (DGVE governance executor). The event reports the stored value.
     /// @custom:reverts OnlyVault If caller is not the vault owner.
-    /// @custom:reverts ZeroValue If newThreshold is zero.
+    /// @custom:reverts ZeroValue If newThreshold is below 0.001 ETH.
+    /// @custom:reverts OutOfBounds If newThreshold is 4,294,967.296 ETH or more.
     function setLootboxRngThreshold(uint256 newThreshold) external {
         _gameSetLootboxRngThreshold(newThreshold);
     }
@@ -532,8 +534,10 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
     /// @param payKind Payment method (DirectEth, Claimable, or Combined).
     /// @param foil True to additively buy one foil pack (10x the price scaled by the level's
     ///        snap exponent) in the same tx. The foil leg is one-per-cycle and adds to — never
-    ///        replaces — the ticket and lootbox legs, sharing the combined spend's affiliate,
-    ///        quest, and streak recording so a foil pack counts exactly like a ticket purchase.
+    ///        replaces — the ticket and lootbox legs. It makes its own affiliate, quest, streak
+    ///        and recycle-bonus calls at a ticket purchase's rates; the 3-ticket recycle
+    ///        threshold applies to it separately from the ticket and lootbox legs, and the
+    ///        day-before-final-draw affiliate uplift applies only to the ticket leg.
     function purchaseOrderFor(
         uint32 id,
         uint256 entryQuantityScaled,
@@ -662,7 +666,8 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
     }
 
     /// @notice Purchase whale pass: boosts levelCount, queues 100 levels of ticket entries, includes lootbox.
-    /// @dev Available at any level. Can be purchased multiple times (1-1,000 per call).
+    /// @dev Available at any level. 1-1,000 per call; a century (x00) pass level needs at least
+    ///      2 unless a whale boon applies.
     ///      Price: 2.4 ETH (levels 0-3), 4 ETH (levels 4+), or discounted with boon.
     ///      Per pass x quantity: 20 entries/level for [passLevel..9]; the rest of the 100-level
     ///      span from passLevel = level+1 pays 2 x quantity half-passes as whole tickets
@@ -725,8 +730,10 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
     ///         protocol draws then use today's word, available through rngWordForDay.
     /// @return day Current day index.
     /// @return usedMask Bitmask of slots already used (bit i = slot i used).
-    /// @return decimatorOpen Whether decimator boons are available.
-    /// @return deityPassAvailable Whether deity pass boons can be generated.
+    /// @return decimatorOpen Whether the decimator burn window is open; no deity menu holds a
+    ///         decimator boon.
+    /// @return deityPassAvailable Whether fewer than 32 deity passes exist; no deity menu holds a
+    ///         deity-pass boon.
     function deityBoonData(
         address deity
     )
@@ -790,7 +797,8 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
     ///      VRF-derived randomness seed. The signature matches the module function exactly
     ///      (identical selector), so the calldata forwards as-is — re-encoding here would cost
     ///      contract-size headroom for no behavior change.
-    /// @return returnAmountWei Amount to return (no entries or this round was already sealed).
+    /// @return returnAmountWei Pool handed back unsealed (no entries, already sealed, or the
+    ///         session cannot take the seal); 0 when sealed.
     function runDecimatorJackpot(
         uint256,
         uint24,
@@ -925,8 +933,9 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
     }
 
     /// @notice The canonical per-player prepaid afking ETH balance.
-    /// @return The player's afkingFunding balance (wei).
+    /// @return The player's afkingFunding balance (wei); 0 once the final sweep has run.
     function afkingFundingOf(address player) external view returns (uint256) {
+        if (_goRead(GO_SWEPT_SHIFT, GO_SWEPT_MASK) != 0) return 0;
         return _afkingOf(_walletIdOf(player));
     }
 
@@ -937,8 +946,9 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
     /// @dev Per-item isolated: an ineligible / already-claimed affiliate skips instead of
     ///      reverting the batch (the single-affiliate entry above is the catchable boundary).
     ///      The isolating self-call runs with msg.sender == this contract, so an ID of 0 maps to
-    ///      the caller's own ID first; for a caller with no ID that stays 0, which the body
-    ///      rejects (propagated for the blank array, skipped inside a batch).
+    ///      the caller's own ID first. For a caller with no ID it stays 0, and the body reads 0 as
+    ///      this contract's own wallet ID: rejected while this contract holds none (propagated
+    ///      for the blank array, skipped inside a batch), otherwise a claim for that ID.
     function claimAffiliateDgnrs(uint32[] calldata ids) external {
         uint256 len = ids.length;
         uint32 self = _walletIdOf(msg.sender);
@@ -1000,9 +1010,10 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
     ///         large lootbox wins (>5 ETH), the solo jackpot bucket, golden tickets, the lootbox
     ///         whale-pass boon and foil tier 8.
     /// @dev Thin, PERMISSIONLESS delegatecall dispatch stub into the whale module — forwards
-    ///      `msg.data` verbatim (msg.sender preserved). No approval gate: the claim only awards
-    ///      the account its own deferred tickets (it never moves value to the caller), so
-    ///      cranking it for anyone is safe. Signature: claimWhalePass(uint32 id) (0 = caller) —
+    ///      `msg.data` verbatim (msg.sender preserved). No approval gate: the claim awards the
+    ///      account its own deferred tickets and whale-pass status and pays the caller nothing;
+    ///      the window starts at the level after the one current at the claim, whoever calls it.
+    ///      Signature: claimWhalePass(uint32 id) (0 = caller) —
     ///      matches the module selector.
     function claimWhalePass(uint32) external {
         (bool ok, bytes memory data) = ContractAddresses
@@ -1162,11 +1173,12 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
     ///      at each step (100, 150, 225, 337, 505, ...); it resets after the queued nudges are
     ///      applied. The caller-supplied quote prevents a transaction
     ///      from paying a higher price if another nudge lands first.
-    ///      Only available while RNG is unlocked (before VRF request is in-flight).
+    ///      Only available while the daily RNG lock is clear: refused from the daily request until
+    ///      that day's daily-phase work unlocks it; a mid-day request in flight does not block it.
     ///      MECHANISM: Adds 1 to the daily coinflip word for each nudge, reversing its win
     ///      bit. Every other daily consumer uses the raw word.
     ///      SECURITY: Players cannot predict the base word, only influence it.
-    /// @custom:reverts RngLocked If RNG is currently locked (VRF request pending).
+    /// @custom:reverts RngLocked If the daily RNG lock is held.
     /// @custom:reverts NudgeCostChanged If the live quote differs from expectedCost.
     /// @custom:reverts E Once the liveness trigger has fired.
     /// @custom:reverts NudgeCapReached Once 255 nudges are queued.
@@ -1279,7 +1291,7 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
     }
 
     /// @notice View a queued Degenerette bet word (zero once resolved or unknown).
-    /// @param index Lootbox RNG index the bet was placed at.
+    /// @param index Physical RNG buffer (0 or 1) the bet was placed in.
     /// @param betId Bet id within `index` (queue position + 1).
     /// @return packed The logical bet word, matching its placement event.
     function degeneretteBetInfo(
@@ -1297,11 +1309,13 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
         return _loadDegeneretteBet(index, betId - 1);
     }
 
-    /// @notice Spendable Degenesis credit accrued by a player.
+    /// @notice Degenesis credit accrued by a player, while the credit window is open. Whether a
+    ///         purchase can spend it is decided at the purchase.
     /// @param player Player to query.
-    /// @return credit Remaining credit (consumed 1:1 by Degenesis purchases).
+    /// @return credit Remaining credit (consumed 1:1 by Degenesis purchases); 0 once the credit
+    ///         window has closed.
     function degenesisCreditOf(address player) external view returns (uint256 credit) {
-        return degenesisCredit[_walletIdOf(player)];
+        if (_degenesisCreditOpen()) credit = degenesisCredit[_walletIdOf(player)];
     }
 
     /// @notice Get the current prize pool (jackpots are paid from this).
@@ -1322,7 +1336,8 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
         return _goRead(GO_SWEPT_SHIFT, GO_SWEPT_MASK) != 0;
     }
 
-    /// @notice Timestamp when gameover was triggered (0 if game still active).
+    /// @notice Timestamp at which the terminal payout completed (`GO_TIME`); 0 until then,
+    ///         including between the game-over latch and that completion.
     function gameOverTimestamp() external view returns (uint48) {
         return uint48(_goRead(GO_TIME_SHIFT, GO_TIME_MASK));
     }
@@ -1384,7 +1399,7 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
     }
 
     /// @notice Check if RNG is currently locked (daily jackpot resolution).
-    /// @dev When locked, burns and certain operations are blocked.
+    /// @dev When locked, box and bet opening wait and changes to inputs of the day's draws are refused.
     /// @return True if RNG lock is active.
     function rngLocked() external view returns (bool) {
         return rngLockedFlag;
@@ -1396,13 +1411,14 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
         return _lootboxReadComplete();
     }
 
-    /// @notice Check if VRF has been fulfilled for current request.
-    /// @return True if random word is available for use.
+    /// @notice Check whether the open request session holds a delivered word.
+    /// @return True from delivery until the session closes (mid-day publication or the daily
+    ///         unlock), whether or not the word is published yet.
     function isRngFulfilled() external view returns (bool) {
         return _rngRequestActive() && rngWordCurrent != RNG_WORD_WAITING;
     }
 
-    /// @notice Timestamp of the last successfully processed VRF word.
+    /// @notice Timestamp of the last applied daily VRF word; mid-day words do not move it.
     /// @dev Used by governance contracts to detect VRF stalls (time-based).
     function lastVrfProcessed() external view returns (uint48) {
         return lastVrfProcessedTimestamp;
@@ -1561,7 +1577,8 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
     /// @dev Batches multiple stats into single call for gas efficiency.
     /// @param player The player address to query.
     /// @return lvl Current game level.
-    /// @return levelCount Credited level count, including FLIP mints, passes and activity awards.
+    /// @return levelCount Credited level count: ticket, box and foil purchases paid in ETH value,
+    ///         passes and activity awards. FLIP-paid tickets add none.
     /// @return streak Consecutive level mint streak.
     function ethMintStats(
         address player
@@ -1880,7 +1897,7 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
         total = uint32(_bucketLength(lvl, trait));
         if (offset >= total) return (0, total, total);
 
-        uint256 end = offset + limit;
+        uint256 end = uint256(offset) + limit;
         if (end > total) end = total;
 
         uint32 id = _walletIdOf(player);
@@ -1910,8 +1927,8 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
       +======================================================================+*/
 
     /// @notice Get hero weights for the sealed request day - 1, or the accumulating pool for today.
-    /// @param day Day index (from GameTimeLib).
-    /// @param quadrant Quadrant (0-3).
+    /// @param day Logical game day (`dailyIdx`), not the GameTimeLib wall-clock index.
+    /// @param quadrant Quadrant (0-3); only 0-2 carry hero wagers, 3 reads 0.
     /// @param symbol Symbol index within quadrant (0-7).
     /// @return wagerUnits Amount wagered in 1e14 wei units.
     function getDailyHeroWager(
@@ -1925,7 +1942,7 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
     }
 
     /// @notice Get the leading hero in the sealed or accumulating pool; other days return zeros.
-    /// @param day Day index (from GameTimeLib).
+    /// @param day Logical game day (`dailyIdx`), not the GameTimeLib wall-clock index.
     /// @return winQuadrant The winning quadrant.
     /// @return winSymbol The winning symbol within that quadrant.
     /// @return winAmount The wagered units for the winner.
@@ -1959,6 +1976,7 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
     /// @notice Accept plain ETH and credit it to the sender's prepaid afking balance.
     /// @dev Bare transfers become the sender's own withdrawable afking funds (not a prize-pool
     ///      donation). Blocked once the game is over, since post-sweep afking is unwithdrawable.
+    ///      A sender without a wallet ID is refused (`E`).
     receive() external payable {
         if (gameOver) revert GameOver();
         _creditAfkingValue(_requireWalletId(msg.sender), msg.value);

@@ -43,6 +43,9 @@ interface IDGNRSReserve {
 interface IDGNRSGame {
     /// @notice Whether the daily RNG lock is active, as implemented by DegenerusGame.
     function rngLocked() external view returns (bool);
+    /// @notice Whether the previous RNG cycle has finished: false while a request is unanswered or
+    ///         its word is still being consumed.
+    function rngComplete() external view returns (bool);
     /// @notice Whether the game has ended, as implemented by DegenerusGame.
     function gameOver() external view returns (bool);
     /// @notice The game's current level, as implemented by DegenerusGame.
@@ -236,7 +239,8 @@ contract DGNRS {
     // =====================================================================
 
     /// @notice Burn DGNRS and send the underlying sDGNRS to a recipient as soulbound.
-    /// @dev Blocked while RNG is locked to prevent vote-stacking via DGNRS→sDGNRS conversion.
+    /// @dev Blocked while the daily RNG lock is held or any VRF request, daily or mid-day, is
+    ///      unanswered or still being consumed, to prevent vote-stacking via DGNRS→sDGNRS conversion.
     ///      Unwraps are whole-token minimums so one account cannot be seeded with vote-ineligible dust.
     ///      Lifetime unwraps are capped at `UNWRAP_CAP` (40B), however many calls.
     ///      Only the Vault may unwrap, from its own balance; its owner reaches this through
@@ -250,7 +254,7 @@ contract DGNRS {
         if (amount < MIN_UNWRAP_AMOUNT) revert UnwrapTooSmall();
         uint256 unwrapped = totalUnwrapped;
         if (amount > UNWRAP_CAP - unwrapped) revert UnwrapCapExceeded();
-        if (game.rngLocked()) revert Unauthorized();
+        if (game.rngLocked() || !game.rngComplete()) revert Unauthorized();
         _burn(msg.sender, amount);
         totalUnwrapped = uint128(unwrapped + amount);
         staked.wrapperTransferTo(recipient, amount);
@@ -289,6 +293,7 @@ contract DGNRS {
     /// @return stethOut stETH received from backing.
     /// @return flipOut Always 0.
     /// @custom:reverts GameNotOver If called during active game.
+    /// @custom:reverts Swept (sDGNRS) If sDGNRS's year sweep has run.
     function burn(uint256 amount) external returns (uint256 ethOut, uint256 stethOut, uint256 flipOut) {
         _burn(msg.sender, amount);
         if (!game.gameOver()) revert GameNotOver();
@@ -311,7 +316,8 @@ contract DGNRS {
     // =====================================================================
 
     /// @notice Preview the value and FLIP output for burning a given amount of DGNRS
-    /// @dev Delegates to sDGNRS.previewBurnValue; does not modify state
+    /// @dev Delegates to sDGNRS.previewBurnValue (zero once the year sweep has ended burns); does not
+    ///      modify state
     /// @param amount Amount of DGNRS to simulate burning (12 decimals)
     /// @return ethOut Total value that would be received, in wei (paid as ETH and/or stETH)
     /// @return flipOut FLIP that would be received

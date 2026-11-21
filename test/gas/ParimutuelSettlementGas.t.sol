@@ -9,13 +9,15 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {MineFlipGasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
+import {GlamsterdamReprice} from "../helpers/GlamsterdamReprice.sol";
+import {MinerloopGasProbe} from "../helpers/MinerloopGasProbe.sol";
 
 /// @notice Parimutuel settlement stage gas on the real protocol (real Parimutuel, Coinflip and
 ///         Game). Each figure is one call measured with the touched accounts cooled first, so
 ///         storage and account access are cold as in a fresh transaction. Winners' Coinflip stake
 ///         lanes are fresh (zero) unless the case says otherwise: a zero-to-nonzero lane write is
 ///         the per-winner worst case the runGrowthWork admission estimate must cover.
-contract ParimutuelSettlementGasTest is DeployProtocol {
+contract ParimutuelSettlementGasTest is DeployProtocol, MinerloopGasProbe {
     uint256 private constant WORKER_CALL_GAS = 16_700_000;
     uint256 private constant LARGE_WORKER_ALLOWANCE = 16_000_000;
     uint256 private constant MINER_CALL_GAS = 9_000_000;
@@ -128,6 +130,34 @@ contract ParimutuelSettlementGasTest is DeployProtocol {
         assertEq(_stake(ids[0]), (STAKE * (CHUNK + 1)) / CHUNK);
         assertLe(used, FRESH_CHUNK_BOUND, "cold fresh chunk of 100 winners");
     }
+
+    /// Glamsterdam: one round of `winners` fresh winners, its flushes and the round step. Each run of
+    /// k winners after n pending credits is admitted at k * GROWTH_WINNER_GAS + GROWTH_TAIL_GAS
+    /// + (n + k) * CRAPS_CREDIT_GAS_MAX, the step at GROWTH_ROUND_ADVANCE_GAS + GROWTH_TAIL_GAS
+    /// + n * CRAPS_CREDIT_GAS_MAX, so the whole call is held to their sum.
+    function _glamsterdamFreshRound(string memory label, uint256 winners) private {
+        (, uint32[] memory ids) = _round(1, winners);
+        for (uint256 i; i < ids.length; ++i) assertEq(_stake(ids[i]), 0, "fixture: fresh lanes");
+        (GlamsterdamReprice.Result memory g, bytes memory returned) = _probe(address(parimutuel), address(game),
+            abi.encodeCall(parimutuel.runGrowthWork, (MineFlipGas.budget(ALLOWANCE, 10_000, true))), WORKER_CALL_GAS);
+        vm.stopMappingRecording();
+        MineFlipGas.Result memory r = abi.decode(returned, (MineFlipGas.Result));
+        assertTrue(r.done);
+        assertEq(r.rewardBasis, winners);
+        assertGe(g.newSlots, winners, "every winner's stake lane is new");
+        uint256 bound = MineFlipGasBounds.GROWTH_ROUND_ADVANCE_GAS + MineFlipGasBounds.GROWTH_TAIL_GAS
+            + winners * (MineFlipGasBounds.GROWTH_WINNER_GAS + MineFlipGasBounds.CRAPS_CREDIT_GAS_MAX);
+        _report(label, g, bound);
+        emit log_named_uint("new_slots", g.newSlots);
+        assertLe(g.glamsterdamExec + g.stateGas, bound,
+            "GROWTH_ROUND_ADVANCE_GAS + GROWTH_TAIL_GAS + winners * (GROWTH_WINNER_GAS + CRAPS_CREDIT_GAS_MAX)");
+    }
+
+    function test_GlamsterdamOneFreshWinner() public { _glamsterdamFreshRound("growth_one_fresh_winner", 1); }
+    function test_GlamsterdamFullFlushOfFreshWinners() public {
+        _glamsterdamFreshRound("growth_32_fresh_winners_one_flush", MineFlipGasBounds.GROWTH_CREDIT_BATCH_SIZE);
+    }
+    function test_GlamsterdamChunkOfFreshWinners() public { _glamsterdamFreshRound("growth_100_fresh_winners", CHUNK); }
 
     /// Repeat winners: the same 100 wallets win a second round on the same stake day, so each
     /// lane write is nonzero-to-nonzero (cold slot).

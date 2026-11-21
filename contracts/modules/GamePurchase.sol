@@ -135,7 +135,8 @@ abstract contract GamePurchase is
     /// @return futureShare Portion destined for the future prize pool.
     /// @return claimableDraw Per-player claimable + afking drawn; caller subtracts it from claimablePool.
     /// @return claimableUsed Recycled winnings drawn, excluding afking principal.
-    /// @custom:reverts E If payment validation fails or the funding tiers fall short.
+    /// @custom:reverts E If the payment kind or its fresh-ETH amount is invalid.
+    /// @custom:reverts Insolvent If the funding tiers fall short.
     function _recordMintPayment(
         uint32 player,
         uint256 costWei,
@@ -267,7 +268,7 @@ abstract contract GamePurchase is
     ///         is the `ethValue` parameter rather than `msg.value`. Callers: the facade's foil
     ///         purchase, which funds the ticket/lootbox leg with the fresh ETH it carved while
     ///         the buyer's msg.value is in flight (that msg.value is ignored here — only
-    ///         ethValue is spent).
+    ///         ethValue is spent), and the Vault's Degenesis spend, which names the Vault as payer.
     /// @param payerId Ledger the claimable/AFKing legs debit (0 = the buyer's own).
     function _purchaseWith(
         uint32 buyerId,
@@ -289,7 +290,8 @@ abstract contract GamePurchase is
         );
     }
 
-    /// @notice Redeem FLIP for current-jackpot tickets — allowed only inside the jackpot window.
+    /// @notice Redeem FLIP for tickets at the active ticket level — allowed only while the FLIP
+    ///         purchase window is open.
     /// @dev Reverts unless the FLIP purchase window is open. The window latches open on the first
     ///      redeem that lands with the prize target met and no RNG in flight, stays open through the
     ///      jackpot days (later daily locks do not close it), and is cleared by the advance at the
@@ -468,8 +470,8 @@ abstract contract GamePurchase is
 
     /// @notice Repay an open loan before the game enters its due level. Owed: principal plus 5%
     ///         of it per level used (at least one) plus 1% per unused level of the chosen term,
-    ///         all to the lender. Only the owner. ETH first, the account's own claimable for any
-    ///         shortfall; excess ETH goes to the account's AFKing balance.
+    ///         all to the lender. Only the owner. ETH first; a shortfall draws the account's
+    ///         claimable, then its prepaid AFKing. Excess ETH goes to the account's AFKing balance.
     function _repay(uint32 id) internal {
         if (id == 0) id = _walletIdOf(msg.sender);
         uint256 loan = _loans[id];
@@ -491,9 +493,9 @@ abstract contract GamePurchase is
         }
         _loans[id] = LOAN_RETAINED;
 
-        // The claimable leg leaves the 1-wei sentinel, as every claimable draw does.
-        if (owed > fresh && _claimableOf(id) <= owed - fresh) revert Insolvent();
-        _debitClaimable(id, owed - fresh);
+        // Claimable (above the 1-wei sentinel) then prepaid AFKing cover any shortfall, as on the
+        // automatic repayment; both already sit in claimablePool.
+        _settleShortfallNoPool(id, owed - fresh, true);
         claimablePool += uint128(fresh);
         _creditClaimableLogged(uint32(uint8(loan >> LOAN_LENDER_SHIFT)), owed);
         _creditAfkingValue(id, msg.value - fresh);
@@ -779,8 +781,9 @@ abstract contract GamePurchase is
         }
 
         // --- Single quest handler call (post-action: handlers execute before score) ---
-        // MINT_ETH quest progress is credited 1:1 in wei on the gross ETH-denominated
-        // ticket + lootbox spend (totalCost), regardless of fresh-vs-recycled funding source.
+        // MINT_ETH quest progress is credited on the gross ETH-denominated ticket + lootbox
+        // spend (totalCost), regardless of fresh-vs-recycled funding source: daily progress in
+        // milli-ETH after per-action truncation, level progress in wei.
         uint32 questStreak;
         bool questAfking;
         {
@@ -955,9 +958,10 @@ abstract contract GamePurchase is
     {
         // Liveness is gated by both callers (_purchaseForWithCached / _redeemFlipFor)
         // before any state is touched, so it is not re-evaluated here.
-        // Only the day before a standard phase's final draw earns the affiliate bonus.
+        // Only the day before a standard phase's final draw earns the affiliate bonus. The window
+        // closes at the final draw's request, where tickets start routing to the next level.
         bool affiliateBonusDay = cachedJpFlag && (jackpotFlags & JACKPOT_TURBO) == 0
-            && jackpotCounter >= JACKPOT_DAYS - 1;
+            && jackpotCounter >= JACKPOT_DAYS - 1 && !rngLockedFlag;
         // Single source of truth shared with the purchase quote (so charge == award) and the
         // foil delivery. Routes to level+1 on the final jackpot day's RNG request to prevent
         // tickets stranded in a level whose draws have ended (_endPhase breaks before _unlockRng).
@@ -1023,8 +1027,10 @@ abstract contract GamePurchase is
             // validation already ran inside the payment processing.
             uint256 freshEth = costWei - ticket.ticketClaimableUsed;
 
-            // Day before final jackpot draw (not turbo): +100 FLIP per ticket for affiliates
-            // Basis inflated by 7/5 (lvl 0-3, 25% rate) or 3/2 (lvl 4+, 20% rate) to yield +100 after scaling
+            // Day before final jackpot draw (not turbo): basis inflated by 7/5 at ticket levels 0-3
+            // and 3/2 after, +100 FLIP per ticket at the affiliate level's 25% or 20% rate. A level-3
+            // ticket bought in level 3's jackpot phase, before its final request, scales at
+            // affiliate level 4 (20%): +80.
             uint256 freshFlip = freshEth != 0
                 ? _ethToFlipValue(freshEth, priceWei)
                 : 0;

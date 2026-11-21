@@ -104,7 +104,7 @@ abstract contract DeadVrfEndingGasFixture is DeployProtocol {
         vm.etch(address(game), code);
     }
 
-    function test_ColdDeadVrfBatchFits11_5M() public {
+    function test_ColdDeadVrfBatchFits10M() public {
         uint8 mode = shape();
         // Only the empty-days shape completes in the first call; the others need several.
         bool oneCall = mode == 2;

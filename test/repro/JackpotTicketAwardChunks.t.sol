@@ -4,6 +4,8 @@ import {ProfileModules} from "../helpers/ProfileModules.sol";
 
 import {DegenerusGameTicketModule} from "../../contracts/modules/DegenerusGameTicketModule.sol";
 import {Test, Vm} from "forge-std/Test.sol";
+import {VmSafe} from "forge-std/Vm.sol";
+import {GlamsterdamReprice} from "../helpers/GlamsterdamReprice.sol";
 import {JackpotCheckpointHarness} from "./JackpotCheckpoints.t.sol";
 import {DegenerusGameFoilPackModule} from "../../contracts/modules/DegenerusGameFoilPackModule.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
@@ -33,9 +35,9 @@ contract JackpotTicketAwardChunksTest is Test {
     uint256 private constant WORD = 0xAC4DE45EDBEEF;
     uint256 private constant MAX_WINNERS = 192;
     uint256 private constant CHUNK = GasBounds.JACKPOT_TICKET_AWARD_CHUNK;
-    uint256 private constant EXPECTED_GROUP_BOUND = 2_833_600; // 8 * (4,200 + 350,000). Independent assertion of the protocol limit
+    uint256 private constant EXPECTED_GROUP_BOUND = 3_433_600; // 8 * (4,200 + 425,000). Independent assertion of the protocol limit
     uint256 private constant EXPECTED_TAIL = 180_000; // Independent assertion of the protocol limit
-    uint256 private constant EXPECTED_GROUP_ADMISSION = 3_015_600; // bound + tail + 2,000 engine margin
+    uint256 private constant EXPECTED_GROUP_ADMISSION = 3_615_600; // bound + tail + 2,000 engine margin
     // Admits the plan (120k + tail) but never a group (2.8336M + tail + 2k).
     uint256 private constant BELOW_GROUP = 3_000_000;
     // Admits setup (750k + tail + 2k) with headroom for the call's own entry spend; a group never
@@ -290,11 +292,82 @@ contract TicketGasHarness is TicketChunkHarness {
     }
 }
 
+/// @dev Glamsterdam repricing inside one test transaction (no reservoir). vm.cool re-colds the
+///      host's slots but not an account, so every account other than the host is charged as if
+///      its Osaka access had been warm: 2,500 above the model's cold Osaka access. State-diff
+///      recording warms every later access in the test, so each test takes all its cold figures
+///      before its first recorded replay, which supplies only the accesses. A cooled host is
+///      re-touched before a pre-state snapshot so the snapshot keeps its storage.
+abstract contract ReproGlamsterdam is Test {
+    uint256 internal constant WARM_ACCOUNT_GAS = 2_500;
+
+    /// @dev One measured call: pre- and post-state snapshots, allowance, cold frame and outcome.
+    struct Measured {
+        uint256 pre;
+        uint256 post;
+        uint256 allowance;
+        uint256 frame;
+        bytes32 outcome;
+    }
+
+    /// @dev Checks a recorded replay against its cold call; leaves the cold post-state.
+    function _checkReplay(Measured memory m, VmSafe.AccountAccess[] memory acc, bytes32 outcome) internal {
+        assertEq(outcome, m.outcome, "recorded replay reproduces the measured call");
+        bytes32 replayState = _touchedState(acc);
+        assertTrue(vm.revertToState(m.post));
+        assertEq(_touchedState(acc), replayState, "replay and cold call leave the same touched storage");
+    }
+
+    function _touchedState(VmSafe.AccountAccess[] memory acc) internal view returns (bytes32 digest) {
+        for (uint256 i; i < acc.length; ++i) {
+            VmSafe.StorageAccess[] memory sa = acc[i].storageAccesses;
+            for (uint256 j; j < sa.length; ++j) {
+                digest = keccak256(abi.encode(digest, sa[j].account, sa[j].slot, vm.load(sa[j].account, sa[j].slot)));
+            }
+        }
+    }
+
+    function _reprice(uint256 osaka, VmSafe.AccountAccess[] memory acc, address host)
+        internal view returns (GlamsterdamReprice.Result memory r, uint256 total)
+    {
+        uint256 n;
+        for (uint256 i; i < acc.length; ++i) {
+            if (acc[i].account == address(vm) || acc[i].account == address(this)) continue;
+            acc[n++] = acc[i];
+        }
+        assembly ("memory-safe") { mstore(acc, n) }
+        r = GlamsterdamReprice.reprice(osaka, acc, host);
+        total = r.glamsterdamExec + r.stateGas + WARM_ACCOUNT_GAS * r.coldAccounts;
+    }
+
+    function _logNewSlots(VmSafe.AccountAccess[] memory acc) internal {
+        for (uint256 i; i < acc.length; ++i) {
+            VmSafe.StorageAccess[] memory sa = acc[i].storageAccesses;
+            for (uint256 j; j < sa.length; ++j) {
+                if (sa[j].isWrite && !sa[j].reverted && sa[j].previousValue == bytes32(0) && sa[j].newValue != bytes32(0)) {
+                    emit log_named_bytes32("new slot", sa[j].slot);
+                }
+            }
+        }
+    }
+
+    function _glamLog(string memory label, GlamsterdamReprice.Result memory r, uint256 total, uint256 bound) internal {
+        emit log_named_string("unit", label);
+        emit log_named_uint("osaka", r.osakaExec);
+        emit log_named_uint("glamsterdam_exec", r.glamsterdamExec);
+        emit log_named_uint("glamsterdam_state", r.stateGas);
+        emit log_named_uint("glamsterdam_total", total);
+        emit log_named_uint("new_slots", r.newSlots);
+        emit log_named_uint("other_accounts", r.coldAccounts);
+        emit log_named_uint("bound", bound);
+    }
+}
+
 /// @dev Cold measurements behind the ticket draw/award bounds. Realistic heavy: every winner's
 ///      pending word at the queue level is fresh (zero to nonzero) and the queue grows by fresh
 ///      words. Theoretical: additionally a deep distinct bucket, an unregistered deity winner,
 ///      and a padding redraw (one more cold word) for every draw but a group's first.
-contract JackpotTicketChunkGasTest is Test {
+contract JackpotTicketChunkGasTest is ReproGlamsterdam {
     TicketGasHarness private h;
     uint24 private constant LVL = 110;
     uint256 private constant WORD = 0xAC4DE45EDBEEF;
@@ -344,12 +417,51 @@ contract JackpotTicketChunkGasTest is Test {
         used = h.awardGas(winners, LVL, 180, trait, LVL);
     }
 
+    /// @dev Accesses of a recorded draw (reads only).
+    function _drawAccesses(uint8 count) private returns (VmSafe.AccountAccess[] memory acc) {
+        vm.startStateDiffRecording();
+        h.drawGas(LVL, uint256(keccak256(abi.encode(WORD, uint256(0)))), trait, count, 239);
+        acc = vm.stopAndReturnStateDiff();
+        vm.stopMappingRecording();
+    }
+
+    /// @dev Accesses of a recorded award from the current state, which is restored.
+    function _awardAccesses(address[] memory winners) private returns (VmSafe.AccountAccess[] memory acc) {
+        uint256 pre = vm.snapshotState();
+        vm.startStateDiffRecording();
+        h.awardGas(winners, LVL, 180, trait, LVL);
+        acc = vm.stopAndReturnStateDiff();
+        vm.stopMappingRecording();
+        assertTrue(vm.revertToState(pre));
+    }
+
+    uint256 private lastFrame;
+    bytes32 private lastOutcome;
+
     /// @return used Cold call gas including the transaction intrinsic.
     function _tx(uint256 allowance) private returns (uint256 used, MineFlipGas.Result memory r) {
         vm.cool(address(h));
         uint256 g = gasleft();
         r = h.runEarlyBirdTickets{gas: allowance + 1_000_000}(WORD, allowance);
         used = g - gasleft() + INTRINSIC;
+        VmSafe.Gas memory frame = vm.lastCallGas();
+        lastFrame = frame.gasLimit - frame.gasRemaining;
+        lastOutcome = keccak256(abi.encode(r));
+    }
+
+    /// @dev Reprices a measured early-bird call from its pre-state; the current state is kept.
+    function _glamTx(Measured memory m, string memory label) private returns (uint256 total) {
+        uint256 here = vm.snapshotState();
+        assertTrue(vm.revertToState(m.pre));
+        vm.startStateDiffRecording();
+        MineFlipGas.Result memory replay = h.runEarlyBirdTickets{gas: m.allowance + 1_000_000}(WORD, m.allowance);
+        VmSafe.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
+        vm.stopMappingRecording();
+        _checkReplay(m, acc, keccak256(abi.encode(replay)));
+        assertTrue(vm.revertToState(here));
+        GlamsterdamReprice.Result memory r;
+        (r, total) = _reprice(m.frame, acc, address(h));
+        _glamLog(label, r, total, m.allowance);
     }
 
     /// @dev Smallest allowance that pays one group from the current checkpoint.
@@ -369,16 +481,21 @@ contract JackpotTicketChunkGasTest is Test {
 
     /// @dev Moves the leg to a mid-quadrant checkpoint, then measures one cold resumed group.
     /// @return used Cold resumed-group tx gas, including the intrinsic.
-    /// @return allowance The smallest allowance admitting that group.
-    function _resumedGroup() private returns (uint256 used, uint256 allowance) {
+    /// @return m The measured call; `m.allowance` is the smallest allowance admitting that group.
+    function _resumedGroup() private returns (uint256 used, Measured memory m) {
         _tx(SETUP_CALL);
         _tx(MID_LEG_CALL);
         (, , uint16 winner,) = h.progress();
         assertGt(winner, 0, "checkpoint sits inside the quadrant");
-        allowance = _minimumGroupAllowance();
+        m.allowance = _minimumGroupAllowance();
         MineFlipGas.Result memory r;
-        (used, r) = _tx(allowance);
+        vm.deal(address(h), address(h).balance);
+        m.pre = vm.snapshotState();
+        (used, r) = _tx(m.allowance);
         assertEq(r.rewardBasis, CHUNK, "the measured call pays exactly one group");
+        (m.frame, m.outcome) = (lastFrame, lastOutcome);
+        vm.deal(address(h), address(h).balance);
+        m.post = vm.snapshotState();
     }
 
     function test_MeasuredDrawAndAwardCostsFitTheirBounds() public {
@@ -425,6 +542,55 @@ contract JackpotTicketChunkGasTest is Test {
         emit log_named_uint("theoretical worst cold group (deep, deity, 7 redraws, new owner)", worstGroup);
         assertLe(worstGroup, _groupBound() + GasBounds.JACKPOT_TAIL_GAS,
             "the theoretical worst group stays inside its admission and tail");
+
+        _checkGlamsterdamDrawAndAward(snap, draw, deep, deepGroup, groupAward);
+    }
+
+    /// @dev Glamsterdam, no reservoir. On a never-used queue one award writes three new slots: the
+    ///      winner's pending word, the queue word and the queue header; each further winner of a
+    ///      group adds its own new pending word. Production awards wallet IDs and never registers
+    ///      an owner, so the harness's new-owner case is not repriced. Starts on the deep bucket;
+    ///      the cold figures come from the Osaka checks above or are taken here before recording.
+    function _checkGlamsterdamDrawAndAward(uint256 snap, uint256 draw, uint256 deep, uint256 deepGroup,
+        uint256 groupAward) private
+    {
+        uint256 deepOne = _maxDraw(1);
+        assertTrue(vm.revertToState(snap));
+        uint256 oneAward = _award(_holders(1));
+        emit log_named_uint("award of one cold winner, never-used queue", oneAward);
+        assertTrue(vm.revertToState(snap));
+
+        GlamsterdamReprice.Result memory g;
+        uint256 total;
+        (g, total) = _reprice(draw, _drawAccesses(uint8(N)), address(h));
+        _glamLog("draw of 192 positions, 512-holder bucket", g, total, N * GasBounds.JACKPOT_TICKET_DRAW_GAS_MAX);
+        assertEq(g.firstChanges + g.coldAccounts, 0, "a draw only reads the host's storage");
+        assertLe(total, N * GasBounds.JACKPOT_TICKET_DRAW_GAS_MAX, "Glamsterdam draw per winner, shallow bucket");
+
+        (g, total) = _reprice(oneAward, _awardAccesses(_holders(1)), address(h));
+        _glamLog("one award, never-used queue", g, total, GasBounds.JACKPOT_TICKET_AWARD_GAS_MAX);
+        assertLe(total, GasBounds.JACKPOT_TICKET_AWARD_GAS_MAX, "Glamsterdam fresh award (JACKPOT_TICKET_AWARD_GAS_MAX)");
+        // The harness draw also pays the quadrant's length, deity and level reads, which production
+        // pays in the plan; the production one-award unit is measured in JackpotEthNativeUnits.
+        emit log_named_uint("Glamsterdam one-award group (deep draw + fresh award)", deepOne + total);
+        assertLe(deepOne + total, GasBounds.JACKPOT_TICKET_DRAW_GAS_MAX + GasBounds.JACKPOT_TICKET_AWARD_GAS_MAX
+            + GasBounds.JACKPOT_TAIL_GAS, "Glamsterdam one-award group within DRAW + AWARD + TAIL");
+        assertEq(g.newSlots, 3, "pending word, queue word and queue header are new");
+
+        (g, total) = _reprice(groupAward, _awardAccesses(_holders(CHUNK)), address(h));
+        _glamLog("award of one group, never-used queue", g, total, CHUNK * GasBounds.JACKPOT_TICKET_AWARD_GAS_MAX);
+        assertEq(g.newSlots, CHUNK + 2, "every pending word, the queue word and the queue header are new");
+        total += deepGroup + (CHUNK - 1) * REDRAW_GAS;
+        emit log_named_uint("Glamsterdam worst cold group (deep, deity, 7 redraws, fresh queue)", total);
+        assertLe(total, _groupBound(), "Glamsterdam worst group (8 * (DRAW + AWARD))");
+
+        h.seedMany(LVL, trait, 4096, 0x5000000);
+        h.setDeity(trait, DEITY);
+        (g, total) = _reprice(deep, _drawAccesses(uint8(N)), address(h));
+        _glamLog("draw of 192 positions, 4096-holder bucket with deity", g, total, N * GasBounds.JACKPOT_TICKET_DRAW_GAS_MAX);
+        assertEq(g.firstChanges + g.coldAccounts, 0, "a draw only reads the host's storage");
+        assertLe(total, N * GasBounds.JACKPOT_TICKET_DRAW_GAS_MAX, "Glamsterdam draw per winner (JACKPOT_TICKET_DRAW_GAS_MAX)");
+        assertTrue(vm.revertToState(snap));
     }
 
     function test_RealisticLegAndResumedGroupStayWithinBounds() public {
@@ -435,22 +601,29 @@ contract JackpotTicketChunkGasTest is Test {
         assertLe(whole, 10_000_000, "the whole realistic leg fits one 10M tx");
         assertTrue(vm.revertToState(snap));
 
-        (uint256 resumed, uint256 allowance) = _resumedGroup();
+        (uint256 resumed, Measured memory realistic) = _resumedGroup();
         emit log_named_uint("cold resumed one-group tx", resumed);
-        emit log_named_uint("  smallest admitting allowance", allowance);
-        assertLe(resumed - INTRINSIC, allowance, "the realistic resumed group spends inside its admission");
+        emit log_named_uint("  smallest admitting allowance", realistic.allowance);
+        assertLe(resumed - INTRINSIC, realistic.allowance, "the realistic resumed group spends inside its admission");
         assertTrue(vm.revertToState(snap));
 
         h.seedMany(LVL, trait, 4096, 0x5000000);
         h.setDeity(trait, DEITY);
-        uint256 deepAllowance;
-        (resumed, deepAllowance) = _resumedGroup();
+        Measured memory deepRun;
+        (resumed, deepRun) = _resumedGroup();
         uint256 worst = resumed + (CHUNK - 1) * REDRAW_GAS + NEW_OWNER_GAS;
         emit log_named_uint("deep distinct bucket with deity, resumed one-group tx", resumed);
         emit log_named_uint("theoretical worst resumed group tx (+ 7 redraws, + new owner)", worst);
-        assertLe(worst - INTRINSIC, deepAllowance + MineFlipGas.CHECK_RESERVE,
+        assertLe(worst - INTRINSIC, deepRun.allowance + MineFlipGas.CHECK_RESERVE,
             "admission covers the theoretical worst resumed group");
         assertLt(worst, 13_000_000);
+
+        // Glamsterdam replays follow every cold figure of this test.
+        uint256 glam = _glamTx(realistic, "resumed one-group call");
+        assertLe(glam, realistic.allowance, "Glamsterdam: the realistic resumed group spends inside its admission");
+        glam = _glamTx(deepRun, "deep resumed one-group call") + (CHUNK - 1) * REDRAW_GAS;
+        emit log_named_uint("Glamsterdam worst resumed group frame (+ 7 redraws)", glam);
+        assertLe(glam, deepRun.allowance, "Glamsterdam: admission covers the worst resumed group");
     }
 }
 
@@ -458,7 +631,7 @@ contract JackpotTicketChunkGasTest is Test {
 ///      jackpot day (hundreds of winners), every winner's claimable fresh, with pass conversions.
 ///      Quadrants pay in fixed eight-winner groups; a quadrant's first group carries its pass
 ///      conversion. Every partition reproduces the single-call transcript.
-contract JackpotEthQuadrantGasTest is Test {
+contract JackpotEthQuadrantGasTest is ReproGlamsterdam {
     TicketGasHarness private h;
     uint24 private constant LVL = 110;
     uint256 private constant WORD = 0xAC4DE45EDBEEF;
@@ -483,6 +656,9 @@ contract JackpotEthQuadrantGasTest is Test {
         h.seedDaily(LVL);
     }
 
+    uint256 private lastFrame;
+    bytes32 private lastOutcome;
+
     function _call(uint256 allowance) private returns (uint256 used, uint256 wins, bool done, bool progressed) {
         vm.cool(address(h));
         vm.cool(ContractAddresses.GAME_WHALE_MODULE);
@@ -490,12 +666,42 @@ contract JackpotEthQuadrantGasTest is Test {
         uint256 g = gasleft();
         MineFlipGas.Result memory r = h.runDailyJackpot{gas: allowance + 1_000_000}(true, LVL, WORD, allowance);
         used = g - gasleft() + INTRINSIC;
+        VmSafe.Gas memory frame = vm.lastCallGas();
+        lastFrame = frame.gasLimit - frame.gasRemaining;
+        lastOutcome = keccak256(abi.encode(r));
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].topics[0] == ETH_WIN) ++wins;
             stream = keccak256(abi.encode(stream, logs[i].topics, logs[i].data));
         }
         (done, progressed) = (r.done, r.progressed);
+    }
+
+    /// @dev `_call` with its pre- and post-state snapshots kept for a later replay.
+    function _callMeasured(uint256 allowance) private returns (uint256 used, uint256 wins, bool done, Measured memory m) {
+        vm.deal(address(h), address(h).balance);
+        m.pre = vm.snapshotState();
+        m.allowance = allowance;
+        (used, wins, done,) = _call(allowance);
+        (m.frame, m.outcome) = (lastFrame, lastOutcome);
+        vm.deal(address(h), address(h).balance);
+        m.post = vm.snapshotState();
+    }
+
+    /// @dev Reprices a measured call from its pre-state; the current state is kept.
+    function _glamCall(Measured memory m, string memory label, uint256 bound) private returns (uint256 total) {
+        uint256 here = vm.snapshotState();
+        assertTrue(vm.revertToState(m.pre));
+        vm.startStateDiffRecording();
+        MineFlipGas.Result memory replay = h.runDailyJackpot{gas: m.allowance + 1_000_000}(true, LVL, WORD, m.allowance);
+        VmSafe.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
+        vm.stopMappingRecording();
+        _checkReplay(m, acc, keccak256(abi.encode(replay)));
+        assertTrue(vm.revertToState(here));
+        GlamsterdamReprice.Result memory r;
+        (r, total) = _reprice(m.frame, acc, address(h));
+        _logNewSlots(acc);
+        _glamLog(label, r, total, bound);
     }
 
     /// @dev Smallest allowance that pays a group from the current checkpoint.
@@ -531,7 +737,7 @@ contract JackpotEthQuadrantGasTest is Test {
         assertEq(none, 0, "setup checkpoint pays nothing");
         uint256 afterSetup = vm.snapshotState();
 
-        (uint256 whole, uint256 all, bool done,) = _call(60_000_000);
+        (uint256 whole, uint256 all, bool done, Measured memory leg) = _callMeasured(60_000_000);
         assertTrue(done);
         assertGt(all, 305, "more winners than the old 305 ceiling");
         emit log_named_uint("ETH winners on this day", all);
@@ -553,7 +759,7 @@ contract JackpotEthQuadrantGasTest is Test {
         assertLe(firstGas - INTRINSIC, firstAllowance, "first group spends inside its admission");
 
         uint256 nextAllowance = _minimumGroupAllowance();
-        (uint256 nextGas, uint256 nextWins,,) = _call(nextAllowance);
+        (uint256 nextGas, uint256 nextWins,, Measured memory next) = _callMeasured(nextAllowance);
         assertEq(nextWins, CHUNK);
         emit log_named_uint("cold continuation group tx", nextGas);
         emit log_named_uint("  smallest admitting allowance", nextAllowance);
@@ -561,6 +767,20 @@ contract JackpotEthQuadrantGasTest is Test {
         emit log_named_uint("theoretical worst continuation group tx (+ 8 redraws)", worst);
         assertLe(worst - INTRINSIC, nextAllowance, "admission covers the theoretical worst group");
         assertLt(setupGas + firstGas + CHUNK * REDRAW_GAS, 13_000_000);
+        _checkGlamsterdamEth(leg, all, next);
+    }
+
+    /// @dev Glamsterdam replays after every cold figure of the test: the whole leg per winner and
+    ///      the continuation group against its smallest admitting allowance. The minimum first call
+    ///      runs as many groups as its spend leaves room for, so a warmer replay need not repeat it;
+    ///      the first group is measured on its own in JackpotEthNativeUnits.
+    function _checkGlamsterdamEth(Measured memory leg, uint256 all, Measured memory next) private {
+        uint256 glam = _glamCall(leg, "whole ETH leg after setup", all * GasBounds.JACKPOT_ETH_WINNER_GAS_MAX);
+        emit log_named_uint("Glamsterdam ETH per winner incl. quadrant fixed costs", glam / all);
+        assertLe(glam / all, GasBounds.JACKPOT_ETH_WINNER_GAS_MAX, "Glamsterdam ETH per winner (JACKPOT_ETH_WINNER_GAS_MAX)");
+        glam = _glamCall(next, "cold continuation group call", next.allowance);
+        assertLe(glam + CHUNK * REDRAW_GAS, next.allowance,
+            "Glamsterdam: admission covers the theoretical worst group (+ 8 redraws)");
     }
 
     function test_EveryPartitionMatchesTheSingleCall() public {

@@ -2,6 +2,8 @@
 pragma solidity 0.8.38;
 import {GoldSixFoilGasHarness} from "./GoldSixGas.t.sol";
 import {BoundedGasProbe} from "../helpers/BoundedGasProbe.sol";
+import {GlamsterdamReprice} from "../helpers/GlamsterdamReprice.sol";
+import {MinerloopGasProbe} from "../helpers/MinerloopGasProbe.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {MineFlipGasBounds as Bounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
@@ -14,7 +16,7 @@ contract BoundedFoilHost is GoldSixFoilGasHarness {
         for (uint256 i; i < 4; ++i) lines[i] = uint32(record >> (_FOIL_LINES_SHIFT + i * 32));
     }
 }
-contract BoundedFoilGasTest is BoundedGasProbe {
+contract BoundedFoilGasTest is BoundedGasProbe, MinerloopGasProbe {
     BoundedFoilHost private host;
     function setUp() public {
         vm.etch(ContractAddresses.GAME, type(BoundedFoilHost).runtimeCode);
@@ -29,7 +31,13 @@ contract BoundedFoilGasTest is BoundedGasProbe {
         assertEq(cursor, 0, "completed cursor reset");
     }
     function test_SinglePackSixteenDistinctFreshTraits() public {
-        uint256 chosen;
+        uint256 chosen = _sixteenDistinctWord();
+        host.single(chosen);
+        _run("foil-single-sixteen-distinct");
+        emit log_named_uint("sixteen-distinct foil word", chosen);
+    }
+
+    function _sixteenDistinctWord() private returns (uint256 chosen) {
         uint256 snapshot = vm.snapshotState();
         for (uint256 word = 2; word < 1_000 && chosen == 0; ++word) {
             host.single(word);
@@ -49,10 +57,29 @@ contract BoundedFoilGasTest is BoundedGasProbe {
         }
         assertTrue(vm.revertToStateAndDelete(snapshot));
         assertGt(chosen, 0, "fixture reaches sixteen distinct fresh trait buckets");
-        host.single(chosen);
-        _run("foil-single-sixteen-distinct");
-        emit log_named_uint("sixteen-distinct foil word", chosen);
     }
+
+    function _glamsterdamRun(string memory label, uint256 packs) private {
+        (GlamsterdamReprice.Result memory r, bytes memory returned) = _probe(address(host), address(this),
+            abi.encodeCall(host.runFoilWork, (uint256(14_000_000))), 15_000_000);
+        vm.stopMappingRecording();
+        assertTrue(abi.decode(returned, (MineFlipGas.Result)).done);
+        (uint32 count, uint32 cursor) = host.state();
+        assertEq(count, 0, "all paid packs resolved");
+        assertEq(cursor, 0, "completed cursor reset");
+        uint256 bound = packs * Bounds.FOIL_PACK + 100_000;
+        _report(label, r, bound);
+        emit log_named_uint("new_slots", r.newSlots);
+        assertLe(r.glamsterdamExec + r.stateGas, bound, "packs * FOIL_PACK + 100_000 (canRun(FOIL_PACK, 100_000))");
+    }
+
+    /// @dev Glamsterdam: one pack filing sixteen distinct fresh trait buckets, with its loop tail.
+    function test_GlamsterdamSinglePackSixteenDistinctFreshTraits() public {
+        host.single(_sixteenDistinctWord());
+        _glamsterdamRun("foil_single_pack_sixteen_distinct_fresh", 1);
+    }
+
+    function test_GlamsterdamWholeEightPackDrain() public { _glamsterdamRun("foil_eight_pack_drain", 8); }
 
     function test_G3_G7_G10_WholeEightPackDrain() public { _run("G3_G7_G10_foil_drain8"); }
     function test_G3_G7_G10_ResumedPackDrain() public {

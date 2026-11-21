@@ -137,6 +137,16 @@ contract HumanOrderNativeGasTest is DeployProtocol {
             BoxOrderLib.boLarges(100),
             BoxOrderLib.boCustoms(100, 10 ether),
             BoxOrderLib.boCustoms(100, 2_000 ether)];
+        // Every case is measured cold before the first recorded replay of the test: a recording
+        // leaves the accounts and slots it touched warm for the rest of the test.
+        uint256[] memory cold = new uint256[](orders.length * 16);
+        for (uint256 i; i < orders.length; ++i) {
+            for (uint256 w = 1; w <= 16; ++w) {
+                uint256 fixture = vm.snapshotState();
+                cold[i * 16 + w - 1] = this.freshCapCold(orders[i], uint256(keccak256(abi.encode("ev-open", w))));
+                assertTrue(vm.revertToStateAndDelete(fixture));
+            }
+        }
         uint256 peakExec;
         uint256 peakTotal;
         uint256 minimumHeadroom = type(uint256).max;
@@ -144,7 +154,7 @@ contract HumanOrderNativeGasTest is DeployProtocol {
             for (uint256 w = 1; w <= 16; ++w) {
                 uint256 fixture = vm.snapshotState();
                 (uint256 execution, uint256 total, uint256 headroom) = this.freshCapCase(
-                    orders[i], uint256(keccak256(abi.encode("ev-open", w))));
+                    orders[i], uint256(keccak256(abi.encode("ev-open", w))), cold[i * 16 + w - 1]);
                 if (execution > peakExec) peakExec = execution;
                 if (total > peakTotal) peakTotal = total;
                 if (headroom < minimumHeadroom) minimumHeadroom = headroom;
@@ -156,8 +166,19 @@ contract HumanOrderNativeGasTest is DeployProtocol {
         emit log_named_uint("repriced fresh-cap minimum entry headroom", minimumHeadroom);
     }
 
-    /// @dev Each sweep case owns its temporary log and state-diff allocations.
-    function freshCapCase(uint256 input, uint256 word)
+    /// @dev Cold gas of one seeded entry's atomic settlement. Records nothing.
+    function freshCapCold(uint256 input, uint256 word) external returns (uint256 measured) {
+        require(msg.sender == address(this), "fresh-cap self-call");
+        HumanOrderGasSeed host = HumanOrderGasSeed(payable(address(game)));
+        host.seedOrder(PLAYER, input, word);
+        _cool();
+        host.rawAtomic();
+        measured = vm.lastCallGas().gasTotalUsed;
+    }
+
+    /// @dev Each sweep case owns its temporary log and state-diff allocations. `measured` is the
+    ///      case's cold gas from `freshCapCold` on the same seeded state.
+    function freshCapCase(uint256 input, uint256 word, uint256 measured)
         external returns (uint256 execution, uint256 total, uint256 headroom)
     {
         require(msg.sender == address(this), "fresh-cap self-call");
@@ -165,11 +186,6 @@ contract HumanOrderNativeGasTest is DeployProtocol {
         HumanOrderRepricer repricer = new HumanOrderRepricer();
         host.seedOrder(PLAYER, input, word);
         uint256 bound = _entryBound(BoxOrderLib.boCount(host.entry()));
-        uint256 snap = vm.snapshotState();
-        _cool();
-        host.rawAtomic();
-        uint256 measured = vm.lastCallGas().gasTotalUsed;
-        assertTrue(vm.revertToState(snap));
         vm.startStateDiffRecording();
         host.rawAtomic();
         VmSafe.AccountAccess[] memory accesses = vm.stopAndReturnStateDiff();
@@ -179,7 +195,6 @@ contract HumanOrderNativeGasTest is DeployProtocol {
         assertLe(measured, bound, "fresh-cap Osaka admission");
         assertLe(total, bound, "fresh-cap state-inclusive admission");
         headroom = bound - total;
-        assertTrue(vm.deleteStateSnapshot(snap));
     }
 
     function _probe(uint256 input, uint256 word) private {

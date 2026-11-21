@@ -39,7 +39,7 @@ interface IDegenerusVaultOwner {
 }
 
 /// @dev Shared mint streak and activity score utilities. Contains _playerActivityScore
-///      (5-component scoring: mint streak, mint count, quest streak, affiliate bonus, deity/whale pass),
+///      (mint streak, mint count, quest streak, affiliate bonus, deity/whale pass, less the curse),
 ///      the mint streak and mint-data recorders, the curse counter, and loan quoting helpers.
 abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
     /// @notice Thrown for an invalid whale-pass quantity.
@@ -296,9 +296,9 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
     ) internal returns (uint256) {
         if (player == 0) return 0;
         uint256 previous = mintPacked_[player];
-        // Only persist beside durable purchase history. Mutable-only seat/curse
-        // fields can later clear; leaving a cache-only word would incorrectly pass
-        // the market's nonzero participation gate. This also avoids a fresh SSTORE.
+        // Only persist beside durable purchase history. Seat and curse fields are not
+        // history and the curse can later clear; leaving a cache-only word would incorrectly
+        // pass the market's nonzero participation gate. This also avoids a fresh SSTORE.
         uint256 historyMask = (BitPackingLib.MASK_24 << BitPackingLib.LAST_LEVEL_SHIFT)
             | (BitPackingLib.MASK_24 << BitPackingLib.LEVEL_COUNT_SHIFT)
             | (BitPackingLib.MASK_24 << BitPackingLib.DAY_SHIFT);
@@ -389,8 +389,9 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
 
     /**
      * @notice Record mint metadata and update Activity Score metrics.
-     * @dev Runs after the mint payment on the purchase paths (tickets, lootboxes, foil
-     *      packs). Pure mintPacked_ accounting — touches no claimable or pool state.
+     * @dev Runs inside the purchase on the ticket, lootbox and foil-pack paths: after the
+     *      payment on the ticket and foil legs, before the payment split on the box-order leg.
+     *      Pure mintPacked_ accounting — touches no claimable or pool state.
      *
      * @param player Wallet ID of the player making the purchase.
      * @param lvl Target level for this purchase (`_activeTicketLevel()`: level+1 during the
@@ -400,7 +401,7 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
      *
      * ## Activity Score State Updates
      *
-     * - `mintPacked_[player]` updated with level count, units, frozen-flag clearance, and affiliate bonus cache
+     * - `mintPacked_[player]` updated with level count, units, pass freeze/type clearance, and affiliate bonus cache
      * - Only writes to storage if data actually changed
      *
      * ## Level Transition Logic
@@ -408,7 +409,7 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
      * - Same level: stamp mint day + accumulate units
      * - New level with <400 scaled units (4 * QTY_SCALE = one whole ticket): only track units, not "minted"
      * - New level with ≥400 scaled units: stamp mint day, bump lifetime level count (skipped while
-     *   whale-pass frozen; pass flag/type clear once lvl passes frozenUntilLevel), refresh affiliate cache
+     *   whale-pass frozen; pass flag/type clear once the game level passes frozenUntilLevel), refresh affiliate cache
      */
     function _recordMintData(
         uint32 player,
@@ -528,10 +529,12 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
         );
         bool isFrozen = frozenUntilLevel > 0 && lvl <= frozenUntilLevel;
 
-        // If frozen, skip updating total (it's pre-set by whale pass)
-        // Once past the frozen level, clear the flag and resume normal tracking
-        if (frozenUntilLevel > 0 && lvl > frozenUntilLevel) {
-            // Clear frozen flag and whale pass type - resume normal tracking from here
+        // If frozen, skip updating total: the pass counted the levels it covers, and a
+        // jackpot-phase level just below the pass start is skipped as well. A ticket level past the
+        // freeze counts normally. The pass fields clear only once the game level has passed the
+        // freeze: every pass reader treats frozenUntilLevel >= level as active.
+        if (frozenUntilLevel > 0 && level > frozenUntilLevel) {
+            // Clear the freeze and the pass type: the pass no longer covers the game level
             data = BitPackingLib.setPacked(
                 data,
                 BitPackingLib.FROZEN_UNTIL_LEVEL_SHIFT,
@@ -582,7 +585,7 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
             BitPackingLib.MASK_24,
             lvl
         );
-        // Frozen flag is already set in data if it was modified above
+        // A pass freeze/type clearance above is already in data
 
         // Score at the actual game level; the recorded ticket level can be one ahead.
         // Piggyback the current-level affiliate cache on this existing SSTORE.

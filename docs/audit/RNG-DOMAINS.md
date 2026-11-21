@@ -174,11 +174,12 @@ the group. `JackpotTicketBatchTraits` reveals the result.
 ### Gold Dice 6
 
 Gold Dice 6 (trait 253) keeps only its first natural occurrence at each full level, shared by solo,
-round and foil producers. The live-bucket bit, authenticated against the full buffer level, is the
-claim marker: production appends always add nonzero entries and never remove them from an active
-level. Later occurrences become one of traits 248–252, 254 or 255, selected by `H(GOLD_REPLACEMENT,
-seed) % 7`, where `seed` is the candidate's LCG state for solo entries, the round seed for seated
-entries and the foil-line seed for packs. Retired foil levels redirect every candidate. Gold six
+round, direct jackpot-award and foil producers. The live-bucket bit, authenticated against the full
+buffer level, is the claim marker: production appends always add nonzero entries and never remove
+them from an active level. Later occurrences become one of traits 248–252, 254 or 255, selected by
+`H(GOLD_REPLACEMENT, seed) % 7`, where `seed` is the candidate's LCG state for solo entries, the
+round seed for seated entries, the group seed `H(TICKET_GROUP, seed, group)` for direct jackpot
+awards and the foil-line seed for packs. Retired foil levels redirect every candidate. Gold six
 receives zero virtual deity entries in every jackpot and pass sampler; a deity wallet's actual entry
 remains eligible.
 
@@ -220,9 +221,12 @@ same-day or newer record makes the writer return without changing state or rever
 Match currency and spin hash the saved seed with the ticket index under `FOIL_CURRENCY` and
 `FOIL_SPIN`; they never read retained daily words. A zero seed is valid with the flag set.
 
-Claims on draw day D stay open through the published frontier D+1 and expire at D+2; calendar resets
-and outstanding requests cannot expire them. Each player's match markers occupy one word: two
-day-tagged lanes with four ticket bits each. Golden foil claims use the generation-day and next-day
+Claims on draw day D stay open while the latest sealed foil draw is D or D+1 and expire when the
+D+2 draw is sealed; calendar resets and outstanding requests cannot expire them. Because claims
+revert during the daily RNG lock, day D's claims can be made from the end of session D to the next
+daily request and from the end of session D+1 to the request after it. Each player's match
+markers occupy one word: two day-tagged lanes with four ticket bits each. Golden foil claims use
+the generation-day and next-day
 window against published daily results and expire at published D+2. WWXRP draw payouts for
 participation day d open once day d+1 is published and close when the day-(d+3) daily request goes
 out, the request that opens day d+3's entries in day d's storage bank; an outstanding request
@@ -263,11 +267,13 @@ enter the draw, and `lastRecycledCentury` prevents a completed century from roll
 
 Live sDGNRS redemptions settle through the bounded miner drain on the published session word that
 answered the request closing their batch. Manual redemption claims require game over. One synthetic
-flip per batch uses `H(REDEMPTION_FLIP, word)`: bit 0 decides the win and the same hash feeds the coinflip
-reward-percent mapping. Half the rolled ETH credits game claimable and half opens a redemption
-lootbox, subject to the dust rule. Unpaid closed-batch terminal redemptions keep their roll, receipt
-and ETH reservation until withdrawal and need no historical RNG for it. The batch still open at
-game over has no roll and pays its tokens' game-over value.
+flip per batch uses `H(REDEMPTION_FLIP, word)`: bit 0 decides the win and the same hash feeds the
+coinflip reward-percent mapping. Half the rolled ETH credits game claimable and half opens a
+redemption lootbox; a lootbox half below 0.01 ETH is not paid to the redeemer and is credited to
+sDGNRS's own game claimable instead, where it stays in the backing of the remaining holders. Unpaid
+closed-batch terminal redemptions keep their roll, receipt and ETH reservation until withdrawal and
+need no historical RNG for it. The batch still open at game over has no roll and pays its tokens'
+game-over value.
 
 ### Endings without a word
 
@@ -298,7 +304,7 @@ word.
 | --- | --- | --- |
 | Queued box entry root | `H(BOX_ORDER, sessionWord, position)` | One 85-bit entry per purchase, three per storage word; `sessionWord` is the published word of the entry's buffer; `position` is the logical entry position (never the word index or lane), fixed by the append before the buffer's word is requested. The event tag is `1 << 46 \| position << 1 \| buffer`. The frozen activity score is a 12-bit code and is a payout input, never a seed input |
 | Ordinary box roll | `H(BOX_OPEN, entryRoot, nonce)` | Nonce is the box's 1-based position in its order; size excluded; the wallet ID is read from the entry and is not a hash input |
-| Ordinary box boon | `H(BOX_BOON, entryRoot)`, then `H(BOX_BOON_LANE, boonSeed, nonceBase + i)` | Box `n` draws at boon nonce `n - 1`; separate from reward rolls and craps scatter |
+| Ordinary box boon | `H(BOX_BOON, entryRoot)`, then `H(BOX_BOON_LANE, boonSeed, nonceBase + i)` | Box `n` draws at boon nonce `n - 1`; separate from reward rolls and craps scatter. Direct reward and AFKing boxes skip the `BOX_BOON` hop and draw at `H(BOX_BOON_LANE, boxSeed, 0)` |
 | Box secondary draws | `BOX_WWXRP_SPIN`, `BOX_FLIP_SPIN`, `BOX_ETH_SPIN`, `BOX_PASS_SPIN`, `BOX_PASS_ROUND`, `BOX_ROUND` | Each `H(tag, boxSeed)`; stake only sizes the payout |
 | Direct reward box | `H(BOX_DIRECT, word)` | The caller supplies a bound word: `H(BET_BOX, betWord, betId)` for a Degenerette bet, `H(SPIN_RECIRC, spinSeed)` for an ETH-spin recirculation |
 | AFKing box | `H(BOX_AFKING, sessionWord, subscriberWalletId)` | Published session word at open; the stamp is recorded before fulfillment; amount excluded |
@@ -338,7 +344,7 @@ word.
 | Foil packs | lines `H(FOIL_LINES, word, buyerWalletId << 24 \| level, line)`; seed `uint128(H(FOIL_PAYOUT, word))`; claims `H(FOIL_CURRENCY, seed, ticketIndex)` / `H(FOIL_SPIN, seed, ticketIndex)` | See [Foil packs](#foil-packs) |
 | Deity boon menu | `H(DEITY_MENU, menuWord, deityWalletId << 24 \| day, slot)` | `menuWord` is the preceding day's recorded word (the award-day word for a protocol draw with none); protocol issuers use their constant IDs (Vault 1, sDGNRS 2); `DeityBoonViewer` mirrors it |
 | Protocol boon winners | `H(PROTOCOL_BOON_WINNER, awardDayWord, issuerWalletId, slot) % totalWeight` | Issuer ID 1 or 2; the wager cohort closed before the request |
-| AFKing subscriber draw | `1 + H(SUBSCRIBER_DRAW, word) % (length - 1)` | The day's recorded word; position 0 (the Vault) is never drawn |
+| AFKing subscriber draw | `1 + H(SUBSCRIBER_DRAW, word) % (length - 1)` | The day's recorded word; position 0 (the Vault) is never drawn; a pick on a paused protocol seat or a run awaiting removal pays nobody |
 | WWXRP daily draw | `H(WWXRP_BIG \| WWXRP_SMALL \| WWXRP_BUCKET \| WWXRP_WINNER, word)` | `word = rngWordForDay(day + 1)`; independent tags for the gates, bucket and winner roll |
 | WWXRP century incinerator | `H(WWXRP_INCINERATOR, word) % total` | Weighted stake intervals |
 

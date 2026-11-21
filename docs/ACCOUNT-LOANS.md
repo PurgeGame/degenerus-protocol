@@ -59,15 +59,16 @@ With T = X − (level at borrowing) and c = max(1, levels elapsed):
 `owed = principal × (1 + 5%·c + 1%·(T − c))`, which equals `principal × (100 + T + 4c) / 100`.
 
 The amount owed goes to the lender's game claimable. `msg.value` pays first; the account's own
-claimable covers any shortfall, always leaving its 1-wei sentinel; ETH beyond the amount owed is
-credited to the account's AFKing balance.
+claimable (always leaving its 1-wei sentinel) and then its prepaid AFKing balance cover any
+shortfall; ETH beyond the amount owed is credited to the account's AFKing balance.
 
 ## Settlement at the due level
 
 The daily request that enters level X arms the settlement of every unpaid loan due at X. The mining
 engine (`mineRun`) runs it next, ahead of the wait for the VRF word and every consumer of it
 (`MinerAction.SeizeLoans`), in bounded chunks that resume from a cursor. The coordinator can deliver
-the word before settlement runs. A borrower who reads it may then repay, or leave the balances short
+the word before settlement runs. `clearDebtNow` is already closed (the level equals X); a borrower
+who reads the word may then fund the account for automatic repayment, or leave the balances short
 and be seized; both are within the rules. Each loan settles one of two ways.
 
 **Automatic repayment.** If the borrowing account's own claimable (above its 1-wei sentinel) plus
@@ -81,7 +82,7 @@ funds. A borrower who prefers to default withdraws before X.
 **Seizure.** Otherwise the lender takes the account. The account keeps its ID, tickets, records,
 history and referral relationships; its wallet-table element keeps the borrower's address as key
 and gains the lender's reserved ID in the owner lane, so the lender becomes its payee and every
-operator approval lapses.
+operator approval lapses. An operator approval the lender sets on it afterwards has no effect.
 
 - The borrower wallet's entire native sDGNRS balance is burned for no payout, and the wallet's
   default gameplay ID is cleared; its permanent wallet identity is kept, and the wallet may later
@@ -90,8 +91,9 @@ operator approval lapses.
 - The borrower wallet's address-derived referral code keeps naming the seized ID, so a new referral
   made with that code accrues to the seized ID and its payee, the lender. A replacement account
   uses its own default or custom code.
-- The seized account's AFKing run stops. Already-paid box stamps still open, with rewards going to
-  the lender.
+- The seized account's AFKing run stops, and the next daily pass removes it; AFKing days not
+  settled before then are forfeit. Already-paid box stamps still open, with rewards going to the
+  lender.
 - A deity account's soulbound pass moves with it to the lender.
   The Vault can smite or issue boons with an acquired pass through `playerAction`; the account's
   perpetual tickets, symbol draws and any deterministic-ending deity refund accrue to the lender.
@@ -195,7 +197,8 @@ into the freed lane is unsettled too, so the cursor never passes an open loan.
 
 Each new live redemption, including a top-up, must have at least 0.01 ETH of free-backing value
 using supply plus open-batch escrow. Accepted claims are never subjected to the admission minimum
-again.
+again. Principal sDGNRS lends leaves its game claimable, so it is not live redemption backing until
+it is repaid or collected: a batch that closes while sDGNRS loans are open is priced without it.
 
 ## Storage
 

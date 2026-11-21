@@ -21,8 +21,10 @@ liveness. Some payouts still read live pool balances and prices at settlement.
 - **Implementation.** `DegenerusGameRngModule.requestDailyRng_g8190`: `_rngPrepareRequestBoundary`,
   `_swapTicketSlot`, `_swapFoilSlot`, `_sealHeroWagers`, `_freezePool`, `_sealRngWriteBuffer`
   (`Storage._swapRngBuffers`, `_closeRedemptionBatch`), then `_setRngRequest(_requestVrfWord(…))`.
-  Mid-day: `_requestLootboxRng` swaps the ticket slot (nonempty, processed queue) and calls
-  `_sealRngWriteBuffer` before the coordinator call. A refused request reverts its worker call;
+  Mid-day: `_requestLootboxRng` swaps the ticket slot (nonempty write side, processed queue) unless
+  the request activates the next level's future-ticket pool with tickets queued in it or the next
+  daily request is the level's last swap, in which case the cohort stays on the write side; it
+  calls `_sealRngWriteBuffer` before the coordinator call. A refused request reverts its worker call;
   the miner preserves any earlier progress.
 - **Tests.**
   - `test/repro/MiddaySwapJackpotCohort.t.sol::testBuyAfterMiddayRequestIsFrozenOutOfThatWord` ("the
@@ -31,13 +33,14 @@ liveness. Some payouts still read live pool balances and prices at settlement.
   - `test/fuzz/RngIndexDrainBinding.t.sol::testBindingConsistencyMidDayCrossDay` ("box B leaked onto
     the in-flight index N")
   - `test/fuzz/RngFreezeAndRemovalProofs.t.sol::testPlacementNeverBindsToAWordedIndex` ("the bet
-    binds to the unworded write buffer")
+    binds to the unworded write buffer"; harness seal, not the request path)
   - `test/fuzz/HeroWagerCommitmentIntegration.t.sol::test_LateWagersAcrossSeveralDaysAllEnterNextCommitment`
     ("all four late bets enter next frozen draw")
   - `test/fuzz/FoilGenerationCohort.t.sol::test_NewBuyAfterCommitWaitsForFreshCohort` ("later buy
     cannot use public word"; harness commit, not the full request path)
   - `test/fuzz/invariant/RngWindowFreeze.inv.t.sol::invariant_inWindowSloadsFrozen` ("RNG-FREEZE: a
-    player action inside the VRF window mutated an enumerated consumed slot")
+    player action inside the VRF window mutated an enumerated consumed slot"; the enumerated set is
+    the RNG header, word, nudge and foil-draw slots, not queue membership)
   - Degenesis: `test/fuzz/DegenesisWordBinding.t.sol`
 
 ### Callback authority
@@ -64,7 +67,10 @@ nonzero low-64-bit request ID; there is no active-flag check.
   - `test/fuzz/VRFCore.t.sol::test_secondAnswerToConsumedRequestOverwritesOnlyTheSessionWord`
     ("recorded day word unchanged"): documents that the Game itself would accept a second answer to
     a consumed ID, overwriting only the session word
-  - `test/fuzz/VrfSwapReissueZeroId.t.sol::test_zeroLow64Id_refusesTheSwap_thenRetrySucceeds`
+  - `test/fuzz/VrfSwapReissueZeroId.t.sol::test_zeroLow64Id_refusesTheSwap_thenRetrySucceeds` (the
+    swap's own request)
+  - `test/fuzz/VrfNativeFunding.t.sol::testRequestIdWithZeroLowWordIsRefused` (`_boundedVrfRequest`
+    on a storage harness)
 
 ### Word-to-consumer binding
 
@@ -99,7 +105,11 @@ daily words.
   - `test/fuzz/RngCurrentSentinel.t.sol::testFuzz_OnePaidReverseAlwaysFlipsTheDailyCoin` ("every
     other consumer reads the raw word", "one paid reverse always toggles the day's result")
   - `test/fuzz/MiddayRngCredit.t.sol::test_MiddayCallbackStoresSharedWordWithoutApplyingDailyNudges`
-    ("midday word is unchanged", "daily nudge remains pending")
+    ("midday word is unchanged", "daily nudge remains pending"; after the callback, before
+    publication)
+  - `test/fuzz/RngNudgePacking.t.sol::test_255thNudgeAcceptedAnd256thRejectedBeforeBurn`
+    (`NudgeCapReached` at 255)
+  - `test/edge/RngStall.test.js` ("reverseFlip reverts with RngLocked while VRF is pending")
 
 ### Retry and re-issue keep the cohort
 
@@ -107,8 +117,9 @@ daily words.
   waiting, unspent, `RNG_RETRY_TIMEOUT = 20 hours`): `_spendRngRetry` and `_setRngRequest` only; no
   swap or seal; `rngRequestTime` unchanged.
   `DegenerusGameGameOverModule.updateVrfCoordinatorAndSub`: re-issues only an undelivered request
-  (`rngWordCurrent == RNG_WORD_WAITING`), spends the retry under the daily lock, leaves
-  `rngRequestTime` and nudges; after game over or the dead latch it only repoints the configuration.
+  (`rngWordCurrent == RNG_WORD_WAITING`), spends the retry when it re-issues a daily request (a
+  mid-day re-issue leaves the retry as it was), leaves `rngRequestTime` and nudges; after game over
+  or the dead latch it only repoints the configuration.
 - **Tests.**
   - `test/fuzz/RngTransportCommitmentModel.t.sol::testFuzz_RetryPreservesCommitmentAndRejectsStaleResponse`
     ("same original timeout origin", "same day/kind/nudges/cohort"; the module's `retryRng` on
@@ -120,6 +131,15 @@ daily words.
   - `test/fuzz/HeroWagerCommitmentIntegration.t.sol::test_MiddayRequestRetryAndCallbackDoNotRotateHeroPools`
     ("midday retry leaves hero pools intact")
   - `test/fuzz/VRFCore.t.sol::test_sameCoordinatorReissueIgnoresSupersededRequest`
+  - `test/repro/DailyRngStallRecovery.t.sol::testAdminRetryOwnsAuthorityAndPreservesTheFrozenSession`
+    (`OnlyAdmin` for any other caller), `::testAdminRetryRejectsDeliveredUnpublishedEntropy`
+    ("delivered entropy cannot be replaced"), `::testDailyRetryIsSingleShot`
+  - `test/fuzz/VRFCore.t.sol::test_coordinatorSwapSpendsTheRetry` ("Swap spends the retry");
+    `test/fuzz/VrfRotationLiveness.t.sol::test_dailyAlreadyDelivered_shortCircuit` ("no re-issue when
+    rngWordCurrent!=0 (short-circuit)");
+    `test/repro/VrfRotationMidDayReRoll.t.sol::test_C1_rotationAfterMidDayWordLands_doesNotReRoll`
+  - `test/fuzz/VrfRotationLiveness.t.sol::test_retryRescuesStalledReissueAfterRotation` ("the retry
+    issued a replacement request on the new coordinator", after a mid-day re-issue)
 
 ## Mining engine
 
@@ -136,17 +156,27 @@ same. Mining rewards depend on gas spent per call.
   - `test/fuzz/DegenesisSettlement.t.sol::test_PartitionInvariance` ("same count"),
     `::test_InterleavedActivityDoesNotChangeRewards`
   - `test/fuzz/JackpotBattleDraw.t.sol::testFuzz_CircularVisitsMatchOracleAcrossChunkSizes`
-  - `test/repro/MineFlipWorkerBudget.t.sol::test_ZeroAndExplicitBaselineProduceSameBoxOutcome`
+  - `test/repro/MineFlipWorkerBudget.t.sol::test_ZeroAndExplicitBaselineProduceSameBoxOutcome` (the
+    buyer's claimable ETH and the box cursor across four multipliers)
   - `test/fuzz/MinerNoProgress.t.sol::test_LapsedRefundsMatchAcrossGasLimitsIncluding167M`
   - `test/fuzz/BafStagedResume.t.sol::test_MidwayResumeWithAnyAllowancePaysTheSameAwards`,
     `::testFuzz_AllowanceLadderMatchesOneCall`;
     `test/fuzz/BafStagedTranscript.t.sol::test_OneGroupPerCallMatchesOneCall`
   - `test/fuzz/MintModuleDivergenceAcrossSplit.t.sol::testMintDivCrossPathEquality_OwedSplitsAcrossSlices`
+  - Cursors: `test/fuzz/DegeneretteResolveRepeg.t.sol::testResolutionDeltasIndependentOfBatchPartitioning`;
+    `test/fuzz/GoldenTicketFoilPack.t.sol::test_gas_FoilChunk_LowGasCheckpointsPreserveOrderedEntries`
+    ("checkpoint partitions preserve exact ordered entries"; foil module harness);
+    `test/fuzz/DecimatorBattle.t.sol::test_SuppliedGasPartitionsPreserveRealDiceTranscriptAndPayouts`
+    (harness); `test/fuzz/CrapsKeeperBudgetGas.t.sol::test_ColdRemainderPartitionsPreserveFieldAndEveryPlayerPayment`
+  - Mining reward: `test/fuzz/MinerRewardMinimum.t.sol::testFuzz_RewardIsTheNormalizedRawPay`
+    ("reward == normalize(raw)")
   - Whole days:
     `test/repro/WholeDayChunkingIndependence.t.sol::testFuzz_OneDayChunkedEqualsLargeCalls`,
     `::testFuzz_ThreeDaysChunkedEqualLargeCalls` ("the chunked run diverged from the large-call
-    run"): from one snapshot of a mature game, an unpaid miner's one-unit minimum-gas calls and 1e9-gas
-    minimum-calibration calls end with every written storage slot and touched ETH balance equal,
+    run"): from one snapshot of a mature game, with each day's ticket and box purchase, three large
+    boxes, an sDGNRS burn and an AFKing deposit staged identically, an unpaid miner's one-unit
+    minimum-gas calls and 1e9-gas minimum-calibration calls end with every written storage slot and
+    touched ETH balance equal,
     except sDGNRS `_settlingReserveLeft`, a between-calls scratch field that is dead once its batch
     completes
 
@@ -156,15 +186,24 @@ same. Mining rewards depend on gas spent per call.
   `MineFlipGas.canRun` admission against remaining allowance and available gas, with the checkpoint
   and return tail.
 - **Tests.**
-  - `test/gas/RoundDrainChunkGas.t.sol::test_Chunk_AllRounds_Cold` (helper `_oneChunk`: "chunk
-    overran its declared reservation" bound and the 10M target)
+  - `test/gas/RoundDrainChunkGas.t.sol::test_Round_AllRareQuadrantsColdWorst` ("cold worst round
+    exceeds ROUND_MAX"), `::test_Solo_EntryAndBaseCoverColdWorst` ("per-entry cold worst exceeds
+    ENTRY_MAX"), `::test_Chunk_AllRounds_Cold` (helper `_measure`: at its smallest admitting
+    allowance a chunk stays within that allowance plus 50,000 of unmetered call overhead, "chunk
+    overran its declared reservation", and under the 10M target)
   - `test/gas/TicketDrainWorstCaseBound.t.sol::test_CanonicalTicketStepsFitSizingTargetIncludingCheckpoint`
+    (arithmetic on the declared constants: each ticket step plus its tail fits the 10M target)
   - `test/gas/AdvanceGasCeilingFuzz.t.sol::testFuzz_advanceGame_everyTxUnderCap`
-  - `test/gas/DeadVrfEndingGas.t.sol::test_ColdDeadVrfBatchFits11_5M`
+  - `test/gas/DeadVrfEndingGas.t.sol::test_ColdDeadVrfBatchFits10M` (every call at 10M gas)
   - `test/repro/MineFlipGasAdmission.t.sol::test_ChunkCannotConsumeTheCheckpointTail`,
-    `::test_ActualSpendingStopsTheNextChunkAtItsCheckpoint`
-  - Jackpot battle: `test/gas/JackpotBattleStageGas.t.sol`, `test/gas/JackpotBattleDrawGas.t.sol`,
-    `test/gas/JackpotBattleAwardsGas.t.sol`
+    `::test_ActualSpendingStopsTheNextChunkAtItsCheckpoint` (`MineFlipGas` admission on a synthetic
+    worker)
+  - Jackpot battle construction against `JACKPOT_BATTLE_DRAW`:
+    `test/gas/JackpotBattleConstructionGas.t.sol::test_Cold50UniqueCollisionBoardsInitializeAppendSealWithinBound`
+    (helper `_worker`: "full worker must fit atomic admission bound"),
+    `test/gas/JackpotBattleConstructionMaximumGas.t.sol::test_MaxSearchDistinctPrefixesAndQueueWidths`
+    (helper `_observe`: "cold construction exceeds configured bound"),
+    `::test_MaxResumedAndFinal50EntryChunks`
   - Gas-admission evidence and its limits: [Testing](TESTING.md#test-selection)
 
 ### Mining admission and worker failures
@@ -179,8 +218,8 @@ continuation mode at any calibration; calibration can raise the minimum but neve
 Otherwise the call refuses before reaching the dependency, so no failure policy (the stake fallback,
 the VRF reads and top-up, the AFKing stETH pull, the VRF cancellation, the terminal and sweep
 balance reads, or GNRUS's final cash-outs, which admit their own budget and re-raise the protocol's
-gas refusals) is ever a gas shortage the caller chose. A dead stETH leg in a cash-out (a revert,
-missing code or a short return) skips that cash-out, never the sweep. The selection guard between
+gas refusals) is ever a gas shortage the caller chose. A dead stETH leg in a cash-out (a revert or a
+short return) skips that cash-out, never the sweep. The selection guard between
 workers keeps the coordinator read's minimum unscaled, so a selection never refuses after a
 committed prefix.
 
@@ -188,6 +227,12 @@ committed prefix.
   `BoundedCall._remaining` (both modes), `BoundedCall.admitFirst`, `GNRUS.onFinalSweep`
   (`_admitCashout`, `MineFlipGas.rethrowGasRefusal`).
 - **Tests.**
+  - `test/repro/MineFlipWorkerBudget.t.sol::test_InvalidMultiplierCannotMutatePendingBox`;
+    `test/fuzz/MinerNoProgress.t.sol::test_IdleAndWaitRevertBeforeDispatchAtLowAndHighGas`,
+    `::test_ExhaustedWorkerGasRevertsWithoutWorkAndKeepsAUsefulPrefix`,
+    `::test_InvariantFailureStillRollsBackEarlierWork` (the production miner on seeded state with
+    mocked workers); `test/fuzz/GameExternalIsolation.t.sol::test_UnderfundedFirstRequestRevertsAndNeverReturnsWithoutWork`
+    ("a short first unit is refused for gas"), `::test_RequestRefusalRetainsPrefixAndRollsBackOwnPreparation`
   - `test/fuzz/DependencyAdmissionGuarantee.t.sol::testFuzz_ValueCallReachesItsDependencyOnlyWithItsMinimum`,
     `::testFuzz_ReadReachesItsDependencyOnlyWithItsMinimum`,
     `::test_FirstUnitRefusesBelowTheDependencyMinimum` (gas, calibration 0.25x–10x, first unit or
@@ -199,18 +244,21 @@ committed prefix.
     cancels the subscription and cashes out both tokens, or reverts with both intact),
     `::test_cashoutIsNeverSkippedForShortGas`, `::test_GasCashoutBurnsFitTheirAdmission`,
     `::test_deadStethLegSkipsTheCashoutsNotTheSweep`
-  - `test/fork/ForkGlamsterdamBudgets.t.sol` (every enforced dependency minimum is at least 1.2x the gas
-    its cold mainnet-fork call uses at Glamsterdam prices; the cold stETH read needs 39,719 at entry,
-    and `EXTERNAL_READ_GAS` of 50,000 is 1.26x that), including `::test_c01_vrfFundNativeHeldBalance`,
-    `::test_c02_vrfFundNativeZeroBalance` and `::test_a09_stethTransferIntoEmptyBalance`
-  - The dependency mocks count calls that arrive below the protocol's admission
-    (`MockVRFCoordinator.starvedCalls`, `MockStETH.starvedCalls`); `ChainCallJudge.judgeCheck` fails any
-    judged suite that records one.
+  - `test/fork/ForkGlamsterdamBudgets.t.sol` (every enforced dependency minimum, as typed into the
+    test, is at least 1.2x the gas its cold mainnet-fork call uses at Glamsterdam prices), including
+    `::test_a01_stethBalanceOfGame` (the cold stETH read against `EXTERNAL_READ_GAS`, 50,000),
+    `::test_c01_vrfFundNativeHeldBalance`, `::test_c02_vrfFundNativeZeroBalance` and
+    `::test_a09_stethTransferIntoEmptyBalance`
+  - The dependency mocks count state-changing calls (VRF request, native funding and cancellation;
+    stETH `submit` and `transferSharesFrom`) that arrive below the protocol's admission
+    (`MockVRFCoordinator.starvedCalls`, `MockStETH.starvedCalls`); reads are views and are not counted.
+    `ChainCallJudge.judgeCheck` fails any judged suite that records one.
   - `test/repro/MineFlipGasSweep.t.sol::test_SweepFromPublish`, `::test_SweepFromDailyPhase`,
     `::test_SweepFromSealingDailyPhase` (helpers `_sweep`: "never WorkGasBound"; `_fullSweep`: "near
     the cap every call succeeds")
   - `test/fuzz/invariant/CrapsRngSeal.inv.t.sol::invariant_keeperNeverReverts` ("CRAPS-KEEPER: a
-    mineFlip Craps worker reverted")
+    mineFlip Craps worker reverted"; the two Craps workers called directly as the Game with the
+    frame's gas, not through `mineRun`)
   - `test/fuzz/LootboxBudgetResume.t.sol::test_smallBudgetOpensOneEntryPerCallAndDrainsTheIndex`,
     `::test_budgetThatFitsOneEntryRefusesTheSecond`
   - `test/fuzz/invariant/AnyInputSafety.inv.t.sol::invariant_anyInputSafety` (liveness clause under
@@ -235,10 +283,16 @@ committed prefix.
   `_handleFinalSweep` (`goTime + 30 days`, once). The final-sweep delay is the literal `30 days` in
   both places, not a named constant.
 - **Tests: 14-day hard stall.**
+  - `test/repro/ChainPinTerminal.t.sol::test_FT4_WordDeliveredAfterTheWindowIsDiscarded` (the
+    GameOver module over seeded storage: `_vrfDead` false at `sent + 14 days − 1`, true at
+    `sent + 14 days`)
   - `test/fuzz/DeadVrfEnding.t.sol::test_stallAcrossDeadlineWaitsForTheVrfDeadWindow` ("14 days
-    unanswered"; boundary at `sent + 14 days − 1`)
+    unanswered"; storage harness; at `sent + 14 days − 1` the earlier completion deadline has
+    already fired, so it orders the two clocks)
   - `test/fuzz/DeadVrfEnding.t.sol::test_retryBitKeepsTheWindowAndTheDay`,
-    `::test_middayRequestUnansweredFourteenDaysIsDeadAndStaysLatched`
+    `::test_middayRequestUnansweredFourteenDaysIsDeadAndStaysLatched` (storage harness)
+  - `test/fuzz/DeadVrfEnding.t.sol::test_unansweredMiddayRequestAtDeadlineEndsDeterministically`
+    (real engine: a mid-day request unanswered for 14 days ends with the deterministic payout)
   - `test/fuzz/StallDaysNeverHappened.t.sol::test_LateEntropyCannotRescueExpiredProgressDeadline`
   - `test/fuzz/PurchaseDeadline.t.sol::test_FundedPhasesOnlyFaceFourteenDayHardDeadline`
 - **Tests: 30-day purchase timeout.**
@@ -255,7 +309,7 @@ committed prefix.
   - `test/repro/TerminalPayoutCheckpoints.t.sol::test_SetupRunsOncePotIsPinnedAndTimerWaitsForFinalQuadrant`
     (`GO_TIME` zero after setup, set at payout completion)
   - `test/edge/GameOver.test.js` ("mineFlip before 30 days reports NoWork and preserves the
-    unexpired claim window", "mineFlip after 30 days triggers final sweep path")
+    unexpired claim window")
   - `test/fuzz/DeadVrfEnding.t.sol::test_claimsCloseAtTheFinalSweep`
   - `test/repro/FinalSweepBoundary.t.sol::test_OneSecondBeforeTheBoundaryNothingIsSwept` (GO_TIME
     stamped by a real hard-stall ending; at `+ 30 days − 1` the miner is Idle, the terminal phase
@@ -270,15 +324,19 @@ The equations and per-phase transitions are in [Accounting](ACCOUNTING.md).
 
 - **Implementation.** `Storage._untrackedYield` (obligation sum); `GameFacade.yieldPoolView`;
   post-game-over `claimablePool` only.
-- **Tests.** `test/fuzz/invariant/EthSolvency.inv.t.sol::invariant_ethSolvency`,
-  `::test_reconciliationDetectsMissingWei`;
-  `test/fuzz/invariant/AnyInputSafety.inv.t.sol::invariant_anyInputSafety`,
-  `::test_conservationDetectsMissingWei`;
+- **Tolerance.** Lido moves whole shares, so each stETH submission can leave custody up to 2 wei
+  below its nominal amount. Against real Lido the check allows exactly that
+  (`test/fork/ForkSteth.t.sol::_assertSolvent`, 2 wei per submission); the solvency suites below
+  never rebase the mock token, so it stays at a 1:1 share rate and they check strict cover.
+- **Tests.** `test/fuzz/invariant/EthSolvency.inv.t.sol::invariant_ethSolvency`;
+  `test/fuzz/invariant/AnyInputSafety.inv.t.sol::invariant_anyInputSafety`;
   `test/fuzz/invariant/DegenesisSolvency.inv.t.sol::invariant_backingCoversObligations`,
   `::invariant_claimablePoolIdentity`;
   `test/fuzz/invariant/MultiLevel.inv.t.sol::invariant_solvencyAcrossLevels`;
   `test/fuzz/invariant/WhaleSybil.inv.t.sol::invariant_gameOverTerminal`. Full list in
-  [Accounting](ACCOUNTING.md#obligation-equation).
+  [Accounting](ACCOUNTING.md#obligation-equation). The conservation oracles beside them fail on one
+  missing wei (`EthSolvency.inv.t.sol::test_reconciliationDetectsMissingWei`,
+  `AnyInputSafety.inv.t.sol::test_conservationDetectsMissingWei`).
 - **Tests: the full `claimablePool` identity.** Balance words above their sentinels plus unsplit
   Degenesis volume, Vault budget, redemption reserve, staged BAF reservation and sealed Decimator
   rounds (`test/fuzz/helpers/ClaimablePoolIdentity.sol`):
@@ -288,7 +346,9 @@ The equations and per-phase transitions are in [Accounting](ACCOUNTING.md).
   every reservation live),
   `::test_IdentityIsFalsifiable`;
   `test/fuzz/invariant/AnyInputSafety.inv.t.sol::invariant_anyInputSafety` property (e) ("(e)
-  CLAIMABLE IDENTITY"), also run by `AnyInputSafetyDegenesis.inv.t.sol`.
+  CLAIMABLE IDENTITY"), also run by `AnyInputSafetyDegenesis.inv.t.sol`; AnyInputSafety's measured
+  default-profile runs (`_assertCoverage`) reach at most level 2 with no Decimator burn, so the
+  staged BAF and sealed Decimator terms are live only in the composed test.
 
 ### Exactly-once reserve transfers
 
@@ -298,8 +358,8 @@ The equations and per-phase transitions are in [Accounting](ACCOUNTING.md).
 | Vault budget and sDGNRS AFKing release | `DegenerusGameGameOverModule._handleGameOverDrain` (before `gameOver`; returns early once set) | `test/fuzz/DegenesisTerminal.t.sol::test_HardDeadline_AfterSale_ReleasesOnceIntoFinalPrizes` ("no second release"), `::test_DeadVrfEnding_DuringSale_SplitsThenReleasesOnce` |
 | Vault budget spend | `spendDegenesis` (net move equals cost; `DegenesisMaxCostExceeded`) | `test/fuzz/DegenesisVaultSpend.t.sol::testFuzz_SpendLeavesNoCashout`; `test/fuzz/invariant/DegenesisSolvency.inv.t.sol::invariant_degenesisEthConservation` |
 | BAF reservation | `runBafJackpot`, `runBafAwards`, `_releaseBafReserve`; game-over latch (`jackpotWork.kind == 7`) | `test/fuzz/BafStagedResume.t.sol::test_EmptyBracketReturnsTheWholeReservation` (`_checkResidue`: "claimablePool releases exactly the residue"); `test/fuzz/BafStagedGameOver.t.sol::test_LatchReleasesTheUncreditedReservationAndTheEndingDistributesIt` ("claimablePool releases exactly work.paid"); `test/fuzz/BafStagedSkip.t.sol::test_X0LosingFlipSkipsWithoutAStage` |
-| Sealed Decimator reservation | A sealed round's pool stays in `claimablePool` at an ending, is unpayable once the terminal bit or liveness holds (`_rngConsumerStage` returns 0), and is released with `claimablePool = 0` at `DegenerusGameGameOverModule._handleFinalSweep`, which splits it with the remainder across the Vault, sDGNRS and GNRUS | `test/repro/ClaimablePoolIdentityComposed.t.sol::test_IdentityHoldsThroughEveryReservation` (the identity counts sealed Decimator rounds) |
-| Redemption reserve | `_closeRedemptionBatch`, `_releaseRedemptionReserve` | `test/repro/RedemptionReserve.t.sol::testSettlingReserveCountsOnceInBackingPreview`; `test/invariant/RedemptionAccounting.t.sol::invariant_INV_02_EthConservationExact` |
+| Sealed Decimator reservation | A sealed round's pool stays in `claimablePool` at an ending, is unpayable once the terminal bit or liveness holds (`_rngConsumerStage` returns 0), and is released with `claimablePool = 0` at `DegenerusGameGameOverModule._handleFinalSweep`, which splits it with the remainder across the Vault, sDGNRS and GNRUS | `test/repro/ClaimablePoolIdentityComposed.t.sol::test_IdentityHoldsThroughEveryReservation` (the identity counts sealed Decimator rounds while the game is live); `test/fuzz/ReviewFixes0924.t.sol::test_legIdlesDuringLiveness` ("no credit once liveness triggers", "the reservation stays reserved for the sweep"), `::test_legIdlesAfterGameOver` ("no credit after game over"), `::test_SweepDoesNotWaitForPendingBattle` ("sweep ran with a battle queued", "the unsettled battle credits nothing") |
+| Redemption reserve | `_closeRedemptionBatch`, `_releaseRedemptionReserve` | `test/repro/RedemptionReserve.t.sol::testSettlingReserveCountsOnceInBackingPreview` ("preview counts the reserve exactly once"), `::testLeftoverReturnsAndNextClosePricesIt` ("next close includes released leftovers in price"; Game claimable plus reserve conserved across the release and the next close); `test/invariant/RedemptionAccounting.t.sol::invariant_INV_02_EthConservationExact` (sDGNRS side) |
 
 ### Settled loans retire exactly once
 
@@ -318,7 +378,8 @@ settle the remaining loans later.
     ("manual repayment closes the loan once", "each remaining loan seized exactly once"),
     `::testFuzz_RandomBookSettlesOnceAtTheRepaymentPrice`
   - `test/fuzz/AccountLoans.t.sol::test_RepaidLoanIsNeverSeized`,
-    `::test_GameOverClosesRepaymentOfALoanTheEndingLeftOpen`, `::testFuzz_DueListSwapAndPop`
+    `::test_GameOverClosesRepaymentOfALoanTheEndingLeftOpen`, `::test_GameOverBlocksBorrow`,
+    `::test_BorrowStaysClosedThroughHardStall`, `::testFuzz_DueListSwapAndPop`
   - `test/fuzz/invariant/LoanAccounting.inv.t.sol::invariant_closedLoansPaidSpecOrSeized`,
     `::invariant_ownershipAndDueLists`
 
@@ -337,10 +398,12 @@ settle the remaining loans later.
   - `test/repro/AfkingMidRunShieldBurn.t.sol::test_MidRunManualActionKeepsHighWaterAndGrantsNoCentury`
     ("mid-run high-water untouched by the manual action", "no re-granted century shields")
   - `test/repro/QuestStreakStallForgiveness.t.sol::test_FinalizeDeliveredAheadRetainsPreRequestCoverage`
-    ("finalize is idempotent"), `::test_MissedLogicalDaysConsumeShieldsExactlyOnce`
-  - `test/fuzz/V56QuestNonPerturb.t.sol::testStreakNeutralDuringAfkingSlot0`,
+    ("finalize is idempotent")
+  - Same-day neighbour (a manual completion during a run leaves the streak unchanged):
+    `test/fuzz/V56QuestNonPerturb.t.sol::testStreakNeutralDuringAfkingSlot0`,
     `::testStreakNeutralIsGatedByAfkingActiveOnly`
-  - Complement (outside a run, misses beyond shields decay against the Game day):
+  - Complement (outside a run, misses consume shields once and beyond shields decay against the Game
+    day): `test/repro/QuestStreakStallForgiveness.t.sol::test_MissedLogicalDaysConsumeShieldsExactlyOnce`;
     `test/repro/QuestStreakRequestWindow.t.sol::test_LapsedStreakStaysDecayedInRequestWindow`
     ("window: decayed against the Game day")
 
@@ -357,8 +420,9 @@ before a day-`(d+3)` entry can reuse day `d`'s storage bank.
     ("control claim paid on day d+2", "finder closed at the d+3 request", "preview closed at the d+3
     request")
   - `test/fuzz/WWXRPRecycling.t.sol::test_ClaimClosesAtDayPlusThreeRequestBeforeBankReuse`
-    ("control: open on day d+2", "preview closed at the d+3 request")
-  - `test/fuzz/WWXRPRecycling.t.sol::test_VrfStallCannotPayExpiredDrawOrNewDrawWithOldWord`
+    ("control: open on day d+2", "preview closed at the d+3 request"; WWXRP against a Game mock)
+  - `test/fuzz/WWXRPRecycling.t.sol::test_VrfStallCannotPayExpiredDrawOrNewDrawWithOldWord` (WWXRP
+    against a Game mock)
 
 ## Build profiles
 
@@ -372,7 +436,8 @@ before a day-`(d+3)` entry can reuse day `d`'s storage bank.
   CrapsBattle/JackpotBattle pair with the shared layout, including nested members.
 - **Tests.**
   - `test/unit/test_recursive_layout.py` (`test_expected_modules_come_from_deployment_registry` pins
-    each profile's module set; checker self-tests for packed and nested member changes)
+    the Glamsterdam module set and the size and three members of the EIP-170 set; checker self-tests
+    for packed and nested member changes)
   - `test/fuzz/StorageSlotPins.t.sol::test_ProductionGameSlotConstants`;
     `test/fuzz/StorageFoundation.t.sol::testSlot0FieldOffsets`
   - Hosted CI, `.github/workflows/ci.yml` job `foundry-build`, step "Glamsterdam profile layout

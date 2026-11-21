@@ -91,16 +91,20 @@ import {RngTags} from "./libraries/RngTags.sol";
  * @dev DRAW SECURITY — WHY day d SETTLES ON WORD d+1:
  *      A normal daily request advances the logical index before its word can
  *      arrive. enterDraw() reads that index from Game slot 0, so normal word
- *      d+1 is unknowable while participation day d remains open. Entries after
- *      game over are unguarded: WWXRP is worthless then.
- *      Thus a recorded word for
+ *      d+1 is unknowable while participation day d remains open. Outside the
+ *      terminal sequence a recorded word for
  *      day d+1 while entry is open is structurally impossible — the same
  *      settlement-blindness model as coinflip deposits, which also stay open
  *      through the daily lock and settle on the next word. reverseFlip
  *      nudges move only the coinflip; this draw reads the raw recorded
  *      word. No fallback word exists: a game whose VRF dies ends
  *      deterministically without any word, so entry carries no stall
- *      gate; burns into a dead game's days simply never settle. The draw
+ *      gate; burns into a dead game's days simply never settle. The terminal
+ *      request records its word as day d+1 without advancing the index, so
+ *      day d stays enterable after that word lands. Entries from then on,
+ *      including after game over, are unguarded: their prize is a FLIP stake
+ *      on a day that never resolves, and WWXRP is worthless after game over.
+ *      The draw
  *      has no owner, no parameter mutation, and no override of RNG, winner,
  *      probability, prize, or recipient.
  *
@@ -258,7 +262,8 @@ contract WWXRP {
     /// @notice Emitted when a skipped century BAF resolves its incinerator draw
     /// @param bracket Century bracket whose BAF skipped (level x00)
     /// @param winnerId Wallet ID recorded in the winning entry (paid as flip credit)
-    /// @param flipAward FLIP credited to the winner by the game as flip credit
+    /// @param flipAward FLIP this contract credited to the winner as flip credit (0 unless
+    ///        the armed day's flip lost)
     /// @param roll Winner roll in [0, totalScore)
     /// @param totalScore Bracket total effective score (whole-WWXRP units)
     event IncineratorResolved(

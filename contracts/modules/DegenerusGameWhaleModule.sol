@@ -224,10 +224,16 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
      * @param buyerId The account receiving the pass (resolved by the Game; its payee takes the token payouts).
      * @param quantity Number of passes to purchase (1-1,000).
      * @param affiliateCode Affiliate/referral code for the purchase (bytes32(0) = stored code).
-     * @custom:reverts GameOver When gameOver is true.
+     * @custom:reverts GameOver When the liveness/game-over state is triggered.
      * @custom:reverts InvalidQuantity When quantity is 0 or exceeds 1,000.
      * @custom:reverts MinQuantityRequired When a century (x00) pass level is purchased with quantity < 2
      *         on the standard-price path. A boon purchase takes the discount branch and is not gated.
+     * @custom:reverts NotApproved When `buyerId` is nonzero and the caller is neither its payee nor
+     *         an approved operator.
+     * @custom:reverts Insolvent When msg.value, the buyer's claimable and its AFKing balance together
+     *         do not cover the price.
+     * @custom:reverts RngLocked When the daily RNG lock is set and the award needs a new far-future
+     *         queue lane for the buyer.
      */
     function purchaseWhalePass(
         uint32 buyerId,
@@ -369,7 +375,8 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     /// @param passLevel `level + 1`, cached by the caller (invariant across the call).
     /// @param quantity Paid passes (1..WHALE_MAX_QUANTITY).
     /// @param totalPrice The canonical quote for `quantity` at these boon terms.
-    /// @param freshPaid The msg.value applied to the price (0 for the automatic purchase).
+    /// @param freshPaid The msg.value applied to the price (0 for the automatic purchase); the
+    ///        AFKing draw joins it as fresh-rate affiliate basis.
     /// @param payerId Account whose claimable and AFKing balances fund the shortfall.
     /// @param affiliateCode Affiliate/referral code (bytes32(0) = stored code / vault default).
     function _deliverWhalePass(
@@ -381,7 +388,11 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         uint256 freshPaid,
         bytes32 affiliateCode
     ) private {
-        _settleShortfall(payerId, totalPrice - freshPaid, true);
+        {
+            // Prepaid AFKing is the payer's own principal: fresh-rate basis, as on tickets and foil.
+            (, uint256 afkingUsed) = _settleShortfall(payerId, totalPrice - freshPaid, true);
+            freshPaid += afkingUsed;
+        }
         // Whale-pass ETH-in (any funding source): the full price routes to the pools; the
         // pass lootbox is a pool-funded reward, so its LootBoxBuy must NOT be re-counted.
         emit WhalePassPurchased(buyerId, quantity, totalPrice);
@@ -462,6 +473,8 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
 
         mintPacked_[buyerId] = data;
         emit PassActivated(buyerId, true, ticketStartLevel, newFrozenLevel, data);
+        // Cure: every pass costs more than one ticket, so it clears the curse like a qualifying buy.
+        _clearCurse(buyerId);
 
         // Queue entries for the paid passes plus one bonus pass per 5 bought: 20/lvl per pass
         // for bonus levels (passLevel to 9); the standard leg awards 2 half-passes per pass
@@ -489,8 +502,8 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
 
         // Affiliate, fresh 25% at affiliate levels 1-3 / 20% at 4+, halved for
         // bulk buys, and 5% recycle exactly like a
-        // normal ticket mint: the fresh portion (freshPaid) at the fresh rate, the
-        // claimable/afking-funded remainder at the recycle rate, both frozen at level + 1
+        // normal ticket mint: the fresh portion (msg.value plus the AFKing draw) at the fresh
+        // rate, the claimable-funded remainder at the recycle rate, both frozen at level + 1
         // like the ticket affiliate (score 0, same as tickets). The FLIP basis converts at
         // the pass ticket level's price; the kickback share is credited back to the buyer
         // in one Coinflip write.
@@ -582,7 +595,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
      *      - Applies the standard 10-level stat boost via _activate10LevelPass.
      *      - Price: flat 0.24 ETH at levels 0-2 (excess buys bonus tickets), sum of per-level
      *        ticket prices across the 10-level window at levels 3+.
-     *      - Awards a lootbox equal to 10% of pass value.
+     *      - Awards a lootbox equal to 10% of the price paid (after any boon discount).
      *      - Boon purchases apply the boon's tier discount (10/25/50%) to the payment amount.
      *      - Affiliate: fresh 25% (affiliate levels 1-3, i.e. current level 0-2) or 20% (4+), 5% recycled, of the price
      *        in FLIP, exactly like a ticket mint (kickback share credited back to the buyer).
@@ -700,15 +713,19 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         // Claimable-pay: msg.value first (overpay -> payer's afking), claimable covers the rest.
         uint256 freshPaid = msg.value > totalPrice ? totalPrice : msg.value;
         if (msg.value > freshPaid) _creditAfkingValue(_requireWalletId(msg.sender), msg.value - freshPaid);
-        _settleShortfall(buyerId, totalPrice - freshPaid, true);
+        {
+            // Prepaid AFKing is the buyer's own principal: fresh-rate basis, as on tickets and foil.
+            (, uint256 afkingUsed) = _settleShortfall(buyerId, totalPrice - freshPaid, true);
+            freshPaid += afkingUsed;
+        }
         // Lazy-pass ETH-in (any funding source): the full price routes to the pools; the
         // pass lootbox is a pool-funded reward, so its LootBoxBuy must NOT be re-counted.
         emit LazyPassPurchased(buyerId, startLevel, totalPrice);
         _accrueDegenesisCredit(buyerId, totalPrice);
 
         // Affiliate, fresh 25% at affiliate levels 1-3 / 20% at 4+ (paid at level + 1) and 5% recycle exactly like a
-        // normal ticket mint: the fresh portion (freshPaid) at the fresh rate, the
-        // claimable/afking-funded remainder at the recycle rate, both frozen at level + 1
+        // normal ticket mint: the fresh portion (msg.value plus the AFKing draw) at the fresh
+        // rate, the claimable-funded remainder at the recycle rate, both frozen at level + 1
         // like the ticket affiliate (score 0, same as tickets). The FLIP basis converts at
         // the pass start level's price; the kickback share is credited back to the buyer
         // in one Coinflip write.
@@ -741,6 +758,8 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         }
 
         _activate10LevelPass(buyerId, startLevel, LAZY_PASS_ENTRIES_PER_LEVEL);
+        // Cure: every pass costs more than one ticket, so it clears the curse like a qualifying buy.
+        _clearCurse(buyerId);
 
         // Queue bonus tickets from flat-price overpayment at early levels
         if (bonusEntries != 0) {
@@ -803,6 +822,10 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
      * @custom:reverts InvalidSymbol When symbolId is out of range (>= 32).
      * @custom:reverts SymbolTaken When the symbol is already claimed.
      * @custom:reverts AlreadyOwnsDeityPass When the buyer already owns a deity pass.
+     * @custom:reverts NotApproved When `buyerId` is nonzero and the caller is neither its payee nor
+     *         an approved operator.
+     * @custom:reverts Insolvent When msg.value, the buyer's claimable and its AFKing balance together
+     *         do not cover the price.
      */
     function purchaseDeityPass(
         uint32 buyerId,
@@ -881,6 +904,8 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         _accrueDegenesisCredit(buyerId, totalPrice);
 
         _registerDeity(buyerId, symbolId);
+        // Cure: every pass costs more than one ticket, so it clears the curse like a qualifying buy.
+        _clearCurse(buyerId);
         // The next transition extends every deity to level + 100. In the purchase phase
         // passLevel is level + 1, so a 100-level grant ends at level + 100 and the next
         // transition (targeting level + 101) continues it; in the jackpot phase the level
@@ -889,9 +914,8 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         _queueEntryRange(buyerId, passLevel, jackpotPhaseFlag ? 99 : 100, DEITY_PERPETUAL_ENTRIES);
         ++deityPassSales;
 
-        // DGNRS rewards: the three referrer hops by wallet ID (VAULT when unreferred). A referrer
-        // without an ID yet (a bootstrap code owner before its first earnings) reads 0 and zeroes
-        // every later hop.
+        // DGNRS rewards: the three referrer hops by wallet ID (VAULT when unreferred). Every
+        // stored referral names an allocated ID and an unset one reads as VAULT, so no hop is 0.
         (uint32 affiliateId, uint32 upline1Id, uint32 upline2Id) = affiliate.referrerIdsById(buyerId);
         // The conferred whale pass below needs the direct affiliate's wallet ID.
         if (affiliateId == 0) revert E();
@@ -1167,7 +1191,8 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     /// @notice Claim deferred whale pass rewards for account `id`.
     /// @dev Awards deterministic tickets based on pre-calculated half-pass count.
     ///      Tickets start at current level + 1 to avoid giving tickets for an already-active level.
-    ///      Permissionless: it only awards the account its own tickets and moves no value.
+    ///      Permissionless: it awards the account its own tickets and whale-pass status and pays
+    ///      the caller nothing; the window starts at the level after the one current at the claim.
     /// @param id Account to claim for (0 = caller, which must hold an ID; otherwise allocated).
     /// @custom:reverts NothingToClaim If the account has no pending whale-pass claims.
     function claimWhalePass(uint32 id) external {
@@ -1191,11 +1216,11 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         _queueHalfPassAward(id, startLevel, 100, halfPasses);
     }
 
-    /// @dev One-per-account-LIFETIME AFKing seat latch. The seat is a perk of BUYING a
-    ///      pass, never of winning or being handed one, so this fires only where an
-    ///      account pays for its own pass (whale/lazy/deity purchase); the seat mints to the
-    ///      account's payee. Passes that arrive
-    ///      any other way — the whale-pass claim and every `whalePassClaims` feeder behind
+    /// @dev One-per-account-LIFETIME AFKing seat latch. The seat comes with a pass
+    ///      PURCHASE for the account, never with a won pass, so this fires on a whale/lazy/
+    ///      deity purchase, including a whale purchase the Vault makes for the account from
+    ///      the Degenesis budget; the seat mints to the account's payee. Passes that arrive
+    ///      any other way — the whale-pass claim and every half-pass feeder behind
     ///      it, and a deity buyer's conferred affiliate pass — mint no seat. The seat
     ///      ARRIVES here: `mintSeatFor` mints it with deterministic default art the holder
     ///      can restyle at any time (setSeatTraits), so no separate claim step stands

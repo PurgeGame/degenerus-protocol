@@ -146,9 +146,12 @@ node scripts/owner-governance.js direct --data "$VAULT_CALLDATA" --owners "$OWNE
 
 `inspect` retrieves the transaction from its `ProposalCreated` log through `eth_getLogs`, verifies
 it against the stored hash, and shows approval totals, position, delegate, settled approval and
-current-block support. Execution uses the verified event calldata, reads the stored ETH value and
-forwards that exact amount from its caller. The target's timing and other conditions can still make
-an approved action revert.
+current-block support. A proposal's `lockedWeight` and `settledWeight` report the support currently
+assigned to it, so they fall as positions clear or withdraw, including after execution or expiry;
+the support an action executed with is recoverable from its `Supported` and `VoteCleared` events.
+Execution uses the verified event calldata, reads the stored ETH value and forwards that exact
+amount from its caller. The target's timing and other conditions can still make an approved action
+revert.
 
 `direct` (also accepted as `direct-action`) discovers the caller's delegated positions from deposit
 and delegate-change logs, includes their own position, checks current control, and sorts the owners.

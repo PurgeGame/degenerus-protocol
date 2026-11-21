@@ -124,14 +124,13 @@ abstract contract GameActions is GameRngNudge, GameHooks, DegenerusGamePayoutUti
 
     function _actionSetLootboxRngThreshold(uint256 newThreshold) internal {
         if (!actionVault.isVaultOwner(msg.sender)) revert OnlyVault();
-        if (newThreshold == 0) revert ZeroValue();
+        uint256 milli = newThreshold / LR_ETH_SCALE;
+        if (milli == 0) revert ZeroValue();
+        if (milli > LR_THRESHOLD_MASK) revert GameFacade.OutOfBounds();
         uint256 prev = _unpackMilliEthToWei(uint64(_lrRead(LR_THRESHOLD_SHIFT, LR_THRESHOLD_MASK)));
-        if (newThreshold == prev) {
-            emit GameFacade.LootboxRngThresholdUpdated(prev, newThreshold);
-            return;
-        }
-        _lrWrite(LR_THRESHOLD_SHIFT, LR_THRESHOLD_MASK, _packEthToMilliEth(newThreshold));
-        emit GameFacade.LootboxRngThresholdUpdated(prev, newThreshold);
+        uint256 current = milli * LR_ETH_SCALE;
+        if (current != prev) _lrWrite(LR_THRESHOLD_SHIFT, LR_THRESHOLD_MASK, milli);
+        emit GameFacade.LootboxRngThresholdUpdated(prev, current);
     }
 
     function _actionSetMiddayMaxBasefee(uint256 newGwei) internal {

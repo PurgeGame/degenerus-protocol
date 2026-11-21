@@ -94,6 +94,7 @@ async function main() {
   const deployed = new Map();
   const affiliateBootstrap = parseAffiliateBootstrap();
   const affiliatePreReferrals = parseAffiliatePreReferrals();
+  checkAffiliateBootstrap(affiliateBootstrap, affiliatePreReferrals, predicted);
   if (affiliateBootstrap.owners.length != 0) {
     console.log(
       `Bootstrapping ${affiliateBootstrap.owners.length} affiliate code(s) from AFFILIATE_BOOTSTRAP_JSON...`
@@ -450,6 +451,63 @@ function parseAffiliatePreReferrals() {
   }
 
   return { players, codes };
+}
+
+/**
+ * Refuse, before any transaction, every bootstrap input the DegenerusAffiliate
+ * constructor would revert on (`_createAffiliateCode`, `_bootstrapReferral`).
+ */
+function checkAffiliateBootstrap(bootstrap, preReferrals, predicted) {
+  const lower = (a) => hre.ethers.getAddress(a).toLowerCase();
+  const zero = hre.ethers.ZeroAddress.toLowerCase();
+  // Constructor-created codes and their owners.
+  const owners = new Map([
+    [hre.ethers.encodeBytes32String("VAULT"), lower(predicted.get("VAULT"))],
+    [hre.ethers.encodeBytes32String("DGNRS"), lower(predicted.get("SDGNRS"))],
+    [hre.ethers.encodeBytes32String("GNRUS"), lower(predicted.get("GNRUS"))],
+  ]);
+
+  for (let i = 0; i < bootstrap.codes.length; i++) {
+    const owner = lower(bootstrap.owners[i]);
+    if (owner === zero) {
+      throw new Error(`Affiliate bootstrap entry ${i} has a zero owner`);
+    }
+    // 1-32 bytes of A-Z / 0-9, at least one letter, left-aligned, zero-padded.
+    const code = bootstrap.codes[i].toLowerCase();
+    const text = Buffer.from(code.slice(2), "hex").toString("latin1").replace(/\0+$/, "");
+    if (!/^[A-Z0-9]*[A-Z][A-Z0-9]*$/.test(text)) {
+      throw new Error(
+        `Affiliate bootstrap entry ${i} code must be A-Z / 0-9 with at least one letter`
+      );
+    }
+    if (owners.has(code)) {
+      throw new Error(`Affiliate bootstrap entry ${i} code is already taken`);
+    }
+    owners.set(code, owner);
+  }
+
+  const referred = new Set([
+    lower(predicted.get("VAULT")),
+    lower(predicted.get("SDGNRS")),
+  ]);
+  const gnrus = lower(predicted.get("GNRUS"));
+  for (let i = 0; i < preReferrals.players.length; i++) {
+    const player = lower(preReferrals.players[i]);
+    const code = preReferrals.codes[i].toLowerCase();
+    if (player === zero || player === gnrus) {
+      throw new Error(`Affiliate pre-referral entry ${i} has a zero or GNRUS player`);
+    }
+    if (!owners.has(code)) {
+      throw new Error(`Affiliate pre-referral entry ${i} names an unknown code`);
+    }
+    if (owners.get(code) === player) {
+      throw new Error(`Affiliate pre-referral entry ${i} refers a player to its own code`);
+    }
+    if (referred.has(player)) {
+      throw new Error(`Affiliate pre-referral entry ${i} player is already referred`);
+    }
+    referred.add(player);
+  }
 }
 
 main().catch((err) => {

@@ -20,7 +20,10 @@ For calls that support a self-account shorthand, **ID 0 means the Vault**, not t
 Funding deposits require an explicit beneficiary ID (Vault = 1). Explicit IDs still require the
 destination's normal authorization, so the Vault can also act for accounts it owns or is approved
 for. Claim proceeds follow the underlying account's payee rules. The transaction caller gains no
-power over unrelated IDs.
+power over unrelated IDs. Actions open to any payer can still name another account, so the owner
+can spend Vault ETH or FLIP for another account: a prepaid-funding deposit credits it ETH it may
+withdraw, a gifted Degenerette bet or coinflip deposit gives it the bet or stake and its winnings, a
+GNRUS ticket donation buys tickets for GNRUS, and `decurse` clears its curse.
 
 Accounts the Vault acquired through loan seizure use that same route: encode the account's
 explicit ID for purchases, account settings, bets and claims supported by the destination.

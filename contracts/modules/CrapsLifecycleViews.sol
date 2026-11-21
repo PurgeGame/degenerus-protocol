@@ -160,6 +160,7 @@ abstract contract CrapsLifecycleViews is CrapsBattleStorage {
             _schedRound(bank), bounty / 100, pick + 1);
     }
 
+    /// @dev The period clock of `CrapsBattleCore._currentBonusSlot`, timed from the 22:57 UTC reset.
     function _jackpotCurrentBonusSlot(uint24 day) internal view returns (uint24, uint256 period, uint256 slot) {
         uint256 elapsed = (block.timestamp - 82_620) % 1 days;
         if (_scheduleResetPassed()) period = _BONUS_PERIODS_PER_DAY;

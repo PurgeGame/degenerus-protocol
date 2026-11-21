@@ -3,7 +3,7 @@
 
 An unchecked subtraction whose bound assumption is wrong is the canonical critical. The bounds
 live in comments and in reviewers' heads; this extractor re-derives, from source, every
-unchecked block in the game facade, its storage base and the modules, tagged with its enclosing
+unchecked block in every deployed contract source, tagged with its enclosing
 function and the block's first statement, so check-unchecked.sh can diff the live set against a
 manifest that records the invariant keeping each block in range — and fail when a block is added,
 moved or rewritten without that record.
@@ -14,8 +14,8 @@ where ordinal is the block's 1-based position within its function, head is the b
 non-empty statement (whitespace-collapsed, comments stripped, at most 90 chars), and ops lists
 which of - / -= / * / *= / + / += / ++ / -- / << appear inside the block.
 
-Scope: SCOPE_FILES (env, comma-separated) or the default main-contract set. Comments and strings
-are masked before matching.
+Scope: SCOPE_FILES (env, comma-separated) or every .sol file under CONTRACTS_DIR except
+interfaces/, test/ and mocks/. Comments and strings are masked before matching.
 """
 import os
 from pathlib import Path
@@ -23,41 +23,13 @@ import re
 import sys
 
 CONTRACTS_DIR = os.environ.get("CONTRACTS_DIR", "contracts")
-DEFAULT_SCOPE = [
-    "DegenerusGame.sol",
-    "storage/DegenerusGameStorage.sol",
-    "modules/DegenerusGameAdvanceModule.sol",
-    "modules/DegenerusGameRngModule.sol",
-    "modules/DegenerusGameTicketModule.sol",
-    "modules/DegenerusGameJackpotDrawModule.sol",
-    "modules/DegenerusGameJackpotDrawUtils.sol",
-    "modules/DegenerusGameRngUtils.sol",
-    "modules/DegenerusGameJackpotModule.sol",
-    "modules/DegenerusGameMintModule.sol",
-    "modules/GamePurchase.sol",
-    "modules/GamePurchaseBoon.sol",
-    "modules/GamePurchaseBox.sol",
-    "modules/GameHooks.sol",
-    "modules/DegenerusGameMintStreakUtils.sol",
-    "modules/DegenerusGamePayoutUtils.sol",
-    "modules/DegenerusGameGameOverModule.sol",
-    "modules/GameAfkingModule.sol",
-    "modules/DegenerusGameLootboxModule.sol",
-    "modules/DegenerusGameBoonModule.sol",
-    "modules/DegenerusGameWhaleModule.sol",
-    "modules/DegenerusGameFoilPackModule.sol",
-    "modules/DegenerusGameFoilCore.sol",
-    "modules/DegenerusGameFoilUserModule.sol",
-    "modules/DegenerusGameFoilWorkerModule.sol",
-    "modules/DegenerusGamePassModule.sol",
-    "modules/DegenerusGameEndgameModule.sol",
-    "modules/DegenerusGameDecimatorModule.sol",
-    "modules/DegenerusGameDegeneretteModule.sol",
-    "modules/DegenerusGameDegenesisModule.sol",
-]
-# New consolidated components cannot silently escape the source census.
-DEFAULT_SCOPE = sorted(set(DEFAULT_SCOPE) | {"modules/" + p.name for p in Path(CONTRACTS_DIR, "modules").glob("*.sol")}
-                       | {"libraries/BoundedCall.sol", "libraries/MineFlipGas.sol"})
+# Every deployed contract source is in scope (all of contracts/ except interfaces/ and the test-only
+# helpers in test/ and mocks/), so no unchecked block escapes the census.
+DEFAULT_SCOPE = sorted(
+    p.relative_to(CONTRACTS_DIR).as_posix()
+    for p in Path(CONTRACTS_DIR).rglob("*.sol")
+    if p.relative_to(CONTRACTS_DIR).parts[0] not in ("interfaces", "test", "mocks")
+)
 
 SCOPE = [s.strip() for s in os.environ.get("SCOPE_FILES", "").split(",") if s.strip()] or DEFAULT_SCOPE
 

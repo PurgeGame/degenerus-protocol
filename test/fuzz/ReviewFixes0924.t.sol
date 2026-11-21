@@ -27,8 +27,8 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 //   T1  a VRF stall that recovers past the purchase deadline does not fire liveness before the
 //       next accepted logical round, without calendar credit (unit + integration).
 //   T2  terminal routing is irreversible: the sDGNRS self-claim waits (NotGameOver) while liveness
-//       reads true before game over; sealed Decimator battles remain settleable through the ending
-//       and receive a full claim window after their last completion; the foil drain's terminal
+//       reads true before game over; a sealed Decimator battle stops settling once liveness triggers
+//       and stays reserved until the final sweep releases it; the foil drain's terminal
 //       flag keys on the ending latch, not the liveness predicate.
 //   T3  a vault DGVE burn whose afking shortfall exceeds the game's ETH is paid ETH + stETH.
 //   T4  the terminal jackpot pays exact shares: one wei in the pot moves a winner by wei, not a

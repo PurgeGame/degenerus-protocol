@@ -5,7 +5,13 @@ import {
   deployFullProtocol,
   restoreAddresses,
 } from "../helpers/deployFixture.js";
-import { driveDailyCycle } from "../helpers/dailyCycle.js";
+import {
+  driveDailyCycle,
+  ACTION_IDLE,
+  ACTION_REQUEST_MIDDAY,
+  ACTION_TERMINAL,
+  ACTION_WAIT,
+} from "../helpers/dailyCycle.js";
 import {
   eth,
   advanceToNextDay,
@@ -105,6 +111,35 @@ describe("JackpotAffiliateBonus", function () {
   async function getAffiliateRunningTotal(tx, affiliate) {
     const events = await getEvents(tx, affiliate, "AffiliateEarningsRecorded");
     return events.length > 0 ? (events[events.length - 1].args.packed >> 24n) : null;
+  }
+
+  /** The affiliate level the running total of a purchase tx is kept under (low 24 bits). */
+  async function getAffiliateLevelKey(tx, affiliate) {
+    const events = await getEvents(tx, affiliate, "AffiliateEarningsRecorded");
+    return events.length > 0 ? (events[events.length - 1].args.packed & 0xffffffn) : null;
+  }
+
+  /**
+   * Run the miner on the current wall day until the daily request is made, without delivering
+   * its word. `rngLocked()` is then true, and on the final jackpot day new tickets route to the
+   * next level.
+   */
+  async function driveToPendingDailyRequest(game, signer, mockVRF, { maxCalls = 400 } = {}) {
+    for (let i = 0; i < maxCalls; i++) {
+      if (await game.rngLocked()) return;
+      const action = await game.nextMinerAction();
+      if (action === ACTION_IDLE || action === ACTION_REQUEST_MIDDAY || action === ACTION_TERMINAL) {
+        throw new Error(`driveToPendingDailyRequest: no daily request came due (action ${action})`);
+      }
+      if (action === ACTION_WAIT) {
+        // With the daily lock clear, only a non-daily request can be waiting.
+        const id = await getLastVRFRequestId(mockVRF);
+        await mockVRF.fulfillRandomWords(id, 0x5eedn + id);
+        continue;
+      }
+      await game.connect(signer).mineRun(0, { gasLimit: 16_777_216 });
+    }
+    throw new Error(`driveToPendingDailyRequest: no daily request within ${maxCalls} calls`);
   }
 
   // ---------------------------------------------------------------------------
@@ -208,6 +243,61 @@ describe("JackpotAffiliateBonus", function () {
       const ratio = (bonus * 10000n) / baseline;
       expect(ratio).to.be.gte(13900n, "Standard bonus should inflate by ~7/5");
       expect(ratio).to.be.lte(14100n, "Standard bonus should inflate by ~7/5");
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Final draw requested: tickets route to the next level and earn no bonus
+  // ---------------------------------------------------------------------------
+
+  describe("final draw requested (3 days)", function () {
+    it("tickets bought after the final draw's request earn no affiliate bonus", async function () {
+      const { game, deployer, mockVRF, advanceModule, affiliate, buyerBaseline, buyerBonus, aliceCode, others } =
+        await loadFixture(deployStandardWithAffiliate);
+      const buyerFinal = others[14];
+      await affiliate.connect(buyerFinal).referPlayer(aliceCode);
+
+      const reached = await driveToJackpotPhase(game, deployer, mockVRF, advanceModule);
+      expect(reached).to.equal(true, "Should reach jackpot phase");
+      expect(await game.jackpotDuration()).to.equal(3, "Should be standard");
+
+      // First jackpot day (no bonus): the 1x basis.
+      const tx1 = await buyFullTickets(game, buyerBaseline, 10, 0.1, aliceCode);
+      const total1 = await getAffiliateRunningTotal(tx1, affiliate);
+      expect(total1).to.not.be.null;
+      const baseline = total1;
+      expect(baseline).to.be.gt(0n);
+
+      // Day before the final draw: 7/5 (precondition, as in the standard-mode case).
+      await driveOneCycle(game, deployer, mockVRF, advanceModule, 5000n);
+      expect(await game.jackpotPhase()).to.equal(true, "Should still be in jackpot phase");
+      const tx2 = await buyFullTickets(game, buyerBonus, 10, 0.1, aliceCode);
+      const total2 = await getAffiliateRunningTotal(tx2, affiliate);
+      expect(total2).to.not.be.null;
+      const bonusRatio = ((total2 - total1) * 10000n) / baseline;
+      expect(bonusRatio).to.be.gte(13900n, "precondition: the day before the final draw pays 7/5");
+      expect(bonusRatio).to.be.lte(14100n, "precondition: the day before the final draw pays 7/5");
+
+      // The final draw is requested and its word is not delivered yet.
+      await advanceToNextDay();
+      await driveToPendingDailyRequest(game, deployer, mockVRF);
+      expect(await game.rngLocked()).to.equal(true, "daily request pending");
+      expect(await game.jackpotPhase()).to.equal(true, "still in the jackpot phase");
+
+      const tx3 = await buyFullTickets(game, buyerFinal, 10, 0.1, aliceCode);
+      const total3 = await getAffiliateRunningTotal(tx3, affiliate);
+      expect(total3).to.not.be.null;
+      expect(await getAffiliateLevelKey(tx3, affiliate)).to.equal(
+        await getAffiliateLevelKey(tx2, affiliate),
+        "same affiliate level, so the running totals subtract"
+      );
+      const finalRatio = ((total3 - total2) * 10000n) / baseline;
+      expect(finalRatio).to.be.gte(9900n, "no bonus once the final draw is requested");
+      expect(finalRatio).to.be.lte(10100n, "no bonus once the final draw is requested");
+
+      // The pending request was the final draw's: delivering it ends the jackpot phase.
+      await driveOneCycleSameDay(game, deployer, mockVRF, advanceModule, 6000n);
+      expect(await game.jackpotPhase()).to.equal(false, "the pending request was the final draw's");
     });
   });
 

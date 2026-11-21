@@ -61,7 +61,7 @@ abstract contract GameAfkingClaims is DegenerusGameMintStreakUtils {
     /// @dev Each settlement moves its sub's checkpoint before it pays, so a duplicate sub
     ///      settles nothing the second time. Only `ContractAddresses.AFFILIATE` may drain, so a
     ///      non-affiliate caller can never redirect a sub's base. Returns zeros from the liveness
-    ///      trigger onward. Runs in the Game's storage context; `msg.sender` is the original caller.
+    ///      trigger onward. Runs in the Game's storage context; `msg.sender` is the Game's caller.
     /// @param ids Up to eight subscriber IDs, 32 bits each from the low end, all sharing one direct
     ///        affiliate. A zero lane and a non-member settle nothing.
     /// @param uplines The run's two upline IDs packed low/high 32 bits (zero for no referrer).

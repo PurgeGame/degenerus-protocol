@@ -118,7 +118,9 @@ library ContractAddresses {
     // consumes no deployment nonce; a separate deployment in the default EIP-170 profile.
     address internal constant CRAPS_ENGINE =
         address(0xe916cadb12C49389E487eB1e8194B1459b29B0eC);
-    // Jackpot lifecycle entries share the CrapsBattle host and storage; no separate deployment.
+    // Alias of CRAPS: jackpot lifecycle entries are called at the CrapsBattle address and run in
+    // its storage; the alias consumes no deployment nonce. In the default EIP-170 profile the
+    // lifecycle code itself is the separate CRAPS_LIFECYCLE_MODULE deployment.
     address internal constant JACKPOT_BATTLE =
         address(0x6AFc743aa4E9D98D0F53Ff111996E9817d79D301);
     address internal constant GAME_TICKET_MODULE =

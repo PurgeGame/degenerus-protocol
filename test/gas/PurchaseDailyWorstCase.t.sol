@@ -2,7 +2,7 @@
 pragma solidity 0.8.38;
 
 import {ProtocolBoonDrawSeeder} from "./helpers/ProtocolBoonDrawSeeder.sol";
-import {Vm} from "forge-std/Vm.sol";
+import {Vm, VmSafe} from "forge-std/Vm.sol";
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
@@ -13,6 +13,11 @@ import {BucketSeed} from "../helpers/BucketSeed.sol";
 import {AdvanceStageStream} from "../helpers/AdvanceStageStream.sol";
 import {TicketQueueStorage as TQ} from "../fuzz/helpers/TicketQueueStorage.sol";
 import {CrapsSlots} from "../helpers/GameSlots.sol";
+import {RngTags} from "../../contracts/libraries/RngTags.sol";
+import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
+import {IDegenerusGameAdvanceModule} from "../../contracts/interfaces/IDegenerusGameModules.sol";
+import {GlamsterdamReprice} from "../helpers/GlamsterdamReprice.sol";
+import {NewSlotCensus} from "../helpers/NewSlotCensus.sol";
 
 /// @title PurchaseDailyWorstCase — the purchase-phase daily stages at their winner caps.
 /// @notice Stage 6 pays 105 ETH winners (or level one's 50 trait shares) and prices tickets.
@@ -147,6 +152,32 @@ contract PurchaseDailySeeder is DegenerusGame, BucketSeed {
                 }
             }
         }
+    }
+
+    /// @dev Gross gas of one production daily-phase checkpoint in isolation.
+    function measuredDailyPhase(uint256 allowance) external returns (bool done, uint256 grossGas) {
+        bytes memory data = abi.encodeWithSelector(IDegenerusGameAdvanceModule.runDailyPhase_g2582.selector, allowance);
+        uint256 beforeGas = gasleft();
+        (bool ok, bytes memory returned) = ContractAddresses.GAME_ADVANCE_MODULE.delegatecall(data);
+        grossGas = beforeGas - gasleft();
+        if (!ok) assembly ("memory-safe") { revert(add(returned, 32), mload(returned)) }
+        (, done,) = abi.decode(returned, (bool, bool, uint256));
+    }
+
+    /// @dev The day's subscriber seat draw pays a wallet with no coinflip stake: its credit
+    ///      creates a slot.
+    function forceSeatDraw() external {
+        while (_subscribers.length < 2) {
+            _seedSubscriber(_seedWallet(address(uint160(0x5EA70000 + _subscribers.length))), false);
+        }
+        uint256 len = _subscribers.length;
+        uint256 boxes = _subBoxCount;
+        uint256 idx = 1 + EntropyLib.hash2(RngTags.SUBSCRIBER_DRAW, _recordedDailyWord(rngRequestDay)) % (len - 1);
+        uint256 position = idx < boxes ? idx : SUBSCRIBER_CAP - (idx - boxes);
+        uint32 winner = _seedWallet(address(uint160(0x5EA7F000)));
+        _setSubLaneAt(position, uint256(winner));
+        _setSubMetaLane(winner, (position + 1) | (uint256(1) << SUB_META_RUN_START_SHIFT));
+        if (_afkingEndpointDay < 2) _afkingEndpointDay = 200;
     }
 
     /// @dev Un-record the day's word: the day is fresh and unlocked, so the next advance fires the
@@ -677,6 +708,110 @@ abstract contract PurchaseDailyLevelOneStage is PurchaseDailyFixture {
 contract PurchaseDailyLevelOneSaturated is PurchaseDailyLevelOneStage {
     function _prev() internal pure override returns (uint256) { return PREV_POOL_L1_MAX; }
     function _label() internal pure override returns (string memory) { return "S50_LATCH"; }
+
+    struct RepricedPhase {
+        bool done;
+        uint256 shares;
+        uint256 distinct;
+        bool seatDraw;
+        uint256 osaka;
+        GlamsterdamReprice.Result r;
+        NewSlotCensus.Census census;
+    }
+
+    /// @notice LEVEL_ONE_DRAW under Glamsterdam (EIP-8037 / EIP-8038, no reservoir): the admitted
+    ///         and declined cold daily-phase checkpoints, each re-priced from its recorded
+    ///         accesses; their difference is the draw-and-seal unit the bound admits. Fifty
+    ///         distinct wallets with no coinflip stake take the shares, the seat draw pays a fresh
+    ///         wallet and the day's board takes an unused draw slot.
+    function test_LevelOneDrawGlamsterdam() public {
+        require(vm.envOr("FOUNDRY_ISOLATE", false), "cold measurement requires isolation");
+        bytes memory realCode = address(game).code;
+        vm.etch(address(game), type(PurchaseDailySeeder).runtimeCode);
+        PurchaseDailySeeder host = PurchaseDailySeeder(payable(address(game)));
+        host.forceSeatDraw();
+        // Both cold runs precede the first recording: once state-diff recording has started, later
+        // calls in the test no longer start cold.
+        RepricedPhase memory declined = _coldDailyPhase(host, 1_000_000);
+        RepricedPhase memory full = _coldDailyPhase(host, 10_000_000);
+        _recordDailyPhase(host, 1_000_000, declined);
+        _recordDailyPhase(host, 10_000_000, full);
+        vm.etch(address(game), realCode);
+        assertEq(declined.shares, 0, "a 1M allowance cannot admit the draw");
+        assertEq(declined.r.stateGas, 0, "the declined checkpoint writes nothing");
+        assertTrue(full.done, "the draw and its seal complete in one checkpoint");
+        assertEq(full.shares, COIN_DRAW_SHARES, "the trait draw paid the full 50-share cap");
+        assertEq(full.distinct, COIN_DRAW_SHARES, "every share went to a distinct wallet");
+        assertTrue(full.seatDraw, "the seat draw paid its fresh winner");
+
+        uint256 osaka = full.osaka - declined.osaka;
+        uint256 exec = full.r.glamsterdamExec - declined.r.glamsterdamExec;
+        uint256 total = exec + full.r.stateGas;
+        emit log_named_uint("declined checkpoint, cold osaka", declined.osaka);
+        emit log_named_uint("admitted checkpoint, cold osaka", full.osaka);
+        emit log_named_uint("level-one draw unit, osaka", osaka);
+        emit log_named_uint("level-one draw unit, glamsterdam exec", exec);
+        emit log_named_uint("level-one draw unit, glamsterdam state (peak)", full.r.stateGas);
+        emit log_named_uint("level-one draw unit, glamsterdam total", total);
+        emit log_named_uint("new slots", full.r.newSlots);
+        emit log_named_uint("LEVEL_ONE_DRAW", GasBounds.LEVEL_ONE_DRAW);
+        emit log_named_int("margin", int256(GasBounds.LEVEL_ONE_DRAW) - int256(total));
+        _logCensus(full.census);
+        // The most one draw can create: a stake slot per share, the seat-draw stake slot and the
+        // day's draw slot (no main-phase day has recorded one yet).
+        assertEq(full.r.newSlots, COIN_DRAW_SHARES + 2, "the fixture creates every slot the draw can create");
+        assertEq(NewSlotCensus.countOf(full.census, address(coinflip)), COIN_DRAW_SHARES + 1, "fresh stake slots");
+        assertLe(total, GasBounds.LEVEL_ONE_DRAW, "level-one draw exceeds LEVEL_ONE_DRAW under Glamsterdam");
+    }
+
+    /// @dev One cold daily-phase checkpoint, uninstrumented: its Osaka gross gas and outcome.
+    function _coldDailyPhase(PurchaseDailySeeder host, uint256 allowance) private returns (RepricedPhase memory m) {
+        uint256 base = vm.snapshotState();
+        vm.recordLogs();
+        (m.done, m.osaka) = host.measuredDailyPhase(allowance);
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        uint32[] memory winners = new uint32[](logs.length);
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].topics.length == 0) continue;
+            if (logs[i].topics[0] == FLIP_WIN_SIG) {
+                uint32 w = uint32(uint256(logs[i].topics[1]));
+                bool seen;
+                for (uint256 j; j < m.shares; ++j) if (winners[j] == w) seen = true;
+                if (!seen) ++m.distinct;
+                winners[m.shares++] = w;
+            } else if (logs[i].topics[0] == keccak256("SubDrawWon(uint32,uint24,uint24,uint256)")) {
+                m.seatDraw = true;
+            }
+        }
+        assertTrue(vm.revertToState(base));
+    }
+
+    /// @dev A recorded replay of the same checkpoint from the same pre-state: the Glamsterdam
+    ///      re-price of the cold figure and the slots the checkpoint creates.
+    function _recordDailyPhase(PurchaseDailySeeder host, uint256 allowance, RepricedPhase memory m) private {
+        uint256 base = vm.snapshotState();
+        vm.startStateDiffRecording();
+        (bool replayDone,) = host.measuredDailyPhase(allowance);
+        VmSafe.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
+        vm.stopMappingRecording();
+        assertTrue(vm.revertToState(base));
+        assertEq(replayDone, m.done, "the recorded replay takes the same branch");
+        uint256 count;
+        for (uint256 i; i < acc.length; ++i) if (acc[i].account != address(vm)) acc[count++] = acc[i];
+        assembly ("memory-safe") { mstore(acc, count) }
+        m.r = GlamsterdamReprice.reprice(m.osaka, acc, address(game));
+        m.census = NewSlotCensus.created(acc);
+    }
+
+    function _logCensus(NewSlotCensus.Census memory c) private {
+        for (uint256 k; k < c.n; ++k) {
+            bool seen;
+            for (uint256 j; j < k; ++j) if (c.account[j] == c.account[k]) seen = true;
+            if (seen) continue;
+            emit log_named_address("  new slots in", c.account[k]);
+            emit log_named_uint("    count", NewSlotCensus.countOf(c, c.account[k]));
+        }
+    }
 }
 
 /// @notice Level one with a fresh word: stage 18 applies it, the 250-award battle its request locked

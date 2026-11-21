@@ -30,6 +30,9 @@ Explicit rounding rules:
 - Where the award mechanic applies (`FlipRoundLib`), amounts above 1,000 FLIP are rounded
   stochastically to multiples of 100 FLIP. Smaller awards keep their integer amount.
 - RNG-nudge prices floor each recurrence: 100, 150, 225, 337, 505, 757, 1,135, …
+- Daily ETH quest progress (ticket, box and Degenerette ETH spend) counts whole 0.001 ETH per
+  action; each action's remainder below 0.001 ETH is dropped, not carried. FLIP-paid ticket progress
+  counts whole tickets per purchase, so a FLIP purchase below one whole ticket adds none.
 - Coinflip keeps seven uint32 daily stake lanes and a page tag per word. The stored per-day cap is
   4,294,967,295 FLIP. Manual deposits above it revert `StakeAboveDailyCap`; automatic credits
   saturate.

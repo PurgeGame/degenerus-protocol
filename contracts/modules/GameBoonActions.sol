@@ -176,7 +176,8 @@ abstract contract GameBoonActions is GamePurchaseBoon {
     /// @dev 5% bonus in basis points for coinflip boon
     uint16 internal constant LOOTBOX_BOON_BONUS_BPS = 500;
 
-    /// @dev Maximum bonus amount for coinflip boon (5000 FLIP)
+    /// @dev `LootBoxReward` value for every coinflip boon tier; the boost itself is 5/10/25% of
+    ///      at most 100,000 FLIP of a direct deposit (CoinflipCore)
     uint256 internal constant LOOTBOX_BOON_MAX_BONUS = 5000;
 
     /// @dev 10% bonus in basis points for coinflip boon
@@ -349,7 +350,8 @@ abstract contract GameBoonActions is GamePurchaseBoon {
     ///      whale-discount 40), in full-table coordinates after the dec skip re-adds 50.
     uint16 internal constant BOON_WEIGHT_PRE_DEITY_PASS = 1072;
 
-    /// @dev Whale pass standard entries per level (4 entries = 1 ticket). Reported in the
+    /// @dev Average whale pass entries per level: two half passes queue one whole ticket
+    ///      (4 entries) on every second level. Reported in the
     ///      LootBoxWhalePassJackpot event for downstream indexers; the
     ///      actual ticket materialization happens in claimWhalePass.
     uint32 internal constant WHALE_PASS_ENTRIES_PER_LEVEL = 2;
@@ -386,8 +388,8 @@ abstract contract GameBoonActions is GamePurchaseBoon {
     ///      BoonConsumed/MintRecorded/quest events. Deity day = day.
     ///      All boon state is stored in boonPacked[id] (2-slot packed struct).
     ///      Players can hold one boon per packed lane simultaneously (coinflip, lootbox,
-    ///      purchase, decimator, whale, lazy, deity pass, craps, and one per Degenerette
-    ///      currency); activity, quest-shield and whale-pass awards credit instantly.
+    ///      purchase, decimator, whale, lazy, deity pass, craps, one per Degenerette
+    ///      currency, and WWXRP); activity, quest-shield and whale-pass awards credit instantly.
     ///      Isolated bit fields per category -- applying a boon in one category cannot
     ///      affect another category's bits (targeted bitmask operations: & ~mask | value).
     function _applyBoon(
@@ -804,7 +806,7 @@ abstract contract GameBoonActions is GamePurchaseBoon {
     /// @custom:reverts E When `deityId` or `recipientId` is unallocated, or `recipientId == 0`
     /// @custom:reverts SelfBoon When the deity account issues a boon to itself
     /// @custom:reverts InvalidSlot When slot is >= 3
-    /// @custom:reverts Unauthorized When deity does not own a deity pass
+    /// @custom:reverts Unauthorized When deity does not own a deity pass, or is the Vault or sDGNRS
     /// @custom:reverts RngNotReady When the preceding day has no finalized RNG word
     /// @custom:reverts RecipientBoonCapReached When this deity has hit the lifetime boon cap for the recipient
     /// @custom:reverts SlotAlreadyUsed When slot was already used today

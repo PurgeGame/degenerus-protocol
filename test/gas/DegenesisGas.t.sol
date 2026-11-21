@@ -847,10 +847,10 @@ contract DegenesisTerminalGas is DegenesisGasBase {
         (,,, uint256 header) = host.hostState(7);
         assertTrue(header & (uint256(1) << 80) != 0, "seventh cohort split");
         vm.revertToState(snap);
-        // The split creates the Vault budget slot and the release clears it in the same
-        // call: the repricer counts net new slots, so the peak adds that slot's state gas.
-        uint256 peak = _worst(m) + GlamsterdamReprice.NEW_SLOT_STATE_GAS;
-        emit log_named_uint("peak including the transient Vault budget slot", peak);
+        // The Vault budget shares its slot with lastDailyCompletedAt, so the split and release
+        // change a live slot; the repriced state gas is already the call's peak.
+        uint256 peak = _worst(m);
+        emit log_named_uint("no-reservoir peak", peak);
         assertLe(peak, GasBounds.DEGENESIS_TERMINAL_GAS, "terminal setup addition");
         assertLe((peak * 120 + 99) / 100, GasBounds.DEGENESIS_TERMINAL_GAS,
             "terminal addition retains 20% margin");

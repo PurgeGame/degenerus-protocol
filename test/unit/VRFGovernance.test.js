@@ -433,8 +433,10 @@ describe("VRF Governance", function () {
   // 8. DGNRS unwrapTo block during VRF stall
   // =========================================================================
   describe("unwrapTo VRF stall guard", function () {
-    it("unwrapTo works normally (rngLocked=false)", async function () {
-      const { dgnrs, sdgnrs, vault, deployer, alice } = await loadFixture(deployFullProtocol);
+    it("unwrapTo works normally (rngLocked=false, rngComplete=true)", async function () {
+      const { dgnrs, sdgnrs, vault, game, deployer, alice } = await loadFixture(deployFullProtocol);
+      expect(await game.rngLocked()).to.equal(false);
+      expect(await game.rngComplete()).to.equal(true);
       const amount = hre.ethers.parseUnits("100", 12);
       const vaultAddr = await vault.getAddress();
 

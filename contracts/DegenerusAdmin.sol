@@ -95,7 +95,8 @@ interface IDegenerusGameAdmin {
     /// @notice Retry an unanswered VRF request once, after the original request's 20-hour timeout.
     function retryRng() external;
 
-    /// @notice Timestamp of the last successfully processed VRF fulfillment.
+    /// @notice Timestamp of the last applied daily VRF word, or of the initial VRF wiring; mid-day
+    ///         words do not move it.
     function lastVrfProcessed() external view returns (uint48);
 
     /// @notice Whether the game has ended.
@@ -255,15 +256,15 @@ contract DegenerusAdmin {
     /// @notice Emitted when a retired subscription is cancelled and its native ETH routed onward.
     ///         A refused cancellation or a failed forward reverts the call.
     /// @param subId The retired subscription the native ETH was recovered from.
-    /// @param to Where the recovered native ETH was routed: the live subscription while the game
-    ///        runs, the vault after game over.
+    /// @param to Where the recovered native ETH was routed: the live coordinator, which credits the
+    ///        live subscription, while the game runs; the vault after game over.
     /// @param amount native ETH amount routed.
     event SubscriptionRecovered(
         uint256 indexed subId,
         address indexed to,
         uint256 amount
     );
-    /// @notice Emitted when the VRF subscription is cancelled and its native ETH swept at game over.
+    /// @notice Emitted when the final sweep cancels the VRF subscription and sweeps its native ETH.
     /// @param subId The subscription cancelled.
     /// @param to The vault address the swept native ETH is sent to.
     /// @param sweptAmount native ETH the Vault received (0 if there was nothing to sweep or the
@@ -277,7 +278,7 @@ contract DegenerusAdmin {
     // Governance events
     /// @notice Emitted when a VRF coordinator-swap proposal is filed.
     /// @param proposalId The new proposal's ID.
-    /// @param proposer The ordinary wallet ID that filed the proposal.
+    /// @param proposer The ordinary wallet ID that filed the proposal; 1 on the owner path.
     /// @param coordinator The proposed VRF coordinator.
     /// @param keyHash The proposed VRF key hash.
     /// @param callbackGasLimit The proposed VRF callback gas limit.
@@ -396,8 +397,12 @@ contract DegenerusAdmin {
     /// @dev Active proposal per proposer wallet ID; key 1 is the owner path (0 = none).
     mapping(uint32 => uint256) private _activeProposalId;
 
+    /// @notice Active proposal slot of `proposer`. Identity 1 (the Vault's) reads 0: key 1 is the
+    ///         owner executor's slot and the Vault cannot propose.
     function activeProposalId(address proposer) external view returns (uint256) {
-        return _activeProposalId[proposer == ContractAddresses.OWNER_GOVERNANCE ? 1 : _governanceId(proposer)];
+        if (proposer == ContractAddresses.OWNER_GOVERNANCE) return _activeProposalId[1];
+        uint32 id = _governanceId(proposer);
+        return id == 1 ? 0 : _activeProposalId[id];
     }
 
     /// @dev Epoch cutoff: proposals with id < validFromId were superseded by an executed swap and can
@@ -583,7 +588,7 @@ contract DegenerusAdmin {
 
     /// @notice Vote on an active VRF swap proposal.
     /// @dev Votes are changeable. After recording, checks execute/kill conditions.
-    ///      On VRF recovery after creation (a word fulfilled since createdAt), the proposal is
+    ///      On VRF recovery (a daily word processed at or after createdAt), the proposal is
     ///      auto-killed rather than executed — this IS the auto-cancellation.
     ///      Zero-weight calls (no sDGNRS) skip vote recording and just check
     ///      execute/kill conditions — allows anyone to poke a proposal past threshold.
@@ -597,24 +602,26 @@ contract DegenerusAdmin {
         if (proposalId < validFromId) revert ProposalNotActive();
         _requireActiveProposal(p.state, createdAt);
 
-        // Invalidate (KILL) the proposal if VRF is healthy NOW, or if any VRF word was fulfilled
-        // AFTER this proposal was created (lastVrf > createdAt). A proposal exists only to swap a
-        // DEAD coordinator; a fulfillment past creation means a recovery occurred, so the proposal
-        // must not linger and resume voting on a later re-stall at a further-decayed (age-keyed)
-        // threshold. The recovery check is recovery-proof even if no one poked during the recovery
-        // window, since it compares against the persistent lastVrfProcessed. Anyone can poke this.
+        // Invalidate (KILL) the proposal if VRF is healthy NOW, or if any VRF word was processed
+        // at or after this proposal's creation (lastVrf >= createdAt). A proposal can only be
+        // created during a stall, so an equal timestamp is a word processed later in its own
+        // block. A proposal exists only to swap a DEAD coordinator; a word past creation means a
+        // recovery occurred, so the proposal must not linger and resume voting on a later re-stall
+        // at a further-decayed (age-keyed) threshold. The recovery check is recovery-proof even if
+        // no one poked during the recovery window, since it compares against the persistent
+        // lastVrfProcessed. Anyone can poke this.
         uint48 lastVrf = gameAdmin.lastVrfProcessed();
         if (
             block.timestamp - uint256(lastVrf) < ADMIN_STALL_THRESHOLD ||
-            uint256(lastVrf) > uint256(createdAt)
+            uint256(lastVrf) >= uint256(createdAt)
         ) {
             p.state = ProposalState.Killed;
             emit ProposalKilled(proposalId);
             return;
         }
 
-        // Record vote only if caller has sDGNRS; otherwise skip to threshold checks (poke)
-        // Safe: VRF dead = supply frozen (no advances, unwrapTo blocked)
+        // Record vote only if caller has sDGNRS; otherwise skip to threshold checks (poke).
+        // Weight is read live; sDGNRS that circulates after creation also enters the denominator.
         (uint40 aw, uint40 rw) = (p.approveWeight, p.rejectWeight);
         uint40 weight = _voterWeight();
         if (weight != 0) {
@@ -627,7 +634,7 @@ contract DegenerusAdmin {
         }
 
         Resolution r = _resolveThreshold(
-            aw, rw, p.votingSnapshot, _thresholdFrom(createdAt)
+            aw, rw, _votingDenominator(p.votingSnapshot), _thresholdFrom(createdAt)
         );
         if (r == Resolution.Execute) {
             _executeSwap(proposalId);
@@ -666,16 +673,16 @@ contract DegenerusAdmin {
         if (proposalId < validFromId) return false;
         if (!_isActiveProposal(p.state, createdAt)) return false;
 
-        // Stall check + recovery-spanning invalidation (mirrors vote(): a fulfillment after
-        // creation means a recovery occurred, so the proposal is dead).
+        // Stall check + recovery-spanning invalidation (mirrors vote(): a word processed at or
+        // after creation means a recovery occurred, so the proposal is dead).
         uint48 lastVrf = gameAdmin.lastVrfProcessed();
         if (
             block.timestamp - uint256(lastVrf) < ADMIN_STALL_THRESHOLD ||
-            uint256(lastVrf) > uint256(createdAt)
+            uint256(lastVrf) >= uint256(createdAt)
         ) return false;
 
         return _resolveThreshold(
-            p.approveWeight, p.rejectWeight, p.votingSnapshot, _thresholdFrom(createdAt)
+            p.approveWeight, p.rejectWeight, _votingDenominator(p.votingSnapshot), _thresholdFrom(createdAt)
         ) == Resolution.Execute;
     }
 
@@ -713,6 +720,14 @@ contract DegenerusAdmin {
     /// @dev Get voter's sDGNRS weight as whole tokens. Sub-token balances have no vote weight.
     function _voterWeight() private view returns (uint40) {
         return uint40(sDGNRS.balanceOf(msg.sender) / 1e12);
+    }
+
+    /// @dev Whole-token voting supply now, never below the creation snapshot: sDGNRS that reaches
+    ///      a holder after creation (pool rewards, Vault unwraps) counts in the denominator it votes
+    ///      against, and burns cannot lower the denominator below the creation snapshot.
+    function _votingDenominator(uint40 snapshot) private view returns (uint256 live) {
+        live = sDGNRS.votingSupply() / 1e12;
+        if (live < snapshot) live = snapshot;
     }
 
     /// @dev Validate a proposal is active and not expired.
@@ -818,7 +833,8 @@ contract DegenerusAdmin {
     // VRF SHUTDOWN (Game-Over)
     // =========================================================================
 
-    /// @notice Cancel the subscription at game over; the coordinator refunds the Vault.
+    /// @notice Cancel the subscription at the final sweep, 30 days after the terminal payout
+    ///         completes; the coordinator refunds the Vault.
     /// @dev A cancellation the coordinator refuses is skipped; the shutdown still completes.
     function shutdownVrf() external {
         MineFlipGas.Meter memory meter = MineFlipGas.fromCall(4);

@@ -551,6 +551,44 @@ contract WalletIdEntropyTest is Test {
         for (uint256 i; i < 3; ++i) assertEq(none[i], 0);
     }
 
+    /// @dev A protocol issuer's menu on a day with no predecessor word (the first award day) comes from the award
+    ///      day's own word; a recorded predecessor word wins, and an unrecorded award-day word or an ordinary deity
+    ///      gets no menu.
+    function test_ProtocolMenuWithoutPredecessorWordUsesAwardDayWord() public {
+        DeityBoonViewerTreeHarness viewer = new DeityBoonViewerTreeHarness();
+        DeityMenuSource src = new DeityMenuSource();
+        uint24 day = 2;
+        uint8[3] memory slots;
+        uint8[3] memory expected;
+        src.set(0, day);
+        src.setWord(day, 0xBEEF);
+        for (uint32 id = 1; id <= 2; ++id) {
+            (slots,,) = viewer.deityBoonSlotsById(address(src), id);
+            expected = _menu(viewer, 0xBEEF, id, day);
+            for (uint256 i; i < 3; ++i) {
+                assertGt(uint256(expected[i]), 0);
+                assertEq(slots[i], expected[i], "menu from the award day's word");
+            }
+        }
+        // A recorded predecessor word keeps priority over the award day's word.
+        src.set(0xCAFE, day);
+        (slots,,) = viewer.deityBoonSlotsById(address(src), 1);
+        expected = _menu(viewer, 0xCAFE, 1, day);
+        for (uint256 i; i < 3; ++i) assertEq(slots[i], expected[i], "predecessor word wins");
+        // No word for the award day yet: no menu.
+        src.set(0, day);
+        src.setWord(day, 0);
+        for (uint32 id = 1; id <= 2; ++id) {
+            (slots,,) = viewer.deityBoonSlotsById(address(src), id);
+            for (uint256 i; i < 3; ++i) assertEq(slots[i], 0, "no word, no menu");
+        }
+        // An ordinary deity-pass holder gets no fallback.
+        src.setWord(day, 0xBEEF);
+        src.setDeityPass(77, true);
+        (slots,,) = viewer.deityBoonSlotsById(address(src), 77);
+        for (uint256 i; i < 3; ++i) assertEq(slots[i], 0, "no fallback for an ordinary deity");
+    }
+
     // ---------------------------------------------------------------------------------------
     // Dice survival salt
     // ---------------------------------------------------------------------------------------

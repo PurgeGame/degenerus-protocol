@@ -75,7 +75,7 @@ interface IDegenerusJackpots {
     /// @custom:reverts OnlyCoin If caller is not COINFLIP.
     function recordBafFlip(uint32 id, uint24 lvl, uint256 amount) external;
 
-    /// @notice Mark a BAF bracket as skipped when the daily flip loses.
+    /// @notice Mark a BAF bracket as skipped when the tagged BAF gate loses.
     /// @dev Bumps lastBafResolvedDay so pre-skip winning-flip credit cannot
     ///      roll forward into future bracket leaderboards.
     /// @param lvl Level whose BAF was skipped.

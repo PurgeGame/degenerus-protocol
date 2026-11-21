@@ -11,6 +11,7 @@ import {Craps} from "../../contracts/Craps.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
+import {GlamsterdamMeterReplay} from "../helpers/GlamsterdamMeterReplay.sol";
 
 /// @dev A cold external frame around one engine run, as the module's run calls it.
 contract DecimatorEngineMeter {
@@ -57,7 +58,7 @@ contract DecimatorPricingRedemptionState {
     function redemptionSettlementPending_g153837() external pure returns (bool) { return false; }
 }
 
-contract DecimatorPricingTest is Test {
+contract DecimatorPricingTest is GlamsterdamMeterReplay {
     DecimatorBattleHarness private h;
     DecimatorPricingMeter private meter;
     uint256 private maxRunGas;
@@ -181,22 +182,74 @@ contract DecimatorPricingTest is Test {
         assertGt(maxRankGas, 0, "a ranking call including any admitted payout tail was measured");
     }
 
-    /// @dev Per-item cold maxima against their declared bounds: one sampled run (heaviest heap
-    ///      shapes, flat engine), the 511-roll engine ceiling on the heaviest board, one ranking,
-    ///      and one payment (whale-pass and ETH shapes, fresh recipients).
-    function test_SingleItemColdMaximaAgainstDeclaredBounds() public {
+    uint256 private maxFinal;
+    // Glamsterdam maxima by no-reservoir total, each from its own one-unit call.
+    Priced private glamRun;
+    Priced private glamRank;
+    Priced private glamPay;
+    Priced private glamFinal;
+
+    function _keep(Priced storage best, Priced memory p) private {
+        if (_glam(p) > best.exec + best.state) {
+            best.osaka = p.osaka;
+            best.exec = p.exec;
+            best.state = p.state;
+        }
+    }
+
+    /// @dev Settle one unit per call, recorded and repriced. A first-progress budget with no
+    ///      allowance admits exactly the next run, ranking, payment or finalization whatever the
+    ///      gas, so recording cannot change the unit and the rebuilt cold figure is exact.
+    function _settleGlamsterdam(Pass memory pass) private {
+        uint256 oneUnit = MineFlipGas.budget(0, MineFlipGas.DEFAULT_MULTIPLIER, true);
+        for (uint256 guard; uint24(h.queue()) != 0 && guard < 20_000; ++guard) {
+            DegenerusGameStorage.DecBattleRound memory r = h.roundOf(uint24(h.queue()));
+            bool finalization = r.phase == 2 && r.paid == r.winners;
+            Priced storage best = finalization ? glamFinal
+                : r.phase == 2 ? glamPay : r.cursor == Sample.count(r.count) ? glamRank : glamRun;
+            vm.cool(address(h));
+            vm.cool(ContractAddresses.CRAPS_ENGINE);
+            // Only a call whose records allow it to beat its kind's maximum is repriced.
+            (Priced memory p, bytes memory ret) = _recorded(address(meter),
+                abi.encodeCall(meter.settle, (h, oneUnit)), pass, best.exec + best.state);
+            (, MineFlipGas.Result memory result) = abi.decode(ret, (uint256, MineFlipGas.Result));
+            assertTrue(result.progressed, "the forced unit progresses");
+            assertEq(result.rewardBasis, finalization ? 0 : 1, "exactly one unit per call");
+            _keep(best, p);
+            if (finalization) {
+                if (p.osaka > maxFinal) maxFinal = p.osaka;
+            } else if (r.phase == 2) {
+                if (p.osaka > maxOnePay) maxOnePay = p.osaka;
+            } else if (r.cursor == Sample.count(r.count)) {
+                if (p.osaka > maxRankGas) maxRankGas = p.osaka;
+            } else if (p.osaka > maxOneRun) {
+                maxOneRun = p.osaka;
+            }
+        }
+        assertEq(uint24(h.queue()), 0, "settled");
+        assertGt(maxFinal, 0, "a finalization was priced alone");
+    }
+
+    /// @dev The per-item fixtures: heaviest heap shapes (flat engine) and whale-pass and ETH
+    ///      payouts to fresh recipients, then the 511-roll engine ceiling on the heaviest board.
+    ///      The first round fills a fresh heap, so its deep fills each create a heap slot, and
+    ///      every round's first run creates its cursor slot.
+    function _singleItemFixtures(Pass memory pass) private returns (uint256 flatRun, Priced memory engine) {
         vm.etch(ContractAddresses.CRAPS_ENGINE, type(DecimatorPricingFlatProbe).runtimeCode);
         for (uint8 shape = 1; shape <= 3; ++shape) {
             _field(2000, 400 + shape, false, shape);
-            _settleOneByOne();
+            if (pass.glam) _settleGlamsterdam(pass);
+            else _settleOneByOne();
         }
-        uint256 flatRun = maxOneRun;
+        flatRun = maxOneRun;
         fieldPool = 2000 ether;
         _field(2000, 410, false, 0);
-        _settleOneByOne();
+        if (pass.glam) _settleGlamsterdam(pass);
+        else _settleOneByOne();
         fieldPool = 100 ether;
         _field(2000, 411, false, 0);
-        _settleOneByOne();
+        if (pass.glam) _settleGlamsterdam(pass);
+        else _settleOneByOne();
 
         // The engine's ceiling: 511 rolls before 48 shooters, the heaviest named board, a
         // bankroll no run can bust. Seeds are searched for runs that reach the roll bound.
@@ -205,16 +258,29 @@ contract DecimatorPricingTest is Test {
         uint256 chips = 3 | 3 << 9 | 1 << 24; // seven named chips
         uint256 boost = (0x050c070c0a0c0e0c120c140c190c1e0c >> (7 << 4)) & 0xFFFF;
         uint256 ceilingRuns;
-        uint256 engineMax;
+        uint256 engineSeed;
         for (uint256 i; i < 400 && ceilingRuns < 4; ++i) {
             vm.cool(ContractAddresses.CRAPS_ENGINE);
             (uint256 used, uint256 rolls) = em.run(chips, keccak256(abi.encode("ceiling", i)), 1e45, boost);
             if (rolls == 511) {
                 ++ceilingRuns;
-                if (used > engineMax) engineMax = used;
+                if (used > engine.osaka) (engine.osaka, engineSeed) = (used, i);
             }
         }
         assertGt(ceilingRuns, 0, "a run reached the 511-roll ceiling");
+        // The engine touches no slot, so recording leaves its cold figure unchanged.
+        if (pass.glam) {
+            (engine,) = _reprice(vm.snapshotState(), address(em),
+                abi.encodeCall(em.run, (chips, keccak256(abi.encode("ceiling", engineSeed)), 1e45, boost)), engine.osaka);
+        }
+    }
+
+    /// @dev Per-item cold maxima against their declared bounds: one sampled run (heaviest heap
+    ///      shapes, flat engine), the 511-roll engine ceiling on the heaviest board, one ranking,
+    ///      and one payment (whale-pass and ETH shapes, fresh recipients).
+    function test_SingleItemColdMaximaAgainstDeclaredBounds() public {
+        (uint256 flatRun, Priced memory engine) = _singleItemFixtures(Pass(false, false));
+        uint256 engineMax = engine.osaka;
         uint256 runWorst = flatRun + engineMax;
         emit log_named_uint("DEC one sampled run, flat engine, worst heap (cold)", flatRun);
         emit log_named_uint("DEC engine 511-roll ceiling run (cold)", engineMax);
@@ -225,6 +291,34 @@ contract DecimatorPricingTest is Test {
         assertLe(maxRankGas, GasBounds.DECIMATOR_RANK_GAS_MAX + GasBounds.DECIMATOR_WORK_TAIL_GAS, "rank fits its bound");
         assertLe(maxOnePay, GasBounds.DECIMATOR_PAYMENT_GAS_MAX + GasBounds.DECIMATOR_WORK_TAIL_GAS, "payment fits its bound");
         assertLe(GasBounds.DECIMATOR_RUN_GAS_MAX + GasBounds.DECIMATOR_WORK_TAIL_GAS + 2_000, 10_000_000);
+    }
+
+    /// @dev The same fixtures one unit per call, each recorded and repriced under Glamsterdam:
+    ///      the ranking alone and the finalization alone, which the Osaka settlement folds into a
+    ///      payment call. Each kind's maximum is taken by no-reservoir total.
+    function test_SingleItemGlamsterdamMaximaAgainstDeclaredBounds() public {
+        (, Priced memory engine) = _singleItemFixtures(Pass(true, false));
+        uint256 tail = GasBounds.DECIMATOR_WORK_TAIL_GAS;
+        emit log_named_uint("DEC one run, cold max", maxOneRun);
+        emit log_named_uint("DEC rank alone, cold max", maxRankGas);
+        emit log_named_uint("DEC one payment, cold max", maxOnePay);
+        emit log_named_uint("DEC finalization alone, cold max", maxFinal);
+        assertLe(maxFinal, GasBounds.DECIMATOR_FINAL_GAS_MAX + tail, "finalization fits its bound");
+        _logPriced("DEC one run, flat engine, worst heap", glamRun, GasBounds.DECIMATOR_RUN_GAS_MAX + tail);
+        _logPriced("DEC engine 511-roll ceiling run", engine, GasBounds.DECIMATOR_RUN_GAS_MAX + tail);
+        uint256 runWorst = _glam(glamRun) + _glam(engine);
+        emit log_named_uint("DEC Glamsterdam run worst = flat run + engine ceiling", runWorst);
+        _logPriced("DEC rank alone", glamRank, GasBounds.DECIMATOR_RANK_GAS_MAX + tail);
+        _logPriced("DEC one payment", glamPay, GasBounds.DECIMATOR_PAYMENT_GAS_MAX + tail);
+        _logPriced("DEC finalization alone", glamFinal, GasBounds.DECIMATOR_FINAL_GAS_MAX + tail);
+        assertLe(runWorst, GasBounds.DECIMATOR_RUN_GAS_MAX + tail,
+            "Glamsterdam run fits DECIMATOR_RUN_GAS_MAX + DECIMATOR_WORK_TAIL_GAS");
+        assertLe(_glam(glamRank), GasBounds.DECIMATOR_RANK_GAS_MAX + tail,
+            "Glamsterdam rank fits DECIMATOR_RANK_GAS_MAX + DECIMATOR_WORK_TAIL_GAS");
+        assertLe(_glam(glamPay), GasBounds.DECIMATOR_PAYMENT_GAS_MAX + tail,
+            "Glamsterdam payment fits DECIMATOR_PAYMENT_GAS_MAX + DECIMATOR_WORK_TAIL_GAS");
+        assertLe(_glam(glamFinal), GasBounds.DECIMATOR_FINAL_GAS_MAX + tail,
+            "Glamsterdam finalization fits DECIMATOR_FINAL_GAS_MAX + DECIMATOR_WORK_TAIL_GAS");
     }
 
     function _report(string memory label) private {

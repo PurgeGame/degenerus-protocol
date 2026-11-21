@@ -6,6 +6,7 @@ import {BoundedGasProbe} from "../helpers/BoundedGasProbe.sol";
 import {DecimatorSamplingLib as Sampling} from "../../contracts/libraries/DecimatorSamplingLib.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {CrapsEngine} from "../../contracts/CrapsEngine.sol";
+import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
 
 contract BoundedHeapRedemptionState {
     function redemptionSettlementPending_g153837() external pure returns (bool) { return false; }
@@ -42,10 +43,17 @@ contract BoundedHeapGasTest is BoundedGasProbe {
     }
     function _run(string memory label, uint8 count, bool reject, bool rankOnly) private {
         host.seedHeap(count, reject, rankOnly);
-        _measureBounded(label, address(host), address(this), 0,
+        (uint256 exec, uint256 state) = _measureBounded(label, address(host), address(this), 0,
             abi.encodeCall(host.runDecimatorWork, (uint256(14_000_000))), false);
         assertEq(host.queue(), 0, "same complete final-entry/rank/payout work in both replays");
-        emit log_named_uint("completed_winners", host.roundOf(5).winners);
+        uint256 winners = host.roundOf(5).winners;
+        emit log_named_uint("completed_winners", winners);
+        // Each unit the call ran was admitted on its own bound; the one tail follows the last.
+        uint256 admitted = (rankOnly ? 0 : GasBounds.DECIMATOR_RUN_GAS_MAX) + GasBounds.DECIMATOR_RANK_GAS_MAX
+            + winners * GasBounds.DECIMATOR_PAYMENT_GAS_MAX + GasBounds.DECIMATOR_FINAL_GAS_MAX
+            + GasBounds.DECIMATOR_WORK_TAIL_GAS;
+        emit log_named_uint("composed_admission", admitted);
+        assertLe(exec + state, admitted, "Glamsterdam total fits the composed admission of the units it ran");
     }
     function test_G5_FirstHeapWord() public { _run("G5_first", 0, false, false); }
     function test_G5_FinalHeapPosition() public { _run("G5_fill200", 199, false, false); }

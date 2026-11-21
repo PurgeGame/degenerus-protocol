@@ -164,7 +164,7 @@ interface IDegenerusAffiliate {
     /// @dev View; never allocates. Each hop is getReferrerId of the previous hop's wallet:
     ///      `affiliate = getReferrerId(player)`, `upline1` the affiliate's referrer, `upline2`
     ///      upline1's referrer. VAULT (1) and SDGNRS (2) refer each other, so an unreferred
-    ///      chain reads (1, 2, 1). A zero hop (referrer without an ID) zeroes every later hop.
+    ///      chain reads (1, 2, 1). Every hop is a nonzero wallet ID.
     /// @param player The player to look up.
     /// @return affiliate Direct referrer's wallet ID.
     /// @return upline1 The direct referrer's referrer.

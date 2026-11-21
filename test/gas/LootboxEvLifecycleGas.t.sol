@@ -71,32 +71,44 @@ contract LootboxEvLifecycleGasTest is DeployProtocol {
             vm.deal(player, 100_000 ether);
             host.seedAccount(player, used, bonus);
         }
+        // Every buy and the open run unrecorded first, so each figure is cold; the recorded
+        // replays then run from each call's pre-state, latest first.
+        uint256[] memory pre = new uint256[](orders);
+        uint256[] memory measured = new uint256[](orders);
         uint256 buyGas;
-        uint256 buyRepriced;
-        uint256 buySlots;
         for (uint256 i; i < orders; ++i) {
             address player = address(uint160(PLAYER) + uint160(distinct ? i : 0));
-            uint256 snap = vm.snapshotState();
+            pre[i] = vm.snapshotState();
             _buy(player, order, grant);
-            uint256 measured = vm.lastCallGas().gasTotalUsed;
-            assertTrue(vm.revertToState(snap));
-            vm.startStateDiffRecording();
-            _buy(player, order, grant);
-            VmSafe.AccountAccess[] memory accesses = vm.stopAndReturnStateDiff();
-            GlamsterdamReprice.Result memory r = GlamsterdamReprice.reprice(measured, accesses, address(host));
-            buyGas += measured;
-            buyRepriced += r.glamsterdamExec + r.stateGas;
-            buySlots += r.newSlots;
+            measured[i] = vm.lastCallGas().gasTotalUsed;
+            buyGas += measured[i];
         }
         host.sealAndPublish(openWord);
         uint256 snap = vm.snapshotState();
         _open();
         uint256 openGas = vm.lastCallGas().gasTotalUsed;
+        {
+            (, uint256 cursor, bool complete) = host.readState();
+            assertEq(cursor, orders);
+            assertTrue(complete);
+        }
         assertTrue(vm.revertToState(snap));
         vm.startStateDiffRecording();
         _open();
         VmSafe.AccountAccess[] memory accesses = vm.stopAndReturnStateDiff();
         GlamsterdamReprice.Result memory opened = GlamsterdamReprice.reprice(openGas, accesses, address(host));
+        uint256 buyRepriced;
+        uint256 buySlots;
+        for (uint256 i = orders; i != 0; --i) {
+            address player = address(uint160(PLAYER) + uint160(distinct ? i - 1 : 0));
+            assertTrue(vm.revertToState(pre[i - 1]));
+            vm.startStateDiffRecording();
+            _buy(player, order, grant);
+            VmSafe.AccountAccess[] memory buyAccesses = vm.stopAndReturnStateDiff();
+            GlamsterdamReprice.Result memory r = GlamsterdamReprice.reprice(measured[i - 1], buyAccesses, address(host));
+            buyRepriced += r.glamsterdamExec + r.stateGas;
+            buySlots += r.newSlots;
+        }
         emit log_named_string("case", label);
         emit log_named_uint("buy_osaka", buyGas);
         emit log_named_uint("open_osaka", openGas);
@@ -113,34 +125,25 @@ contract LootboxEvLifecycleGasTest is DeployProtocol {
         assertLe(total * 100, oldGas * 101, "workload Osaka regression >1%");
         assertLe(repriced * 100, oldRepriced * 101, "repriced workload regression >1%");
         assertEq(buySlots + opened.newSlots, oldSlots, "no additional lifecycle storage slots");
-        (, uint256 cursor, bool complete) = host.readState();
-        assertEq(cursor, orders);
-        assertTrue(complete);
     }
 
-    /// @dev Recalibrated on the stack with the VRF request-ID port (eip170 profile, solc 0.8.38/via-IR/1000/
-    ///      Osaka, isolated transactions). Against the P7B calibration (e.g. exhausted 395,695) every case
-    ///      is higher, bisected: logical game days add about 4.0k per path (75a1765b3), the Glamsterdam
-    ///      shape gains about 1.3k more through the profile and native-VRF commits (exhausted 401,048 there),
-    ///      and the EIP-170 split adds about 14.6k of cold module hops (exhausted 415,662 here; 419,214
-    ///      before the split call-overhead cuts). pass_grant realizes a cheaper branch (7 new slots, was
-    ///      10) after the RNG derivation changes. The limits stay at the original 1% / 1000-per-order.
-    ///      Earlier calibration: frozen P7B 824d757cf. P6b changed RNG domains and therefore the realized
-    ///      award branches and new-slot counts. The 0.8.34 b80dab839 measurements remain
-    ///      historical evidence in docs/TESTING.md.
+    /// @dev Cold figures per case (eip170 profile, solc 0.8.38, via IR, 1,000 runs, Osaka, isolated
+    ///      transactions): every buy and open is measured before the first recorded replay of its
+    ///      test. Columns: Osaka total, Glamsterdam total including state gas, new slots. The limits
+    ///      are 1% of the workload and 1,000 gas per order.
     function _baseline(bytes32 label) private pure returns (uint256, uint256, uint256) {
-        if (label == keccak256("cover")) return (179460, 481520, 3);
-        if (label == keccak256("distinct_wallets")) return (1307320, 4357560, 32);
-        if (label == keccak256("exhausted")) return (415662, 1342662, 10);
-        if (label == keccak256("existing_bonus")) return (419592, 1353792, 10);
-        if (label == keccak256("fresh_bonus")) return (436749, 1451769, 11);
-        if (label == keccak256("low_score")) return (424789, 1432609, 11);
-        if (label == keccak256("manual_with_afk")) return (477939, 1595379, 12);
-        if (label == keccak256("100_boxes")) return (1562271, 3550671, 20);
-        if (label == keccak256("nested_eth_spin")) return (515868, 1721728, 13);
-        if (label == keccak256("pass_grant")) return (309384, 978324, 7);
-        if (label == keccak256("same_wallet")) return (894353, 2462653, 15);
-        if (label == keccak256("taper")) return (419788, 1353988, 10);
+        if (label == keccak256("cover")) return (212574, 514634, 3);
+        if (label == keccak256("distinct_wallets")) return (1481118, 4532258, 32);
+        if (label == keccak256("exhausted")) return (446524, 1373724, 10);
+        if (label == keccak256("existing_bonus")) return (450454, 1384854, 10);
+        if (label == keccak256("fresh_bonus")) return (467611, 1482831, 11);
+        if (label == keccak256("low_score")) return (452428, 1460348, 11);
+        if (label == keccak256("manual_with_afk")) return (516573, 1634213, 12);
+        if (label == keccak256("100_boxes")) return (1662707, 3651507, 20);
+        if (label == keccak256("nested_eth_spin")) return (552460, 1758520, 13);
+        if (label == keccak256("pass_grant")) return (353926, 1022866, 7);
+        if (label == keccak256("same_wallet")) return (1043863, 2612763, 15);
+        if (label == keccak256("taper")) return (450650, 1385050, 10);
         revert("missing lifecycle baseline");
     }
 

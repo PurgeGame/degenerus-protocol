@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Unchecked-arithmetic registry gate (UNCK).
 #
-# Every `unchecked { ... }` block in the main contract set (scripts/lib/unchecked_extract.py:
-# the game facade, its storage base, every module) must be registered in
+# Every `unchecked { ... }` block in the deployed contract sources (scripts/lib/unchecked_extract.py:
+# contracts/ except interfaces/, test/ and mocks/) must be registered in
 # scripts/unchecked-manifest.tsv with the invariant that keeps its arithmetic in range. An
 # unchecked subtraction with a wrong bound is the canonical critical; this keeps the bound
 # argument for every block on record and fails the build when a block is added, moved, or its

@@ -643,8 +643,9 @@ abstract contract CrapsBattleCore is CrapsBattleStorage {
 
     /// @notice Join a custom battle or an open scheduled window for account `id` (0 = the
     ///         caller), placing zero through seven chips and leaving the rest of the ten-chip
-    ///         round to the dice. A scheduled window pays the boost its slot drew; custom and
-    ///         jackpot tickets receive no shooter-profit boost.
+    ///         round to the dice. A scheduled window pays the boost its slot drew; jackpot and
+    ///         custom fields draw no window boost, and custom tickets receive no shooter-profit
+    ///         boost.
     /// @custom:reverts BoardPlaysBothSides If the ticket names both the pass line and don't pass.
     /// @custom:reverts NotApproved If the caller may not act for account `id`.
     function enterBattle(uint32 id, uint64 slot, uint32 chips, uint16 multiple) public returns (uint256 betId) {
@@ -994,9 +995,12 @@ abstract contract CrapsBattleCore is CrapsBattleStorage {
     /// @custom:reverts BoardPlaysBothSides If it names both the pass line and don't pass.
     /// @custom:reverts NoWalletId If the Game has no wallet ID for the caller.
     /// @custom:reverts NotApproved If the caller may not act for account `id`.
+    /// @custom:reverts BetLocked If the account is the house or the vault and scheduled admissions
+    ///                 are closed.
     function applyCrapsPasses(uint32 id, uint24 startDay, uint8 count, bool high, uint32 chips) public {
         (, uint256 word) = _door(id, false);
         id = uint32(word >> CrapsPreferenceLib.ID_SHIFT);
+        _vetBodyBank(id);
         _takeCredits(id, high, count);
         _reserveRun(startDay, count, high, chips, 0, id);
         _rememberBoard(word, chips);
@@ -1211,9 +1215,10 @@ abstract contract CrapsBattleCore is CrapsBattleStorage {
     ///      reverts inside FLIP.
     ///
     ///      ADMIN-DRIVEN, so it vets only what would corrupt state: the vault checks the
-    ///      recipient, an unknown kind or a zero count charges nothing (except a zero upgrade
-    ///      mask, which reverts NothingToUpgrade), and each path's own rules — a shut window, an
-    ///      occupied day, a period past the sixth — revert as they do for a paid entry.
+    ///      recipient, an unknown kind or a zero count charges nothing (a zero upgrade mask
+    ///      reverts NothingToUpgrade, and zero future days from a first day at or before the
+    ///      Degenesis start day revert DayNotReservable), and each path's own rules — a shut
+    ///      window, an occupied day, a period past the sixth — revert as they do for a paid entry.
     /// @param code One comp, packed:
     ///             bits 0..31    the recipient's wallet ID — allocated, never zero; bits
     ///                           32..159 are zero;
@@ -1235,6 +1240,8 @@ abstract contract CrapsBattleCore is CrapsBattleStorage {
     /// @custom:reverts DayNotReservable If a reserved window's day is not strictly ahead.
     /// @custom:reverts AlreadyInBonus If the player already holds that window or that day, or a
     ///                window ahead (kind 5) names the house or the vault, which sit whole days.
+    /// @custom:reverts BetLocked If banked passes (kind 4) name the house or the vault while
+    ///                scheduled admissions are closed.
     function vaultComp(uint256 code) external returns (uint256 charged) {
         if (msg.sender != ContractAddresses.VAULT) revert NotVaultOwner();
         uint32 id = uint32(code);
@@ -1262,6 +1269,7 @@ abstract contract CrapsBattleCore is CrapsBattleStorage {
         } else if (kind == _COMP_UPGRADE) {
             charged = _upgradeDayWindows(account, arg, count, true);
         } else if (kind == _COMP_PASSES) {
+            _vetBodyBank(id);
             uint256 banked = _credit(id, high, count);
             charged = banked * (high ? _HIGH_PASS_VALUE : _NORMAL_PASS_VALUE);
             _burnForCraps(account, _tag(charged, _CRAPS_FLAG_COMP));
@@ -1301,8 +1309,10 @@ abstract contract CrapsBattleCore is CrapsBattleStorage {
     ///      A LATE OPENING STILL OPENS ALL SIX. A window whose period has already passed takes no
     ///      new entry (`_joinableSlot` refuses it), so it plays exactly the seats committed before
     ///      the word: day tickets, the house and vault day seats and prepaid reservations. The
-    ///      miner arms it at once and it settles on its own later word, so a slow word costs no
-    ///      seat a window it paid for.
+    ///      miner arms elapsed windows in order, each once the one before it has settled, and each
+    ///      settles on its own later word, so a slow word costs no seat a window it paid for.
+    ///      A word applied only after the next wall-clock reset opens nothing: scheduled admissions
+    ///      have closed, the day stays unopened and its seats take the unopened-day refund.
     function openBonusDay() external {
         if (msg.sender != _GAME) revert OnlyGame();
         uint24 today = _currentDayIndex();
@@ -1524,7 +1534,8 @@ abstract contract CrapsBattleCore is CrapsBattleStorage {
     ///      high passes at every level close besides. sDGNRS has no controller to call
     ///      `applyCrapsPasses`; the Vault owner or its approved operator can reserve ahead through
     ///      the Vault's player-action door. The daily seat spends any remaining credits, and a
-    ///      body that arrives already paid for is not charged twice.
+    ///      body that arrives already paid for is not charged twice. The high passes read here
+    ///      are the ones held when the day's word was requested (`_vetBodyBank`).
     ///
     ///      A HIGH pass is honoured as a high seat, exactly as the paid door builds one: the
     ///      day's own multiple, the high bit, and the high half of the ticket counter — which is
@@ -1582,6 +1593,9 @@ abstract contract CrapsBattleCore is CrapsBattleStorage {
         return _currentBonusSlot(_currentDayIndex());
     }
 
+    /// @dev Periods are timed from the 22:57 UTC wall-clock reset: windows 0-4 stop taking entries
+    ///      20 minutes, 6h03m, 12h03m, 18h03m and 23h40m after it, window 5 at the next reset, and
+    ///      the period reads 6 once the reset after the request's wall day has passed.
     function _currentBonusSlot(uint24 day) internal view returns (uint24, uint256 period, uint256 slot) {
         uint256 elapsed = (block.timestamp - 82_620) % 1 days;
         if (_scheduleResetPassed()) period = _BONUS_PERIODS_PER_DAY;

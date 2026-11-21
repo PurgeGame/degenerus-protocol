@@ -718,6 +718,48 @@ contract AccountLoansTest is RedemptionCloseTools {
         assertEq(_pool(), poolBefore + owed + 3 ether);
     }
 
+    /// @dev Prepaid AFKing covers what claimable above its sentinel cannot, with the same one-wei
+    ///      boundary as the automatic repayment. Nothing enters or leaves the pool.
+    function test_RepayFromPrepaidAfkingConservesPool() public {
+        _borrow(root, 4);
+        uint256 owed = lens.loanOf(address(game), root).owed;
+        _seed(root, 0, 1, uint128(owed - 1));
+        vm.prank(seller); vm.expectRevert(bytes4(keccak256("Insolvent()"))); game.clearDebtNow(root);
+        _seed(root, 0, 1, uint128(owed));
+        uint256 lenderBefore = game.claimableWinningsOf(address(sdgnrs));
+        uint256 poolBefore = _pool();
+        vm.prank(seller); game.clearDebtNow(root);
+        (uint128 claimable, uint128 prepaid) = lens.accountBalances(address(game), root);
+        assertEq(claimable, 1, "sentinel");
+        assertEq(prepaid, 0, "prepaid paid the loan");
+        assertEq(game.claimableWinningsOf(address(sdgnrs)), lenderBefore + owed);
+        assertEq(_pool(), poolBefore, "internal move");
+        assertEq(lens.loanOf(address(game), root).principal, 0);
+    }
+
+    /// @dev Sources in order: msg.value, claimable down to its sentinel, then prepaid AFKing.
+    function test_RepayOrderIsEthThenClaimableThenPrepaid() public {
+        _borrow(root, 4);
+        uint256 owed = lens.loanOf(address(game), root).owed;
+        uint256 fresh = owed / 4;
+        uint256 fromClaimable = owed / 4;
+        _seed(root, 0, uint128(fromClaimable + 1), uint128(owed - fresh - fromClaimable + 2 ether));
+        uint256 poolBefore = _pool();
+        vm.prank(seller); game.clearDebtNow{value: fresh}(root);
+        (uint128 claimable, uint128 prepaid) = lens.accountBalances(address(game), root);
+        assertEq(claimable, 1, "claimable drained to its sentinel first");
+        assertEq(prepaid, 2 ether, "prepaid covers only the remainder");
+        assertEq(_pool(), poolBefore + fresh, "only fresh ETH grows the pool");
+
+        _borrow(root, 4);
+        owed = lens.loanOf(address(game), root).owed;
+        _seed(root, 0, uint128(owed + 1), 3 ether);
+        vm.prank(seller); game.clearDebtNow(root);
+        (claimable, prepaid) = lens.accountBalances(address(game), root);
+        assertEq(claimable, 1);
+        assertEq(prepaid, 3 ether, "claimable that covers the amount leaves prepaid untouched");
+    }
+
     function test_RepayAllowedDuringRngLockButNotAtDueLevel() public {
         _borrow(root, 2);
         _etch(); LoanSeeder(address(game)).lock(true); _unetch();

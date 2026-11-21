@@ -605,6 +605,24 @@ contract ProtocolBoonDrawTest is DeployProtocol {
         assertEq(lens.protocolBoonPool(address(game), address(vault), day).totalWeight, weight);
     }
 
+    /// @dev In a jackpot phase tickets route to the current level, so a mint streak last
+    ///      completed at level - 1 is live: the bet freezes the score every reader shows, and
+    ///      its boon entry carries that same score.
+    function testBetFreezesCanonicalScoreDuringJackpotPhase() public {
+        _fixtureCall(abi.encodeCall(ProtocolBoonFixture.staleMintStreak, (bettor)));
+        uint32 bettorId = game.walletIdOf_g3120(bettor);
+        assertEq(game.playerActivityScoreById(bettorId), 40, "canonical score: the mint streak is live");
+        vm.prank(bettor); _bet(0, 0.005 ether);
+        bytes memory original = address(game).code;
+        vm.etch(address(game), address(fixture).code);
+        uint256 bet = ProtocolBoonFixture(address(game)).bet(1, 1);
+        vm.etch(address(game), original);
+        assertEq(uint32(bet), bettorId, "the bettor owns queue position 0");
+        assertEq(uint16(bet >> 44), 40, "the bet freezes the canonical score");
+        assertEq(lens.protocolBoonEntryAt(address(game), address(vault), day, 0).scoreSnapshot, 40,
+            "the boon entry carries the bet's score");
+    }
+
     function testFuzzPaidWeightMatchesQuote(uint128 amount, uint16 score) public {
         amount = uint128(bound(amount, 0.005 ether, 100 ether) / 1 gwei * 1 gwei); // whole-gwei stakes
         score = uint16(bound(score, 0, 30_000));

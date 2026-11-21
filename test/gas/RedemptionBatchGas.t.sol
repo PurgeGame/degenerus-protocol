@@ -7,8 +7,11 @@ import {Vm} from "forge-std/Vm.sol";
 import {GameFunding} from "../helpers/GameFunding.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
+import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
+import {GlamsterdamReprice} from "../helpers/GlamsterdamReprice.sol";
+import {ColdFirstReprice} from "../helpers/ColdFirstReprice.sol";
 
-contract RedemptionBatchGasTest is AutomaticRedemptionSettlementTest {
+contract RedemptionBatchGasTest is AutomaticRedemptionSettlementTest, ColdFirstReprice {
     function _coolSettlementState() internal {
         vm.cool(address(game));
         vm.cool(address(sdgnrs));
@@ -93,11 +96,10 @@ contract RedemptionBatchGasTest is AutomaticRedemptionSettlementTest {
         return GasBounds.REDEMPTION_BASE_GAS + GasBounds.REDEMPTION_TAIL_GAS
             + (boxes == 0 ? 0 : GasBounds.HUMAN_ENTRY_GAS + boxes * GasBounds.HUMAN_BOX_GAS);
     }
-    function coldSingleClaim(uint256 base, uint16 roll, uint256 word, bool withEscrow)
-        external returns (uint256 used, uint256 boxes)
+    function _singleClaim(uint256 base, uint16 roll, uint256 word, bool withEscrow)
+        private returns (uint32 day, uint256 rolled, uint256 boxes)
     {
-        require(msg.sender == address(this), "calibration self-call");
-        uint32 day = _openBatchId();
+        day = _openBatchId();
         uint256 supply = sdgnrs.totalSupply();
         if (withEscrow) {
             _seedFlipBacking(1_000_000);
@@ -112,8 +114,17 @@ contract RedemptionBatchGasTest is AutomaticRedemptionSettlementTest {
             (,,,uint96 escrow,,) = sdgnrs.redemptionBatches(day);
             assertGt(escrow, 0);
         }
-        uint256 rolled = _claimBase(alice, day) * roll / 100;
+        rolled = _claimBase(alice, day) * roll / 100;
         boxes = _boxes(rolled - rolled / 2);
+    }
+
+    function coldSingleClaim(uint256 base, uint16 roll, uint256 word, bool withEscrow)
+        external returns (uint256 used, uint256 boxes)
+    {
+        require(msg.sender == address(this), "calibration self-call");
+        uint32 day;
+        uint256 rolled;
+        (day, rolled, boxes) = _singleClaim(base, roll, word, withEscrow);
         uint256 beneficiaryBefore = game.claimableWinningsOf(alice);
         _coolSettlementState();
         vm.recordLogs();
@@ -156,6 +167,51 @@ contract RedemptionBatchGasTest is AutomaticRedemptionSettlementTest {
         uint256 head = GasBounds.REDEMPTION_BASE_GAS + GasBounds.HUMAN_ENTRY_GAS + 20 * GasBounds.HUMAN_BOX_GAS;
         assertLe(head + head / 63 + 12_000 + GasBounds.REDEMPTION_TAIL_GAS + 2_000, 10_000_000,
             "maximum beneficiary admission is one realistic chunk");
+    }
+
+    /// @dev Glamsterdam, the beneficiary without a lootbox leg over the Osaka sweep's words: its
+    ///      claim and the batch finish run under canRun(REDEMPTION_BASE_GAS, REDEMPTION_TAIL_GAS).
+    ///      The won escrow adds the FLIP credit. Every case is measured cold before any is recorded.
+    function test_GlamsterdamColdNoBoxBeneficiary() public {
+        bytes memory data;
+        uint256[96] memory cold;
+        uint256 maxCold;
+        bytes32[96] memory results;
+        uint256 base = vm.snapshotState();
+        for (uint256 c; c < 96; ++c) {
+            (, uint256 rolled, uint256 boxes) = _singleClaim(0.01 ether, 175,
+                uint256(keccak256(abi.encode("chunk shape", uint256(0), c >> 1))), c & 1 == 1);
+            assertEq(boxes, 0, "no lootbox leg");
+            uint256 beneficiaryBefore = game.claimableWinningsOf(alice);
+            data = abi.encodeCall(sdgnrs.runRedemptionWork, (settlementWord, uint256(9_000_000)));
+            bytes memory result;
+            (cold[c], result) = _coldFrame(address(sdgnrs), address(game), data, 9_500_000);
+            results[c] = keccak256(result);
+            if (cold[c] > maxCold) maxCold = cold[c];
+            assertTrue(abi.decode(result, (MineFlipGas.Result)).done);
+            assertGe(game.claimableWinningsOf(alice), beneficiaryBefore + rolled / 2, "direct half credited");
+            assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
+            assertTrue(vm.revertToState(base));
+        }
+        GlamsterdamReprice.Result memory worst;
+        uint256 mostSlots;
+        for (uint256 c; c < 96; ++c) {
+            _singleClaim(0.01 ether, 175, uint256(keccak256(abi.encode("chunk shape", uint256(0), c >> 1))), c & 1 == 1);
+            data = abi.encodeCall(sdgnrs.runRedemptionWork, (settlementWord, uint256(9_000_000)));
+            GlamsterdamReprice.Result memory r =
+                this.coldFirstReplay(address(sdgnrs), address(game), data, 9_500_000, cold[c], results[c]);
+            uint256 total = r.glamsterdamExec + r.stateGas;
+            assertLe(total, GasBounds.REDEMPTION_BASE_GAS + GasBounds.REDEMPTION_TAIL_GAS,
+                "REDEMPTION_BASE_GAS + REDEMPTION_TAIL_GAS");
+            if (total > worst.glamsterdamExec + worst.stateGas) worst = r;
+            if (r.newSlots > mostSlots) mostSlots = r.newSlots;
+            assertTrue(vm.revertToState(base));
+        }
+        vm.deleteStateSnapshot(base);
+        _report("no_box_beneficiary_claim_and_finish", worst, GasBounds.REDEMPTION_BASE_GAS + GasBounds.REDEMPTION_TAIL_GAS);
+        emit log_named_uint("worst_new_slots", worst.newSlots);
+        emit log_named_uint("most_new_slots", mostSlots);
+        emit log_named_uint("osaka_max_cold_frame", maxCold);
     }
 
     function test_ColdTwentyBoxBeneficiaryThroughRouter() public {

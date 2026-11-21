@@ -2,7 +2,7 @@
 pragma solidity 0.8.38;
 import {PeripheralSlots} from "../helpers/PeripheralSlots.sol";
 
-import {Vm} from "forge-std/Vm.sol";
+import {Vm, VmSafe} from "forge-std/Vm.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
@@ -11,6 +11,8 @@ import {FreshWordLeg} from "./PurchaseDailyWorstCase.t.sol";
 import {CenturyBafScores, CenturyNativeGasHost} from "./AdvanceCenturyConsolidationGas.t.sol";
 import {GameSlots} from "../helpers/GameSlots.sol";
 import {RequestCostCoordinator} from "../helpers/RequestCostCoordinator.sol";
+import {GlamsterdamFrameProbe} from "../helpers/GlamsterdamFrameProbe.sol";
+import {GlamsterdamReprice} from "../helpers/GlamsterdamReprice.sol";
 
 /// @dev Last-purchase-day state one level below `lvl`; the real request pre-increments the level.
 ///      A Decimator event of `decEntrants` entrants is open for `lvl` (sealing is constant work
@@ -40,6 +42,31 @@ contract ConsolidationLevelSeeder is DegenerusGame {
     }
 }
 
+/// @dev Coordinator stand-in for the level-entry funding split: every call runs the request-cost
+///      coordinator's code on this account's storage; after the funding call's own work it pauses
+///      gas metering (or, for the reference run, makes the same no-op resume call), so a paused run
+///      meters exactly up to the start of the work VRF_LEVEL_FUND_TAIL holds back.
+contract FundingSplitCoordinator {
+    VmSafe private constant VM = VmSafe(address(uint160(uint256(keccak256("hevm cheat code")))));
+    address private immutable implementation;
+    bool private immutable pauseAtFund;
+
+    constructor(address target, bool pause) {
+        implementation = target;
+        pauseAtFund = pause;
+    }
+
+    fallback(bytes calldata input) external payable returns (bytes memory output) {
+        bool ok;
+        (ok, output) = implementation.delegatecall(input);
+        if (!ok) assembly ("memory-safe") { revert(add(output, 32), mload(output)) }
+        if (msg.sig == RequestCostCoordinator.fundSubscriptionWithNative.selector) {
+            if (pauseAtFund) VM.pauseGasMetering();
+            else VM.resumeGasMetering();
+        }
+    }
+}
+
 /// @title PoolConsolidationGas — the consolidation chunk of every level kind, cold.
 /// @notice The chunk is `runDailyPhase_g2582`'s last-purchase-day branch: level prize pool record, the
 ///         century prize pool push at x00, the growth round seal, the yield surplus distribution,
@@ -50,8 +77,9 @@ contract ConsolidationLevelSeeder is DegenerusGame {
 ///         below, drives the real request and VRF answer, the word application and the purchase
 ///         battle through the production modules, then measures the consolidation call alone with
 ///         every engine account cold. The three yield surplus recipients hold the claimable
-///         sentinel from deployment, so no surplus credit is a zero-to-nonzero write.
-abstract contract PoolConsolidationFixture is FreshWordLeg {
+///         sentinel from deployment, so no surplus credit is a zero-to-nonzero write. Each case is
+///         also re-priced under Glamsterdam from the same state.
+abstract contract PoolConsolidationFixture is FreshWordLeg, GlamsterdamFrameProbe {
     uint8 internal constant STAGE_PURCHASE_BATTLE = 17;
     uint8 internal constant STAGE_ENTERED_JACKPOT = 7;
     uint24 internal constant DAY = 400;
@@ -62,6 +90,10 @@ abstract contract PoolConsolidationFixture is FreshWordLeg {
     // WWXRP incinerator storage: `_incinHeader` slot 6, `_incinEntry` slot 7 (cum, player).
     uint256 internal constant INCIN_HEADER_SLOT = PeripheralSlots.WW_INCIN_HEADER;
     uint256 internal constant INCIN_ENTRY_SLOT = PeripheralSlots.WW_INCIN_ENTRY;
+    // DegenerusGameStorage.VRF_FUND_MIN_GAS and BoundedCall's value-call overhead: the funding
+    // call admits its minimum, the minimum's EIP-150 share and the overhead above its tail.
+    uint256 internal constant VRF_FUND_MIN_GAS = 250_000;
+    uint256 internal constant VALUE_CALL_OVERHEAD = 45_000;
 
     CenturyNativeGasHost internal host;
     uint32 internal incineratorWinner;
@@ -209,6 +241,7 @@ abstract contract PoolConsolidationFixture is FreshWordLeg {
         bool x0 = lvl % 10 == 0;
         bool win = uint256(keccak256(abi.encode(uint256(61), _word()))) & 1 == 1;
         assertEq(_emptyRecipientSlots(), 0, "protocol recipients keep their claimable sentinel");
+        uint256 seeded = vm.snapshotState();
         _coolAll();
         vm.recordLogs();
         MineFlipGas.Result memory result = host.dailyWith{gas: 12_000_000}(9_000_000);
@@ -237,16 +270,41 @@ abstract contract PoolConsolidationFixture is FreshWordLeg {
         assertEq(_countTopic(logs, keccak256("LevelQuestRolled(uint24,uint24,uint8,uint256)")), 1, "level quest rolls");
         assertEq(_dailyLegLogs(logs), 0, "consolidation pays no award");
         assertLt(used, GasBounds.POOL_CONSOLIDATION, "consolidation exceeds its declared bound");
+
+        vm.revertToState(seeded);
+        vm.deleteStateSnapshot(seeded);
+        _glamsterdamConsolidation(_label(), used);
+    }
+
+    /// @dev The consolidation call from the current state, measured cold as `osakaTx`, re-priced
+    ///      under Glamsterdam. The whole frame (the phase preamble and tail included) must fit the
+    ///      consolidation bound alone.
+    function _glamsterdamConsolidation(string memory label, uint256 osakaTx)
+        internal
+        returns (GlamsterdamReprice.Result memory r, VmSafe.AccountAccess[] memory acc)
+    {
+        (r, acc,) = _glamsterdamRecorded(address(host), _consolidationCall(), osakaTx);
+        _logGlamsterdam(string.concat("consolidation_", label), r, GasBounds.POOL_CONSOLIDATION);
+        assertLe(_glamsterdamTotal(r), GasBounds.POOL_CONSOLIDATION,
+            "Glamsterdam consolidation call (phase preamble and tail included) exceeds POOL_CONSOLIDATION");
+    }
+
+    function _consolidationCall() internal pure returns (bytes memory) {
+        return abi.encodeCall(CenturyNativeGasHost.dailyWith, (uint256(9_000_000)));
     }
 
     /// @dev The level-entry funding call included: a source-shaped live subscription below the
     ///      funding threshold.
     function _fundingCase() private {
+        address implementation = address(new RequestCostCoordinator(125_000));
+        bytes memory referenceCode = address(new FundingSplitCoordinator(implementation, false)).code;
+        bytes memory pausingCode = address(new FundingSplitCoordinator(implementation, true)).code;
         vm.etch(address(mockVRF), address(new RequestCostCoordinator(125_000)).code);
         RequestCostCoordinator(address(mockVRF)).seed(address(game), 1);
         // balances[1]: nonzero request count, 0.01 ETH native balance.
         vm.store(address(mockVRF), keccak256(abi.encode(uint256(1), uint256(2))),
             bytes32((uint256(100) << 192) | (uint256(0.01 ether) << 96)));
+        uint256 seeded = vm.snapshotState();
         _coolAll();
         vm.cool(address(mockVRF));
         vm.recordLogs();
@@ -261,6 +319,95 @@ abstract contract PoolConsolidationFixture is FreshWordLeg {
         assertEq(_countTopic(logs, keccak256("VrfFunded(uint24,uint256,uint256)")), 1, "funding outcome");
         assertEq(_countTopic(logs, keccak256("YieldSurplusDistributed(uint256)")), 1, "surplus distributes");
         assertLt(used, GasBounds.POOL_CONSOLIDATION, "consolidation exceeds its declared bound");
+
+        // Cold measurements first: the stand-in's reference run and its paused run.
+        vm.revertToState(seeded);
+        uint256 referenceTx = _coldFundedRun(referenceCode);
+        vm.revertToState(seeded);
+        uint256 prefixTx = _coldFundedRun(pausingCode);
+        vm.resumeGasMetering();
+        vm.revertToState(seeded);
+        (GlamsterdamReprice.Result memory plain,) = _glamsterdamConsolidation(label, used);
+        vm.revertToState(seeded);
+        vm.etch(address(mockVRF), referenceCode);
+        (GlamsterdamReprice.Result memory whole, VmSafe.AccountAccess[] memory acc,) =
+            _glamsterdamRecorded(address(host), _consolidationCall(), referenceTx);
+        vm.revertToState(seeded);
+        vm.deleteStateSnapshot(seeded);
+        _glamsterdamFundingSplit(label, plain.osakaExec, whole, acc, prefixTx - _intrinsicGas(_consolidationCall()));
+    }
+
+    /// @dev The funded consolidation with `code` at the coordinator, cold; its transaction gas.
+    function _coldFundedRun(bytes memory code) private returns (uint256) {
+        vm.etch(address(mockVRF), code);
+        _coolAll();
+        vm.cool(address(mockVRF));
+        MineFlipGas.Result memory result = host.dailyWith{gas: 12_000_000}(9_000_000);
+        assertTrue(result.progressed && result.done, "the stand-in run completes the consolidation");
+        return vm.lastCallGas().gasTotalUsed;
+    }
+
+    /// @dev The funded consolidation split at the funding call, under Glamsterdam. The stand-in's
+    ///      paused run gives the Osaka prefix (`prefixOsaka`, frame gas); its reference run gives the
+    ///      whole frame (`whole`) and its accesses, cut after the funding call's records. Two checks:
+    ///      the work after the call (yield split, the rest of the consolidation and the phase tail)
+    ///      fits VRF_LEVEL_FUND_TAIL; and the prefix leaves the funding admission (its tail, overhead,
+    ///      minimum and the worker's call reserve) inside the consolidation admission.
+    function _glamsterdamFundingSplit(
+        string memory label,
+        uint256 plainOsaka,
+        GlamsterdamReprice.Result memory whole,
+        VmSafe.AccountAccess[] memory acc,
+        uint256 prefixOsaka
+    ) internal {
+        // The stand-in adds only its forwarding frames and one cheatcode call to the plain run.
+        assertGe(whole.osakaExec, plainOsaka, "the reference run meters the whole consolidation");
+        assertLe(whole.osakaExec, plainOsaka + 20_000, "the reference run meters the whole consolidation");
+        assertGt(prefixOsaka, 50_000, "the paused run meters the work before the funding call");
+        assertLt(prefixOsaka + 100_000, whole.osakaExec, "the paused run stops metering at the funding call");
+
+        uint256 cut = _afterFundingCall(acc);
+        assembly ("memory-safe") { mstore(acc, cut) }
+        GlamsterdamReprice.Result memory prefix = GlamsterdamReprice.reprice(prefixOsaka, acc, address(host));
+        uint256 tailOsaka = whole.osakaExec - prefixOsaka;
+        int256 tailExec = int256(tailOsaka) + whole.execDelta - prefix.execDelta;
+        uint256 tail = uint256(tailExec) + whole.stateGas - prefix.finalStateGas;
+        uint256 prefixTotal = _glamsterdamTotal(prefix);
+        uint256 admitted = GasBounds.POOL_CONSOLIDATION + GasBounds.DAILY_PHASE_TAIL + MineFlipGas.CHECK_RESERVE;
+        uint256 fundingAdmission = GasBounds.VRF_LEVEL_FUND_TAIL + VALUE_CALL_OVERHEAD + VRF_FUND_MIN_GAS
+            + VRF_FUND_MIN_GAS / 63 + MineFlipGas.CALL_RESERVE;
+
+        emit log_named_string("glamsterdam_unit", string.concat("level_entry_tail_", label));
+        emit log_named_uint("  whole_osaka_frame", whole.osakaExec);
+        emit log_named_uint("  whole_glamsterdam_total", _glamsterdamTotal(whole));
+        emit log_named_uint("  prefix_osaka", prefixOsaka);
+        emit log_named_uint("  prefix_glamsterdam_exec", prefix.glamsterdamExec);
+        emit log_named_uint("  prefix_glamsterdam_state_peak", prefix.stateGas);
+        emit log_named_uint("  prefix_glamsterdam_total", prefixTotal);
+        emit log_named_uint("  tail_osaka", tailOsaka);
+        emit log_named_uint("  tail_glamsterdam_exec", uint256(tailExec));
+        emit log_named_uint("  tail_glamsterdam_state", whole.stateGas - prefix.finalStateGas);
+        emit log_named_uint("  tail_glamsterdam_total", tail);
+        emit log_named_uint("  tail_bound", GasBounds.VRF_LEVEL_FUND_TAIL);
+        emit log_named_uint("  prefix_plus_funding_admission", prefixTotal + fundingAdmission);
+        emit log_named_uint("  consolidation_admission", admitted);
+        assertLe(tail, GasBounds.VRF_LEVEL_FUND_TAIL, "Glamsterdam level entry after its VRF top-up exceeds VRF_LEVEL_FUND_TAIL");
+        assertLe(prefixTotal + fundingAdmission, admitted,
+            "Glamsterdam prefix plus the funding admission exceeds POOL_CONSOLIDATION + DAILY_PHASE_TAIL");
+    }
+
+    /// @dev Index of the first record after the funding call's own records: the value call to the
+    ///      coordinator and everything it runs.
+    function _afterFundingCall(VmSafe.AccountAccess[] memory acc) private view returns (uint256) {
+        uint256 i;
+        while (!(acc[i].account == address(mockVRF) && acc[i].kind == VmSafe.AccountAccessKind.Call && acc[i].value != 0)) {
+            ++i;
+        }
+        uint64 depth = acc[i].depth;
+        for (++i; i < acc.length; ++i) {
+            if (acc[i].depth <= depth && acc[i].account != address(mockVRF)) return i;
+        }
+        revert("no access after the funding call");
     }
 
     function test_ConsolidationColdFunded() public { _fundingCase(); }

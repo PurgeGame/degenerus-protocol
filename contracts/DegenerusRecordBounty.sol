@@ -40,8 +40,8 @@ interface IDegenerusVaultOwner {
 ///         scheme (data:, ipfs://, https://), name, description, attributes
 ///         and image included.
 /// @dev A reverting or empty external render falls back to the internal
-///      metadata; the staticcall is not gas-capped, and the renderer is
-///      owner-set and trusted.
+///      metadata; return data that does not decode as a string reverts tokenURI.
+///      The staticcall is not gas-capped, and the renderer is owner-set and trusted.
 interface IRecordBountyRendererV1 {
     /// @notice Returns the full tokenURI for `tokenId`, as implemented by the owner-set renderer.
     function tokenURI(
@@ -259,9 +259,10 @@ contract DegenerusRecordBounty {
     ///         Degenerus badge art.
     /// @dev An owner-set external renderer owns the WHOLE metadata: a non-empty
     ///      return is this function's result verbatim. The internal JSON+SVG
-    ///      renders only when the renderer is unset, the call fails, or it
-    ///      returns empty (fallback). The staticcall is not gas-capped, so
-    ///      tokenURI integrity relies on the owner setting a sane renderer.
+    ///      renders only when the renderer is unset, the call reverts, or it
+    ///      returns empty (fallback); return data that does not decode as a string
+    ///      reverts this call. The staticcall is not gas-capped, so tokenURI
+    ///      integrity relies on the owner setting a sane renderer.
     function tokenURI(uint256 tokenId) external view returns (string memory) {
         (address holder, uint128 mark, uint24 sinceDay, uint256 daysHeld) = recordInfo(tokenId);
         string memory recordName = _recordName(tokenId);
@@ -317,8 +318,8 @@ contract DegenerusRecordBounty {
         return "BIGGEST DICE RUN";
     }
 
-    /// @dev The mark in display units: flip in whole FLIP (records sit at or
-    ///      above the 200k-FLIP floor, so wei dust is noise), the two ETH-wei
+    /// @dev The mark in display units: flip in whole FLIP (FLIP has zero
+    ///      decimals), the two ETH-wei
     ///      records with 4 decimals, the buy record as its raw ticket count, and
     ///      the dice run as the multiple its score basis points name.
     function _formatMark(uint256 tokenId, uint128 mark) private pure returns (string memory) {

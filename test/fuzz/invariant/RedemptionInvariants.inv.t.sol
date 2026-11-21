@@ -325,7 +325,121 @@ contract RedemptionInvariants is DeployProtocol {
         vm.expectRevert(sDGNRS.Swept.selector);
         sdgnrs.burn(1);
 
-        // Repeatable: a second call succeeds and finds nothing to move.
+        // Money that arrives later belongs to the next sweep: no burn is quoted a share of it.
+        vm.deal(address(sdgnrs), 10 ether);
+        (uint256 quoted,) = sdgnrs.previewBurnValue(backingTokens);
+        assertEq(quoted, 0, "no burn value is quoted once burns have ended");
+        (quoted,) = dgnrs.previewBurnValue(backingTokens);
+        assertEq(quoted, 0, "the wrapper quotes none either");
+
+        // Repeatable: a second call sweeps the later arrival.
         sdgnrs.yearSweep();
+        assertEq(address(sdgnrs).balance, 0, "the later arrival is swept");
+    }
+
+    // =========================================================================
+    //        FOCUSED: year sweep gates, latch, recipients and ended claims
+    // =========================================================================
+
+    /// @dev Latch a real game over through the redemption handler (the genesis cohort's drain and the
+    ///      request cycle it shifts take ten actions).
+    function _driveGameOver() private {
+        for (uint256 i; i < 12 && !game.gameOver(); i++) {
+            handler.action_triggerGameOver();
+        }
+        assertTrue(game.gameOver(), "precondition: liveness game-over latched");
+    }
+
+    /// @dev One year and a second after game over, run the Game's final sweep.
+    function _runFinalSweep() private {
+        vm.warp(uint256(game.gameOverTimestamp()) + 365 days + 1);
+        for (uint256 i; i < 8 && !game.isFinalSwept(); ++i) try game.mineRun(0) {} catch {}
+        assertTrue(game.isFinalSwept(), "precondition: final sweep ran");
+    }
+
+    /// @notice The year sweep opens exactly 365 days after game over: one second earlier it refuses, at the
+    ///         boundary it runs.
+    function test_yearSweepOpensExactlyOneYearAfterGameOver() public {
+        _driveGameOver();
+        uint256 opens = uint256(game.gameOverTimestamp()) + 365 days;
+        _runFinalSweep();
+
+        vm.warp(opens - 1);
+        vm.expectRevert(sDGNRS.SweepNotReady.selector);
+        sdgnrs.yearSweep();
+
+        vm.warp(opens);
+        sdgnrs.yearSweep();
+        assertEq(sdgnrs.yearSweptAt(), opens, "the sweep ran at the boundary");
+    }
+
+    /// @notice A year after game over the sweep still waits for the Game's final sweep, then runs.
+    function test_yearSweepWaitsForTheGamesFinalSweep() public {
+        _driveGameOver();
+        vm.warp(uint256(game.gameOverTimestamp()) + 365 days + 1);
+        assertFalse(game.isFinalSwept(), "precondition: final sweep has not run");
+
+        vm.expectRevert(sDGNRS.SweepNotReady.selector);
+        sdgnrs.yearSweep();
+        assertEq(sdgnrs.yearSweptAt(), 0, "nothing latched");
+
+        for (uint256 i; i < 8 && !game.isFinalSwept(); ++i) try game.mineRun(0) {} catch {}
+        assertTrue(game.isFinalSwept(), "precondition: final sweep ran");
+        sdgnrs.yearSweep();
+        assertGt(sdgnrs.yearSweptAt(), 0, "the sweep runs once the Game's has");
+    }
+
+    /// @notice Only the first sweep latches the time claims ended; a later sweep leaves it where it was.
+    function test_yearSweepLatchesOnlyOnTheFirstCall() public {
+        _driveGameOver();
+        _runFinalSweep();
+        sdgnrs.yearSweep();
+        uint40 latched = sdgnrs.yearSweptAt();
+        assertGt(latched, 0, "the first sweep latches");
+
+        vm.warp(block.timestamp + 30 days);
+        sdgnrs.yearSweep();
+        assertEq(sdgnrs.yearSweptAt(), latched, "a later sweep keeps the first time");
+    }
+
+    /// @notice GNRUS takes the rounded-down half and the Vault the remainder, of the ETH and of the stETH,
+    ///         from amounts that do not split evenly.
+    function test_yearSweepGnrusTakesTheFloorHalfAndVaultTheRest() public {
+        _driveGameOver();
+        _runFinalSweep();
+        uint256 ethBal = 7 ether + 3;
+        vm.deal(address(sdgnrs), ethBal);
+        mockStETH.mint(address(sdgnrs), 5 ether + 1);
+        uint256 stethBal = mockStETH.balanceOf(address(sdgnrs));
+        uint256 gnrusEth = ContractAddresses.GNRUS.balance;
+        uint256 vaultEth = ContractAddresses.VAULT.balance;
+        uint256 gnrusShares = mockStETH.sharesOf(ContractAddresses.GNRUS);
+        uint256 vaultShares = mockStETH.sharesOf(ContractAddresses.VAULT);
+
+        sdgnrs.yearSweep();
+
+        assertEq(ContractAddresses.GNRUS.balance - gnrusEth, ethBal / 2, "GNRUS ETH is the floor half");
+        assertEq(ContractAddresses.VAULT.balance - vaultEth, ethBal - ethBal / 2, "Vault ETH is the rest");
+        assertEq(
+            mockStETH.sharesOf(ContractAddresses.GNRUS) - gnrusShares,
+            mockStETH.getSharesByPooledEth(stethBal / 2),
+            "GNRUS stETH is the floor half"
+        );
+        assertEq(
+            mockStETH.sharesOf(ContractAddresses.VAULT) - vaultShares,
+            mockStETH.getSharesByPooledEth(stethBal - stethBal / 2),
+            "Vault stETH is the rest"
+        );
+    }
+
+    /// @notice After the sweep a redemption claim reverts as swept, ahead of any claimant lookup.
+    function test_claimRedemptionRevertsOnceSwept() public {
+        _driveGameOver();
+        _runFinalSweep();
+        sdgnrs.yearSweep();
+        (uint32 openBatch,,,) = sdgnrs.redemptionBatchState();
+
+        vm.expectRevert(sDGNRS.Swept.selector);
+        sdgnrs.claimRedemption(0, openBatch);
     }
 }

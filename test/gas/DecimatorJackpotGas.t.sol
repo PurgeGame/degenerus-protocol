@@ -4,7 +4,8 @@ import {ProfileModules} from "../helpers/ProfileModules.sol";
 
 import {DecimatorSampleReference as Sample} from "../helpers/DecimatorSamplingReference.sol";
 import {Test} from "forge-std/Test.sol";
-import {Vm} from "forge-std/Vm.sol";
+import {Vm, VmSafe} from "forge-std/Vm.sol";
+import {GlamsterdamReprice} from "../helpers/GlamsterdamReprice.sol";
 import {DecimatorJackpotHarness} from "../fuzz/DecimatorJackpotIntegration.t.sol";
 import {BucketSeed} from "../helpers/BucketSeed.sol";
 import {GameMiner} from "../../contracts/modules/GameMiner.sol";
@@ -20,6 +21,7 @@ import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlip
 import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
 import {Craps} from "../../contracts/Craps.sol";
 import {CrapsBattle} from "../../contracts/CrapsBattle.sol";
+import {GlamsterdamMeterReplay} from "../helpers/GlamsterdamMeterReplay.sol";
 
 contract DecimatorGasCoinflip {
     mapping(uint32 => uint256) public credited;
@@ -61,6 +63,14 @@ contract DecimatorGeneratedWorkMeter {
     {
         uint256 start = gasleft();
         (result,) = host.runDecimatorJackpotAwards(terms, allowance);
+        used = start - gasleft();
+    }
+
+    function work(DecimatorGasHost host, uint256 allowance)
+        external returns (uint256 used, MineFlipGas.Result memory result)
+    {
+        uint256 start = gasleft();
+        result = host.runDecimatorWork(allowance);
         used = start - gasleft();
     }
 }
@@ -148,7 +158,7 @@ contract DecimatorJackpotNativeViews {
     function balanceOf(address) external pure returns (uint256) { return 0; }
 }
 
-contract DecimatorJackpotGasTest is Test {
+contract DecimatorJackpotGasTest is GlamsterdamMeterReplay {
     uint256 private constant PLAN_FRAME_GAS = 20_000;
 
     DecimatorGasHost private h;
@@ -198,9 +208,13 @@ contract DecimatorJackpotGasTest is Test {
         terms.shares = [uint256(133.3 ether), 133.3 ether, 133.4 ether, 600 ether];
         terms.targets = [uint16(256), 128, 32, 1];
         terms.solo = 3;
+        uint256 allowance = GasBounds.DECIMATOR_PLAN_GAS_MAX + GasBounds.DECIMATOR_WORK_TAIL_GAS + PLAN_FRAME_GAS;
+        uint256 snap = vm.snapshotState();
         vm.cool(address(h));
-        (uint256 used, MineFlipGas.Result memory r) = workMeter.run(h, terms,
-            GasBounds.DECIMATOR_PLAN_GAS_MAX + GasBounds.DECIMATOR_WORK_TAIL_GAS + PLAN_FRAME_GAS);
+        (uint256 used, MineFlipGas.Result memory r) = workMeter.run(h, terms, allowance);
+        // Every write is a first change of a nonzero slot: the plan (mode 1), the round, the
+        // packed current/claimable pools and the jackpot record, so no slot is created.
+        (Priced memory g,) = _reprice(snap, address(workMeter), abi.encodeCall(workMeter.run, (h, terms, allowance)), used);
         assertTrue(r.progressed);
         assertFalse(r.done);
         assertEq(h.plan(5).cursor, 0);
@@ -208,6 +222,14 @@ contract DecimatorJackpotGasTest is Test {
         assertEq(h.round(5).poolWei, 280 ether);
         assertLt(used, GasBounds.DECIMATOR_PLAN_GAS_MAX);
         emit log_named_uint("cold plan initialization and worker frame", used);
+        _logPriced("cold plan initialization and worker frame", g, GasBounds.DECIMATOR_PLAN_GAS_MAX);
+        uint256 resume = GasBounds.DECIMATOR_PLAN_GAS_MAX + GasBounds.DECIMATOR_WORK_TAIL_GAS + 40_000;
+        emit log_named_uint("Jackpot resume admission", resume);
+        assertEq(g.state, 0, "plan initialization creates no slot");
+        assertLt(_glam(g), GasBounds.DECIMATOR_PLAN_GAS_MAX,
+            "Glamsterdam plan initialization and worker frame fit DECIMATOR_PLAN_GAS_MAX");
+        assertLt(_glam(g), resume,
+            "Glamsterdam worker call fits the Jackpot resume admission DECIMATOR_PLAN + WORK_TAIL + 40k");
     }
 
     function test_ColdSoloPassAndGoldResumeFitExistingAdmission() public {
@@ -239,6 +261,9 @@ contract DecimatorJackpotGasTest is Test {
         (uint256 refusedFrame, MineFlipGas.Result memory refused) = workMeter.daily(h, 6, low);
         assertFalse(refused.progressed);
         _coolSolo();
+        // A cooled account is no longer touched; re-touch the host so the snapshot keeps its state.
+        vm.deal(address(h), address(h).balance);
+        uint256 beforeUsed = vm.snapshotState();
         vm.recordLogs();
         (uint256 used, MineFlipGas.Result memory result) = workMeter.daily(h, 6, high);
         assertTrue(result.done);
@@ -267,6 +292,68 @@ contract DecimatorJackpotGasTest is Test {
         emit log_named_uint("cold solo cash/pass/gold and daily completion frame", used);
         emit log_named_uint("solo award plus completion beyond refused frame", used - refusedFrame);
         emit log_named_uint("first admitted solo resume allowance", high);
+        _checkSoloGlamsterdam(refusedFrame, beforeUsed, high, used);
+    }
+
+    /// @dev Glamsterdam, no reservoir: the solo group (one winner, its passes and a fresh
+    ///      golden-ticket arm) with the daily completion, against the composed admission at its
+    ///      canRun site. The refused call's cold Osaka frame is subtracted: its own repricing can
+    ///      only raise it, so the difference is an upper bound.
+    function _checkSoloGlamsterdam(uint256 refusedFrame, uint256 beforeUsed, uint256 high, uint256 used) private {
+        GlamsterdamReprice.Result memory g = _glamsterdamDaily(beforeUsed, high, used);
+        uint256 unit = g.glamsterdamExec + g.stateGas - refusedFrame;
+        uint256 bound = GasBounds.JACKPOT_ETH_WINNER_GAS_MAX + GasBounds.JACKPOT_ETH_FIRST_GROUP_GAS;
+        emit log_named_uint("osaka solo unit", used - refusedFrame);
+        emit log_named_uint("glamsterdam exec solo call", g.glamsterdamExec);
+        emit log_named_uint("glamsterdam state solo call", g.stateGas);
+        emit log_named_uint("glamsterdam new slots", g.newSlots);
+        emit log_named_uint("glamsterdam total solo unit", unit);
+        emit log_named_uint("glamsterdam bound (WINNER + FIRST_GROUP)", bound);
+        emit log_named_uint("glamsterdam admission (WINNER + FIRST_GROUP + TAIL)", bound + GasBounds.JACKPOT_TAIL_GAS);
+        assertLe(unit, bound + GasBounds.JACKPOT_TAIL_GAS,
+            "Glamsterdam solo first group with completion fits WINNER + FIRST_GROUP + TAIL");
+    }
+
+    /// @dev Replays `workMeter.daily` from `pre` with state-diff recording and reprices the cold
+    ///      figure from the replay's accesses; the post-call state is restored afterwards. The
+    ///      recorded replay can run warmer than the cold call, so only its accesses are used.
+    function _glamsterdamDaily(uint256 pre, uint256 allowance, uint256 osaka)
+        private returns (GlamsterdamReprice.Result memory)
+    {
+        uint256 post = vm.snapshotState();
+        assertTrue(vm.revertToState(pre));
+        _coolSolo();
+        vm.startStateDiffRecording();
+        (uint256 replay, MineFlipGas.Result memory result) = workMeter.daily(h, 6, allowance);
+        VmSafe.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
+        vm.stopMappingRecording();
+        emit log_named_uint("recorded replay gas", replay);
+        assertTrue(result.done, "the recorded replay completes the solo");
+        bytes32 replayState = _touchedState(acc);
+        assertTrue(vm.revertToState(post));
+        assertEq(_touchedState(acc), replayState, "replay and cold call leave the same touched storage");
+        uint256 n;
+        for (uint256 i; i < acc.length; ++i) {
+            if (acc[i].account == address(vm) || acc[i].account == address(this)) continue;
+            VmSafe.StorageAccess[] memory sa = acc[i].storageAccesses;
+            for (uint256 j; j < sa.length; ++j) {
+                if (sa[j].isWrite && sa[j].previousValue == bytes32(0) && sa[j].newValue != bytes32(0)) {
+                    emit log_named_bytes32("new slot", sa[j].slot);
+                }
+            }
+            acc[n++] = acc[i];
+        }
+        assembly ("memory-safe") { mstore(acc, n) }
+        return GlamsterdamReprice.reprice(osaka, acc, address(workMeter));
+    }
+
+    function _touchedState(VmSafe.AccountAccess[] memory acc) private view returns (bytes32 digest) {
+        for (uint256 i; i < acc.length; ++i) {
+            VmSafe.StorageAccess[] memory sa = acc[i].storageAccesses;
+            for (uint256 j; j < sa.length; ++j) {
+                digest = keccak256(abi.encode(digest, sa[j].account, sa[j].slot, vm.load(sa[j].account, sa[j].slot)));
+            }
+        }
     }
 
     function _coolSolo() private {
@@ -275,6 +362,10 @@ contract DecimatorJackpotGasTest is Test {
         vm.cool(ContractAddresses.GAME_DECIMATOR_MODULE);
         vm.cool(ContractAddresses.GAME_WHALE_MODULE);
     }
+
+    /// @dev Admits a skipped stratum and its tail with the worker frame, far below a generated item.
+    uint256 private constant SKIP_ONLY_ALLOWANCE =
+        GasBounds.DECIMATOR_SAMPLE_SKIP_GAS_MAX + GasBounds.DECIMATOR_WORK_TAIL_GAS + 55_000;
 
     function test_SkippedNaturalStratumFitsSmallAllowanceAndGeneratedWaits() public {
         uint256 word = 2;
@@ -289,28 +380,107 @@ contract DecimatorJackpotGasTest is Test {
         terms.word = word;
         vm.cool(address(h)); vm.cool(ContractAddresses.CRAPS);
         vm.mockCallRevert(ContractAddresses.CRAPS, abi.encodeWithSignature("extsload_g2807007(bytes32)"), hex"12345678");
+        bytes memory payload = abi.encodeCall(workMeter.run, (h, terms, SKIP_ONLY_ALLOWANCE));
         vm.recordLogs();
-        (uint256 used, MineFlipGas.Result memory r) = workMeter.run(h, terms, 150_000);
+        uint256 skipSnap = vm.snapshotState();
+        (uint256 used, MineFlipGas.Result memory r) = workMeter.run(h, terms, SKIP_ONLY_ALLOWANCE);
         assertEq(vm.getRecordedLogs().length, 0, "natural strata do not emit generated receipts");
         assertTrue(r.progressed);
         assertFalse(r.done);
         assertEq(h.plan(5).cursor, 1, "natural stratum skipped below generated admission");
         assertEq(h.ownerSlot(1), address(0), "natural stratum does not store a generated owner");
+        uint256 refusedSnap = vm.snapshotState();
         vm.cool(address(h));
         uint256 refusedFrame;
-        (refusedFrame, r) = workMeter.run(h, terms, 150_000);
+        (refusedFrame, r) = workMeter.run(h, terms, SKIP_ONLY_ALLOWANCE);
+        // Both cold figures precede the first recording. The refusal changes nothing, so both
+        // replays leave the skip's post-state.
+        (Priced memory refused,) = _reprice(refusedSnap, address(workMeter), payload, refusedFrame);
+        // The skip's cursor write is the plan slot's first change in the call.
+        (Priced memory skip,) = _reprice(skipSnap, address(workMeter), payload, used);
         assertFalse(r.progressed);
         assertEq(h.plan(5).cursor, 1, "survivor waits atomically");
         assertLt(used, GasBounds.DECIMATOR_SAMPLE_SKIP_GAS_MAX + GasBounds.DECIMATOR_WORK_TAIL_GAS);
         assertLt(used - refusedFrame, GasBounds.DECIMATOR_SAMPLE_SKIP_GAS_MAX);
         emit log_named_uint("cold skipped natural stratum and worker frame", used);
         emit log_named_uint("incremental skipped stratum gas", used - refusedFrame);
+        _logPriced("skipped natural stratum and worker frame", skip,
+            GasBounds.DECIMATOR_SAMPLE_SKIP_GAS_MAX + GasBounds.DECIMATOR_WORK_TAIL_GAS);
+        _logPriced("refused generated survivor frame", refused, 0);
+        emit log_named_uint("Glamsterdam incremental skipped stratum", _glam(skip) - _glam(refused));
+        assertLt(_glam(skip), GasBounds.DECIMATOR_SAMPLE_SKIP_GAS_MAX + GasBounds.DECIMATOR_WORK_TAIL_GAS,
+            "Glamsterdam skip and worker frame fit DECIMATOR_SAMPLE_SKIP + WORK_TAIL");
+        assertLt(_glam(skip) - _glam(refused), GasBounds.DECIMATOR_SAMPLE_SKIP_GAS_MAX,
+            "Glamsterdam incremental skipped stratum fits DECIMATOR_SAMPLE_SKIP_GAS_MAX");
+    }
+
+    /// @dev The original-run phase skips a generated stratum at the round's first stratum: its
+    ///      cursor checkpoint creates the round's second slot (cursor, champion and next, zero
+    ///      while no round is queued behind), the fresh-slot maximum behind this skip admission.
+    function test_FirstSkippedStratumCreatesCursorSlot() public {
+        uint256 word = 2;
+        while (Sample.at(word, 5, 16000, 0) <= 8000 || Sample.at(word, 5, 16000, 1) > 8000) ++word;
+        h.prepare(5, 8000, 140 ether, 1000 ether, word, false);
+        h.seedRecipients(250);
+        for (uint8 q; q < 4; ++q) h.setDeity(q, address(uint160(0xa100 + q)));
+        h.primeMiner(false);
+        DecimatorJackpotTerms memory terms;
+        terms.word = word;
+        terms.shares = [uint256(133.3 ether), 133.3 ether, 133.4 ether, 600 ether];
+        terms.targets = [uint16(256), 128, 32, 1];
+        terms.solo = 3;
+        h.runDecimatorJackpotAwards(terms,
+            GasBounds.DECIMATOR_PLAN_GAS_MAX + GasBounds.DECIMATOR_WORK_TAIL_GAS + PLAN_FRAME_GAS);
+        assertEq(h.plan(5).generatedEntries, 8000);
+        h.unlock();
+        assertEq(h.round(5).cursor, 0);
+        // The next stratum is an original run, so this allowance admits the skip alone.
+        uint256 allowance = GasBounds.DECIMATOR_SAMPLE_SKIP_GAS_MAX + GasBounds.DECIMATOR_WORK_TAIL_GAS + 40_000;
+        uint256 refusedSnap = vm.snapshotState();
+        vm.cool(address(h));
+        (uint256 refusedFrame, MineFlipGas.Result memory r) = workMeter.work(h, 50_000);
+        assertFalse(r.progressed);
+        uint256 skipSnap = vm.snapshotState();
+        vm.cool(address(h));
+        uint256 used;
+        (used, r) = workMeter.work(h, allowance);
+        assertTrue(r.progressed);
+        assertEq(r.rewardBasis, 1, "the skip alone is admitted");
+        assertEq(h.round(5).cursor, 1, "the generated stratum is skipped");
+        // Both cold figures precede the first recording; the later snapshot replays first.
+        (Priced memory skip,) = _reprice(skipSnap, address(workMeter), abi.encodeCall(workMeter.work, (h, allowance)), used);
+        (Priced memory refused,) = _reprice(refusedSnap, address(workMeter),
+            abi.encodeCall(workMeter.work, (h, uint256(50_000))), refusedFrame);
+        uint256 admitted = GasBounds.DECIMATOR_SAMPLE_SKIP_GAS_MAX + GasBounds.DECIMATOR_WORK_TAIL_GAS;
+        emit log_named_uint("cold first skipped stratum and worker frame", used);
+        emit log_named_uint("incremental skip and cursor checkpoint", used - refusedFrame);
+        _logPriced("first skipped stratum and worker frame", skip, admitted);
+        _logPriced("refused skip frame", refused, 0);
+        emit log_named_uint("Glamsterdam incremental skip and cursor checkpoint", _glam(skip) - _glam(refused));
+        assertEq(skip.state, 97_920, "the cursor checkpoint creates the round's second slot");
+        assertLt(used - refusedFrame, admitted, "skip and cursor checkpoint fit SAMPLE_SKIP + WORK_TAIL");
+        assertLt(_glam(skip) - _glam(refused), admitted,
+            "Glamsterdam skip and fresh cursor checkpoint fit DECIMATOR_SAMPLE_SKIP + WORK_TAIL");
     }
 
     function test_ScaleItemCeilingsKeepGeneratedAdmission() public {
+        _scaleItemCeilings(Pass(false, false));
+    }
+
+    /// @dev The same items repriced under Glamsterdam, every call recorded. Recording cannot change
+    ///      a unit here: the item is the field's last stratum and the refusal is far below its bound.
+    ///      The filling item creates its heap slot and its owner's ordinal slot, the fresh-slot
+    ///      maximum of one generated item.
+    function test_ScaleItemCeilingsGlamsterdam() public {
+        _scaleItemCeilings(Pass(true, false));
+    }
+
+    function _scaleItemCeilings(Pass memory pass) private {
         uint40[4] memory ns = [uint40(1000),10_000,100_000,1_000_000];
         uint256[4] memory words = [uint256(25),2,6,29];
-        uint256 engine = _engineCeiling();
+        (uint256 engine, uint256 engineSeed) = _engineCeiling();
+        uint256[4] memory glamFrame;
+        uint256[4] memory glamRefused;
         uint256 clean = vm.snapshotState();
         for (uint256 k; k < ns.length; ++k) {
             assertTrue(vm.revertToState(clean));
@@ -338,12 +508,12 @@ contract DecimatorJackpotGasTest is Test {
             h.seedTiedOwnerHeap(word);
             vm.etch(ContractAddresses.CRAPS_ENGINE, type(DecimatorGeneratedFlatEngine).runtimeCode);
             _coolGenerated();
-            (uint256 refused, MineFlipGas.Result memory wait) = workMeter.run(h, terms, 70_000);
+            (Priced memory refused, MineFlipGas.Result memory wait) = _work(terms, 70_000, pass);
             assertFalse(wait.progressed);
             _coolGenerated();
             uint256 snap = vm.snapshotState();
-            (uint256 frame, MineFlipGas.Result memory run) = workMeter.run(h, terms,
-                GasBounds.DECIMATOR_GENERATED_GAS_MAX + GasBounds.DECIMATOR_WORK_TAIL_GAS + 40_000);
+            (Priced memory frame, MineFlipGas.Result memory run) = _work(terms,
+                GasBounds.DECIMATOR_GENERATED_GAS_MAX + GasBounds.DECIMATOR_WORK_TAIL_GAS + 40_000, pass);
             assertTrue(run.done);
             assertEq(h.plan(5).cursor, 1000);
             assertEq(h.round(5).winners, 200);
@@ -351,28 +521,65 @@ contract DecimatorJackpotGasTest is Test {
             assertTrue(vm.revertToStateAndDelete(snap));
             h.seedFillingHeap();
             _coolGenerated();
-            (uint256 fillingFrame,) = workMeter.run(h, terms,
-                GasBounds.DECIMATOR_GENERATED_GAS_MAX + GasBounds.DECIMATOR_WORK_TAIL_GAS + 40_000);
+            (Priced memory filling,) = _work(terms,
+                GasBounds.DECIMATOR_GENERATED_GAS_MAX + GasBounds.DECIMATOR_WORK_TAIL_GAS + 40_000, pass);
             assertEq(h.round(5).winners, 200);
             assertEq(uint64(h.node(0)), id);
-            if (fillingFrame > frame) frame = fillingFrame;
+            if (pass.glam) assertEq(filling.state, 2 * 97_920, "filling item creates its heap and owner slots");
+            if (pass.glam) {
+                _logPriced("scale generated item, replaced root", frame, 0);
+                _logPriced("scale generated item, filling", filling, 0);
+                _logPriced("scale refused generated frame", refused, 0);
+            }
+            (glamFrame[k], glamRefused[k]) = (_glam(frame) > _glam(filling) ? _glam(frame) : _glam(filling), _glam(refused));
+            if (filling.osaka > frame.osaka) frame = filling;
             // The identical refused frame measures sampling/dispatch before admission.
             // Its subtraction leaves the indivisible generated item and its completion;
             // adding the whole cold 511-roll engine call remains conservative (flat call retained).
-            uint256 item = frame - refused + engine;
+            uint256 item = frame.osaka - refused.osaka + engine;
             assertLt(item, GasBounds.DECIMATOR_GENERATED_GAS_MAX);
-            assertLt(frame + engine, GasBounds.DECIMATOR_GENERATED_GAS_MAX + GasBounds.DECIMATOR_WORK_TAIL_GAS);
+            assertLt(frame.osaka + engine, GasBounds.DECIMATOR_GENERATED_GAS_MAX + GasBounds.DECIMATOR_WORK_TAIL_GAS);
             emit log_named_uint("scale item original count", n);
             emit log_named_uint("scale largest generated item ceiling", item);
-            emit log_named_uint("scale cold item including worker frame ceiling", frame + engine);
+            emit log_named_uint("scale cold item including worker frame ceiling", frame.osaka + engine);
         }
+        if (!pass.glam) return;
+        // The real engine again; it touches no slot, so recording leaves its cold figure unchanged.
+        assertTrue(vm.revertToState(clean));
+        (Priced memory engineG,) = _reprice(vm.snapshotState(), address(0xDEC17),
+            abi.encodeCall(DecimatorGeneratedEngineMeter.run, (keccak256(abi.encode("ceiling", engineSeed)))), engine);
+        _logPriced("511-roll engine ceiling", engineG, 0);
+        for (uint256 k; k < ns.length; ++k) {
+            uint256 item = glamFrame[k] - glamRefused[k] + _glam(engineG);
+            emit log_named_uint("scale item original count", ns[k]);
+            emit log_named_uint("Glamsterdam largest generated item ceiling", item);
+            emit log_named_uint("Glamsterdam cold item including worker frame ceiling", glamFrame[k] + _glam(engineG));
+            assertLt(item, GasBounds.DECIMATOR_GENERATED_GAS_MAX,
+                "Glamsterdam generated item fits DECIMATOR_GENERATED_GAS_MAX");
+            assertLt(glamFrame[k] + _glam(engineG),
+                GasBounds.DECIMATOR_GENERATED_GAS_MAX + GasBounds.DECIMATOR_WORK_TAIL_GAS,
+                "Glamsterdam generated item and worker frame fit DECIMATOR_GENERATED + WORK_TAIL");
+        }
+    }
+
+    /// @dev One generated-work call: unrecorded and cold, or recorded and repriced in a Glamsterdam pass.
+    function _work(DecimatorJackpotTerms memory terms, uint256 allowance, Pass memory pass)
+        private returns (Priced memory p, MineFlipGas.Result memory result)
+    {
+        if (!pass.glam) {
+            (p.osaka, result) = workMeter.run(h, terms, allowance);
+            return (p, result);
+        }
+        bytes memory ret;
+        (p, ret) = _recorded(address(workMeter), abi.encodeCall(workMeter.run, (h, terms, allowance)), pass, 0);
+        (, result) = abi.decode(ret, (uint256, MineFlipGas.Result));
     }
 
     function _coolGenerated() private {
         vm.cool(address(h)); vm.cool(ContractAddresses.CRAPS); vm.cool(ContractAddresses.CRAPS_ENGINE);
     }
 
-    function _engineCeiling() private returns (uint256 engine) {
+    function _engineCeiling() private returns (uint256 engine, uint256 seed) {
         vm.etch(ContractAddresses.CRAPS_ENGINE, type(CrapsEngine).runtimeCode);
         address meterAddress = address(0xDEC17);
         vm.etch(meterAddress, type(DecimatorGeneratedEngineMeter).runtimeCode);
@@ -383,7 +590,7 @@ contract DecimatorJackpotGasTest is Test {
             (uint256 used, uint256 rolls) = meter.run(keccak256(abi.encode("ceiling", i)));
             if (rolls == 511) {
                 ++witnesses;
-                if (used > engine) engine = used;
+                if (used > engine) (engine, seed) = (used, i);
             }
         }
         assertGt(witnesses, 0);

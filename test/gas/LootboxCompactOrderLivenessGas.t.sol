@@ -128,23 +128,29 @@ contract LootboxCompactOrderLivenessGas is DeployProtocol {
     function test_Max2000EthBoxesAtScoreCodeExtremes() public {
         uint256[3] memory codes = [uint256(0), 2042, 4039];
         uint256 bound = GasBounds.HUMAN_ENTRY_GAS + 100 * GasBounds.HUMAN_BOX_GAS;
+        // Every case is measured cold before the first recorded replay of the test: a recording
+        // leaves the accounts and slots it touched warm for the rest of the test.
+        uint256[] memory cold = new uint256[](codes.length * 8);
+        for (uint256 k; k < codes.length; ++k) {
+            for (uint256 w; w < 8; ++w) {
+                uint256 base = vm.snapshotState();
+                _seedExtreme(codes[k], k, w);
+                _cool();
+                uint256 beforeGas = gasleft();
+                uint256 boxes = host.rawAtomic{gas: 25_000_000}(0);
+                cold[k * 8 + w] = beforeGas - gasleft();
+                assertEq(boxes, 100, "100 boxes");
+                vm.revertToStateAndDelete(base);
+            }
+        }
         uint256 peakOsaka;
         uint256 peakTotal;
         for (uint256 k; k < codes.length; ++k) {
             uint256 codePeak;
             for (uint256 w; w < 8; ++w) {
                 uint256 base = vm.snapshotState();
-                host.seedOrders(PLAYER, BoxOrderLib.boCustoms(100, MAX_BOX), _codes1(codes[k]),
-                    uint256(keccak256(abi.encode("compact-extreme", k, w))));
-                assertEq(BoxOrderLib.boScoreCode(host.entryAt(0)), codes[k], "seeded code");
-                assertEq(BoxOrderLib.boSizeWei(host.entryAt(0)), MAX_BOX, "2,000 ETH per box");
-                uint256 snap = vm.snapshotState();
-                _cool();
-                uint256 beforeGas = gasleft();
-                uint256 boxes = host.rawAtomic{gas: 25_000_000}(0);
-                uint256 osaka = beforeGas - gasleft();
-                assertEq(boxes, 100, "100 boxes");
-                vm.revertToStateAndDelete(snap);
+                _seedExtreme(codes[k], k, w);
+                uint256 osaka = cold[k * 8 + w];
                 _cool();
                 vm.startStateDiffRecording();
                 host.rawAtomic{gas: 25_000_000}(0);
@@ -163,6 +169,14 @@ contract LootboxCompactOrderLivenessGas is DeployProtocol {
         emit log_named_uint("100 x 2,000 ETH entry: peak cold osaka", peakOsaka);
         emit log_named_uint("100 x 2,000 ETH entry: peak no-reservoir glamsterdam", peakTotal);
         emit log_named_uint("entry bound HUMAN_ENTRY_GAS + 100 x HUMAN_BOX_GAS", bound);
+    }
+
+    /// @dev One 100 x 2,000 ETH order at score code `code` under the word of case (`k`, `w`).
+    function _seedExtreme(uint256 code, uint256 k, uint256 w) private {
+        host.seedOrders(PLAYER, BoxOrderLib.boCustoms(100, MAX_BOX), _codes1(code),
+            uint256(keccak256(abi.encode("compact-extreme", k, w))));
+        assertEq(BoxOrderLib.boScoreCode(host.entryAt(0)), code, "seeded code");
+        assertEq(BoxOrderLib.boSizeWei(host.entryAt(0)), MAX_BOX, "2,000 ETH per box");
     }
 
     /// forge-config: default.fuzz.runs = 12

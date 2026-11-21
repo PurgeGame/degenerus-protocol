@@ -190,6 +190,8 @@ contract JackpotBattle is CrapsLifecycleViews, CrapsProgressiveActions {
                 emit CrapsScheduledExpired(slot);
                 continue;
             }
+            // The resolver checks its own admission after the call reserve and its setup reads, so
+            // just above this one it can refuse: no seat settles and the loop stops.
             if (!MineFlipGas.canRun(meter, _SEAT_GAS_MAX, _SETTLE_TAIL_GAS + _CREDIT_GAS_MAX + _WORK_TAIL_GAS)) break;
             uint256 childAllowance = MineFlipGas.child(meter, _WORK_TAIL_GAS + 30_000);
             MineFlipGas.Result memory child = IReadCohortLifecycle(address(this)).resolveRngSlot_g1079(slot, childAllowance);
@@ -509,9 +511,14 @@ contract JackpotBattle is CrapsLifecycleViews, CrapsProgressiveActions {
         if (highFees != 0) emit JackpotHighCompsAccrued(slot, highFees, atRisk, lossBudget, highComps);
     }
 
+    /// @notice Convert banked normal passes of account `id` (0 = the caller) into `highCount` high
+    ///         passes at 21 normal passes each.
+    /// @custom:reverts BetLocked If the account is the house or the vault and scheduled admissions
+    ///                 are closed.
     function convertNormalToHigh(uint32 id, uint32 highCount) external {
         if (highCount == 0) revert BadPassCount();
         id = _accountId(id);
+        _vetBodyBank(id);
         uint256 word = _passCreditsById[id];
         uint256 cost;
         uint256 highs;
@@ -819,7 +826,8 @@ contract JackpotBattle is CrapsLifecycleViews, CrapsProgressiveActions {
             result.done = true;
             return result;
         }
-        // Each resolve settles at most _RESOLVE_MAX_SEATS; repeat while another batch fits.
+        // Each resolve settles at most _RESOLVE_MAX_SEATS; repeat while another batch fits. A
+        // resolver that refuses on its own admission settles no seat and ends the loop.
         while (MineFlipGas.canRun(meter, _SEAT_GAS_MAX, _SETTLE_TAIL_GAS + _CREDIT_GAS_MAX + _WORK_TAIL_GAS)) {
             uint256 childAllowance = MineFlipGas.child(meter, _WORK_TAIL_GAS + 30_000);
             MineFlipGas.Result memory batch = IReadCohortLifecycle(address(this)).resolveRngSlot_g1079(slot, childAllowance);

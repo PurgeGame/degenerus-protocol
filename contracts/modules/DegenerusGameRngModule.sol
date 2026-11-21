@@ -139,15 +139,10 @@ abstract contract DegenerusGameRngModule is GameDailyInternals, DegenerusGameRng
         // rngLockedFlag is set, so the building level here is always level + 1
         // and the window is [level .. _mintCeiling()], level + 2 after a seal). Stranding is impossible either
         // way — the unified sweep keeps naming a retired level until both its
-        // parities are empty — but the guard below protects DRAW ELIGIBILITY:
-        // when the NEXT daily request caps the jackpot counter, a freeze window
-        // opened now can cross into that final day via a stalled-word retry,
-        // which cannot swap (the committed cohort occupies the read slot). The
-        // stall-window buys would then materialize only after the level retires —
-        // safe but drawless. Skipping the swap keeps the whole evening cohort
-        // together on the write side for the final request's own commit, which
-        // its chain drains BEFORE the final draw. The word still serves the
-        // pending lootboxes.
+        // parities are empty. When the NEXT daily request is the final jackpot day's
+        // request, the swap is skipped: the whole evening cohort stays together on the
+        // write side for that request's own commit, which its chain drains BEFORE the
+        // final draw. The word still serves the pending lootboxes.
         bool activated = _rngActivateNextTickets();
         if (activated && _ticketQueueLength(_tqFarFutureKey(earlyTicketLevel)) != 0) {
             ticketsFullyProcessed = false;
@@ -157,10 +152,8 @@ abstract contract DegenerusGameRngModule is GameDailyInternals, DegenerusGameRng
             // evening latch, or an armed turbo whose advance chain broke on
             // ticket work before its request) is the same final-day shape: the
             // next daily request is the transition that collapses every draw
-            // under its lock, so a swap here, crossed by a stall, would hold the
-            // post-request cohort write-side until the level retires — safe but
-            // drawless. Refused, the whole day's cohort stays together on the
-            // write side for that request's own commit.
+            // under its lock. The swap is skipped, so the whole day's cohort stays
+            // together on the write side for that request's own commit.
             bool lastSwapAhead = (lastPurchaseDay && (jackpotFlags & JACKPOT_TURBO) != 0)
                 || (jackpotPhaseFlag && _isFinalJackpotDay(jackpotCounter, jackpotFlags));
             if (!lastSwapAhead) {

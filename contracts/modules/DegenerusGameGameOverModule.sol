@@ -61,7 +61,8 @@ interface IDegenerusAdminShutdown {
 interface IGNRUSGameOver {
     /// @notice Burn GNRUS's remaining unallocated balance at game over (GNRUS, one-shot).
     function burnAtGameOver() external;
-    /// @notice Record the final-sweep timestamp on GNRUS, anchoring its post-sweep recovery gates.
+    /// @notice Record the final-sweep timestamp on GNRUS, anchoring its post-sweep recovery gates,
+    ///         and cash out GNRUS's sDGNRS and DGNRS holdings (a refused burn is caught).
     function onFinalSweep() external;
 }
 
@@ -245,8 +246,10 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
     ///        calls as it needs, then the game-over drain fixes the pot they share (claimDeadVrf).
     ///      - Normal, for the purchase deadline only. The terminal word
     ///        is one this path requests itself after liveness froze purchases, and every
-    ///        cohort at the terminal level draws on it. There is no retry here: if that
-    ///        request goes unanswered for _VRF_DEAD_TIMEOUT the dead ending takes over.
+    ///        cohort at the terminal level draws on it. There is no retry here. No daily
+    ///        session completes after terminal entry, so the dead ending takes over once
+    ///        _VRF_DEAD_TIMEOUT has passed since the last completed daily session, which is
+    ///        never later than the terminal request's own timeout.
     function runGameOverAdvance(uint24 day, uint24 lvl, uint256 allowance) external returns (bool, uint8, bool, bool) {
         return _runGameOverAdvance(day, lvl, allowance);
     }
@@ -357,8 +360,8 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
         // is drainLevel-only; every other windowed cohort is dead value and is never touched.
         if (!_terminalWordApplied()) {
             if (!_rngRequestActive() || rngWordCurrent == RNG_WORD_WAITING) {
-                // No terminal word yet. Wait out a request in flight: a mid-day lootbox request,
-                // or this path's own terminal request.
+                // No terminal word yet. Wait out this path's own terminal request in flight; any
+                // earlier request was waited out above.
                 if (_rngRequestActive()) {
                     if (!work.progressed) revert RngNotReady();
                     return (true, STAGE_GAMEOVER, false);
@@ -419,9 +422,10 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
 
 
     /// @dev Request the ending's entropy without consulting any read consumer. The first attempt
-    ///      arms the request day and time and asks in the same call, so the 14-day dead-VRF
-    ///      clock starts when VRF is first asked; a coordinator refusal leaves them armed and
-    ///      records the refusal.
+    ///      arms the request day and time and asks in the same call, so the request's own 14-day
+    ///      clock (_vrfDead) starts when VRF is first asked; a coordinator refusal leaves them
+    ///      armed and records the refusal. The no-completed-day clock (_vrfDeadmanFired) started
+    ///      at the last completed daily session and expires no later.
     function _requestTerminalRng(MineFlipGas.Meter memory meter, TerminalWork memory work) private {
         if (!MineFlipGas.canRun(meter, GasBounds.RNG_TERMINAL_REQUEST, GasBounds.TERMINAL_TAIL)) return;
         if (rngRequestDay == 0) {
@@ -486,13 +490,13 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
     /// @dev One terminal drain batch: TICKET_SLOT_BIT on the anchor asks the worker for its
     ///      single-key terminal mode, draining exactly drainLevel's read side plus the foil
     ///      tail — every queued ticket at any other level is worthless at game over.
-    ///      FUND-RELEASE FALLBACK: a worker revert that carries an error of its own (an
-    ///      unforeseen error in ticket processing) is swallowed and reported as no batch, so the
-    ///      ending moves on: undrained tickets forfeit trait-bucket eligibility, but terminal fund
-    ///      release is never blocked.
-    ///      A failure that carries NO error of its own (empty return data, or EmptyRevert from a
-    ///      nested module call) is re-raised instead, before the ending's swap and after it. A
-    ///      batch is gas-bounded well under the per-transaction cap, so that is a caller
+    ///      FUND-RELEASE FALLBACK: a worker revert that carries any error other than a gas
+    ///      failure (an unforeseen error in ticket processing) is swallowed and reported as no
+    ///      batch, so the ending moves on: undrained tickets forfeit trait-bucket eligibility, but
+    ///      terminal fund release is never blocked.
+    ///      A gas failure (empty return data, InsufficientExecutionGas, WorkGasBound, or
+    ///      EmptyRevert from a nested module call) is re-raised instead, before the ending's swap
+    ///      and after it. A batch is gas-bounded well under the per-transaction cap, so that is a caller
     ///      withholding gas. Before the swap, swallowing it would close the one swap window with
     ///      the write cohort left out. After it, the payout the call falls through to is cheap
     ///      when no winning bucket is populated yet — a starved call could afford it and forfeit
@@ -517,8 +521,9 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
     }
 
     /// @dev Process game over by distributing remaining funds. Runs when the game-over trigger
-    ///      fires: the purchase deadline (30 game days without a purchase), or a hard stall (no
-    ///      day completed, or a VRF request unanswered, for 14 days). Sets terminal gameOver flag.
+    ///      fires: the purchase deadline (next prize pool still at or below its target 30 game days
+    ///      into the level's purchase window), or a hard stall (no day completed, or a VRF request unanswered, for
+    ///      14 days). Sets terminal gameOver flag.
     ///
     ///      Distribution logic:
     ///      - Deterministic ending at levels 0-9 only: refund of the price paid (capped at 20 ETH) per
@@ -640,7 +645,8 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
         // Flood FLIP's VAULT mint allowance as a one-shot worthless-token tombstone
         flip.tombstoneAtGameOver();
 
-        // next|future share one slot: zero both in a single SSTORE. currentPrizePool is its own slot.
+        // next|future share one slot: zero both in a single SSTORE. currentPrizePool shares slot 1
+        // with claimablePool and is cleared through its own setter.
         _setPrizePools(0, 0);
         _setCurrentPrizePool(0);
         yieldAccumulator = 0;
@@ -691,10 +697,10 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
             return true;
         }
         // All remaining funds go to the terminal ticket cohort, paid from the same latched level
-        // the terminal drain materialized: current `lvl` in jackpot phase and in the locked
-        // last-purchase transition (where level was already promoted), otherwise purchase-phase
-        // `lvl + 1`. Any leftover from empty trait buckets stays in the contract until
-        // _handleFinalSweep (30 days later) folds it into the three-way split to vault / sDGNRS / GNRUS.
+        // the terminal drain materialized. This ending starts only in the purchase phase outside
+        // the last-purchase day, so that level is `lvl + 1`. Any leftover from empty trait buckets
+        // stays in the contract until _handleFinalSweep (30 days later) folds it into the
+        // three-way split to vault / sDGNRS / GNRUS.
         // Pin the pot before returning even if this call has too little allowance
         // left to roll a first quadrant. 255 denotes priced but not yet initialized.
         _startJackpotWork(uint128(remaining), 0, terminalLevel, 3, 255, false, false);
@@ -726,7 +732,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
         _goWrite(GO_TIME_SHIFT, GO_TIME_MASK, uint48(block.timestamp));
     }
 
-    /// @notice Final sweep of all remaining funds after 30 days post-gameover.
+    /// @notice Final sweep of all remaining funds 30 days after the terminal payout completes.
     /// @dev Pays each sink (vault, sDGNRS, GNRUS) its whole game-side balance still
     ///      owed to it — claimable plus prepaid afking — then splits the remainder ~1/3
     ///      each (GNRUS absorbs the rounding wei). All other unclaimed player balances
@@ -826,7 +832,8 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
     ///      Three stages:
     ///        0 — uncreated queued entries: the terminal read, write and future queues, snap-adjusted as the ticket drain would have applied it, in QTY_SCALE
     ///            units (a fractional remainder counts as its fraction of an entry);
-    ///        1 — undrained foil packs of `lvl`, FOIL_PACK_ENTRIES entries each;
+    ///        1 — foil packs of `lvl` not yet filed (at or past their cohort's cursor and not
+    ///            marked ready), FOIL_PACK_ENTRIES entries each;
     ///        2 — created tickets: every trait bucket's occurrence count, and how many of the
     ///            256 buckets are non-empty.
     /// @param lvl The latched terminal ticket level.
@@ -878,10 +885,15 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
                             _saveDeadTally(1, dd, idx, uncreated);
                             return false;
                         }
-                        // idx < n proves this cached-base read is within the day's bucket.
+                        // idx < n proves this cached-base read is within the cohort's queue.
                         uint256 pack;
                         assembly ("memory-safe") { pack := sload(add(packs, idx)) }
-                        if (uint24(pack >> 160) == lvl) {
+                        // A filed pack's sixteen tickets are counted in stage 2, wherever its
+                        // cohort's cursor stands.
+                        if (
+                            uint24(pack >> 160) == lvl
+                                && _foilRecordWord(uint32(pack >> 192), lvl) & _FOIL_READY == 0
+                        ) {
                             uncreated += FOIL_PACK_ENTRIES * QTY_SCALE;
                         }
                         unchecked {
@@ -890,7 +902,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
                         }
                     } while (idx < n);
                 }
-                // Charge the day step too, so a long run of empty days stays metered.
+                // Charge the step to the next cohort too, so an empty cohort stays metered.
                 if (!MineFlipGas.canRun(meter, GasBounds.TERMINAL_TALLY_RECORD, GasBounds.TERMINAL_TALLY_TAIL)) {
                     _saveDeadTally(1, dd, idx, uncreated);
                     return false;
@@ -968,6 +980,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
     ///          32..55. Pays pot * weight / total for that ID's balance in that queue.
     ///        any other kind — an undrained foil pack: physical cohort (0/1) at bits 64..87, index into
     ///          foilQueue[cohort] at bits 0..63. Pays pot * FOIL_PACK_ENTRIES * QTY_SCALE / total.
+    ///          A pack marked ready is not one: its tickets are DEAD_REF_CREATED holdings.
     ///      Each holding pays once: a created ticket sets its claimed bit, a queued position
     ///      has its owed balance zeroed, a foil pack has its bucket word zeroed. Uncreated
     ///      weight claimed is debited from the tallied total, so claims can never exceed it.
@@ -1022,7 +1035,11 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
                 uint256 packSlot = _foilSlot(cohort, idx);
                 uint256 pack;
                 assembly ("memory-safe") { pack := sload(packSlot) }
-                if (uint32(pack >> 192) != playerId || uint24(pack >> 160) != lvl) revert E();
+                // A filed pack is paid through its created tickets.
+                if (
+                    uint32(pack >> 192) != playerId || uint24(pack >> 160) != lvl
+                        || _foilRecordWord(playerId, lvl) & _FOIL_READY != 0
+                ) revert E();
                 assembly ("memory-safe") { sstore(packSlot, 0) }
                 uint256 w = FOIL_PACK_ENTRIES * QTY_SCALE;
                 weight += w;

@@ -89,10 +89,10 @@ score >= 1200: multiplierUnits = 2400
 weight = wagerUnits * multiplierUnits
 ```
 
-Each entry snapshots canonical `playerActivityScore(recipient)` before this bet's quest credit. The
-already-read effective quest streak is reused; canonical score uses the routed ticket level, which
-can differ from Degenerette's payout-score level during jackpot phases. The multiplier is 1x at
-score 0, 2x at 400, and 3x at 1200 and above. Later score changes do not alter earlier entries.
+Each entry carries the bet's own frozen score: canonical `playerActivityScore(recipient)`, read
+against the routed ticket level before this bet's quest credit. The bet's payout score is the same
+value. The multiplier is 1x at score 0, 2x at 400, and 3x at 1200 and above. Later score changes do
+not alter earlier entries.
 
 Exact paid ETH is retained in the pool total and entry event. Only weight truncates; for example,
 0.00995 ETH counts as 99 wager units. Splitting the same total stake at the same score cannot gain
@@ -129,18 +129,22 @@ deity account cannot gift itself.
 - Each pool's three-bit `awardedMask` seals its awards before delivery, making repeated processing
   harmless. Nothing loops over all participants.
 
-Duplicate or weaker packed boons are ignored; stronger active lanes remain. Expired lanes are
-cleared before applying a fresh award. Different boon categories and currencies retain independent
-lanes. Instant activity awards add to the recipient's level count (saturating at `uint24.max`) and
-quest streak, shield awards saturate at `uint8.max`, and a whale-pass award adds two half passes to
-the recipient's pending claim. These collisions never invoke the manual recipient-limit reverts and
+Duplicate or weaker packed boons are ignored; stronger active lanes remain. An expired lane counts
+as empty when a fresh award is applied, and the automatic draw first clears the winner's expired
+lanes. A stronger award replaces the held lane's tier and expiry
+together; because a deity award, manual or automatic, is valid only on its award day, it can replace
+a weaker box-rolled boon that had up to four more days to run, and a manual gift needs no consent
+from the recipient. Different boon categories and currencies retain independent lanes. Instant
+activity awards add to the recipient's level count (saturating at `uint24.max`) and quest streak,
+shield awards saturate at `uint8.max`, and a whale-pass award adds two half passes to the
+recipient's pending claim. These collisions never invoke the manual recipient-limit reverts and
 never cause a reroll or extra recipient selection.
 
 Awards are issued only while the logical game day equals the award day (`awardDay == _gameDay()`); a
 pool whose award day passes undrawn grants nothing later. Pools are held in a two-day ring (below),
 so a day's pool stays inspectable through its draw day; older pools are recoverable from events.
-Empty, expired or already processed work does not block advance. After game over no fresh boons are
-issued.
+Empty, expired or already processed work does not block advance. After game over the automatic draw
+issues nothing; a paid deity's manual gift has no game-over check and moves no ETH or stETH.
 
 Manual issuance by VAULT or sDGNRS is rejected, including requests through an approved operator.
 Public paid deities retain their ordinary manual-gift rules.

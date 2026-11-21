@@ -4,9 +4,11 @@ import {GameTimeLib} from "../../contracts/libraries/GameTimeLib.sol";
 import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
-import {Vm} from "forge-std/Vm.sol";
+import {Vm, VmSafe} from "forge-std/Vm.sol";
 import {DegeneretteReference as Ref} from "../helpers/DegeneretteReference.sol";
 import {DegeneretteQueue as DQ} from "../helpers/DegeneretteQueue.sol";
+import {GlamsterdamReprice} from "../helpers/GlamsterdamReprice.sol";
+import {ColdAccessPremium} from "../helpers/ColdAccessPremium.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
 import {GameSlots} from "../helpers/GameSlots.sol";
@@ -16,7 +18,9 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 /// small pool so every paying spin takes the cap-conversion path. Assertions check
 /// the actual generated-ticket score, cap count, settlement and 30M gas budget.
 /// The candidate search supplies a reproducible stress case, not an exhaustive
-/// upper bound over every possible ticket sequence.
+/// upper bound over every possible ticket sequence. Each measured stage is also re-priced
+/// under Glamsterdam without a state-gas reservoir from a cold-transaction Osaka frame
+/// (ColdAccessPremium), and both are held to the same admission.
 contract KeeperResolveBetWorstCaseGas is DeployProtocol {
     // -------------------------------------------------------------------------
     // Storage-slot constants (DegenerusGame; confirmed via `forge inspect storage`)
@@ -76,6 +80,16 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
     /// @dev The 25-spin worst-case (word, ticket): greedy ticket wins on all 25 spins.
     uint256 private worstCaseWord25;
     uint32 private worstCaseTicket25;
+
+    /// @dev One measured mineRun: its cold Osaka frame and the no-reservoir Glamsterdam re-pricing.
+    struct Glam {
+        uint256 osaka;
+        uint256 exec;
+        uint256 state;
+    }
+
+    /// @dev State snapshot from just before the last `_crankResolve`, for its later re-pricing.
+    uint256 private lastCrankPre;
 
     function setUp() public {
         _deployProtocol();
@@ -152,6 +166,7 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
         // The headline assertion, per checkpoint: the worst case resolves inside the
         // admission the engine charges for it (the declared bound, itself far under 10M).
         assertLe(stageGas, bound, "10-spin all-match resolve stays inside its declared admission");
+        _assertGlamsterdam(lastCrankPre, bound, "10-spin all-match resolve");
         assertLe(bound, 10_000_000, "the declared admission is one realistic chunk");
 
         emit log_named_uint("worst_case_resolve_bet_10spin_allmatch_gas", stageGas);
@@ -190,6 +205,7 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
 
         // Bracket the whole N-item stage; divide by N for the per-1-spin-item marginal.
         (, uint256 totalGas) = _crankResolve();
+        uint256 itemsPre = lastCrankPre;
         uint256 perItemMarginal = totalGas / nItems;
 
         // Non-vacuity: every item resolved (queue words zeroed), so the marginal is a real per-item cost.
@@ -215,6 +231,7 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
         emit log_named_uint("per_1spin_item_resolve_marginal_gas", perItemMarginal);
         emit log_named_uint("per_1spin_item_resolve_batch_total_gas", totalGas);
         emit log_named_uint("worst_case_resolve_bet_10spin_allmatch_gas", worstCaseGas);
+        _assertGlamsterdam(itemsPre, declared, "8 one-spin items");
     }
 
     // =========================================================================
@@ -301,6 +318,7 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
         // Headline assertion, per checkpoint: the 25-spin worst case resolves inside the
         // admission the engine charges for it (the declared bound, itself far under 10M).
         assertLe(gasUsed, bound, "25-spin all-match resolve stays inside its declared admission");
+        _assertGlamsterdam(lastCrankPre, bound, "25-spin all-match resolve");
         assertLe(bound, 10_000_000, "the declared admission is one realistic chunk");
 
         // Absorption: re-measure the legacy 10-spin worst case in this test's own state, and assert
@@ -354,6 +372,7 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
         assertEq(game.degeneretteBetInfo(INDEX, betId), 0, "non-vacuity: bet resolved via the sweep");
 
         assertLe(gasUsed, bound, "sweep: 25-spin all-match resolve stays inside its declared admission");
+        _assertGlamsterdam(lastCrankPre, bound, "sweep: 25-spin all-match resolve");
         assertLe(bound, 10_000_000, "the declared admission is one realistic chunk");
 
         emit log_named_uint("worst_case_resolve_bet_25spin_allmatch_via_sweep_gas", gasUsed);
@@ -389,6 +408,7 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
         assertEq(game.degeneretteBetInfo(INDEX, flipBet), 0, "non-vacuity: FLIP bet resolved via sweep");
 
         assertLe(gasUsed, bound, "sweep: max mixed-currency batch stays inside its declared admissions");
+        _assertGlamsterdam(lastCrankPre, bound, "sweep: max mixed-currency batch");
         assertLe(bound, 10_000_000, "the declared admissions fit one realistic chunk");
 
         emit log_named_uint("worst_case_mixed_currency_batch_via_sweep_gas", gasUsed);
@@ -597,8 +617,10 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
     /// @dev Resolve the delivered cohort with one cold mineFlip. Bets resolve only as the engine's
     ///      Degenerette read consumer; `stageGas` isolates that stage: the same call against the
     ///      same state with the read bet count zeroed is the baseline every other stage shares.
-    ///      Logs are recorded for the measured call only.
+    ///      Logs are recorded for the measured call only. `lastCrankPre` keeps the pre-state for
+    ///      `_assertGlamsterdam`.
     function _crankResolve() internal returns (uint256 gasUsed, uint256 stageGas) {
+        lastCrankPre = vm.snapshotState();
         uint256 snap = vm.snapshotState();
         uint256 readSlot = uint256(vm.load(address(game), bytes32(GameSlots.DEGENERETTE_READ_COUNT)));
         vm.store(address(game), bytes32(GameSlots.DEGENERETTE_READ_COUNT),
@@ -618,6 +640,64 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
         stageGas = gasUsed - baseline;
         emit log_named_uint("cold mineFlip gas", gasUsed);
         emit log_named_uint("Degenerette stage gas (mineFlip minus empty-queue baseline)", stageGas);
+    }
+
+    /// @dev The cranker's mineRun re-priced under Glamsterdam without a state-gas reservoir. Its
+    ///      Osaka frame is a fully warm replay after the recorded run plus the cold-access premium
+    ///      of the recorded accesses (ColdAccessPremium). State is unchanged.
+    function glamsterdamRun() external returns (Glam memory r) {
+        require(msg.sender == address(this), "fixture self-call");
+        uint256 snap = vm.snapshotState();
+        vm.prank(cranker);
+        vm.startStateDiffRecording();
+        (bool ok, bytes memory ret) = address(game).call(abi.encodeCall(game.mineRun, (0)));
+        VmSafe.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
+        vm.stopMappingRecording();
+        if (!ok) assembly ("memory-safe") { revert(add(ret, 32), mload(ret)) }
+        vm.revertToState(snap);
+        vm.prank(cranker);
+        (ok,) = address(game).call(abi.encodeCall(game.mineRun, (0)));
+        require(ok, "warm replay");
+        VmSafe.Gas memory used = vm.lastCallGas();
+        vm.revertToStateAndDelete(snap);
+        uint256 count;
+        for (uint256 i; i < acc.length; ++i) {
+            address a = acc[i].account;
+            // The cranker is the transaction's sender, warm in a real transaction.
+            if (a == address(vm) || a == cranker
+                || (a == address(this) && acc[i].kind != VmSafe.AccountAccessKind.Resume)) continue;
+            acc[count++] = acc[i];
+        }
+        assembly ("memory-safe") { mstore(acc, count) }
+        (uint256 premium,,) = ColdAccessPremium.premium(acc, address(game));
+        GlamsterdamReprice.Result memory p = GlamsterdamReprice.reprice(
+            uint256(used.gasLimit) - uint256(used.gasRemaining) + premium, acc, address(game));
+        (r.osaka, r.exec, r.state) = (p.osakaExec, p.glamsterdamExec, p.stateGas);
+    }
+
+    /// @dev The crank from snapshot `pre` re-priced: the same measured call and empty-queue baseline,
+    ///      each a cold Osaka frame and a no-reservoir Glamsterdam total, against the admission the
+    ///      stage was charged. State-diff recording leaves what it touches warm for the rest of the
+    ///      test, so this runs after the test's last plain crank; the current state is restored.
+    function _assertGlamsterdam(uint256 pre, uint256 admission, string memory label) internal {
+        uint256 post = vm.snapshotState();
+        vm.revertToState(pre);
+        uint256 readSlot = uint256(vm.load(address(game), bytes32(GameSlots.DEGENERETTE_READ_COUNT)));
+        vm.store(address(game), bytes32(GameSlots.DEGENERETTE_READ_COUNT),
+            bytes32(readSlot & ~(uint256(type(uint32).max) << (GameSlots.DEGENERETTE_READ_COUNT_OFFSET * 8))));
+        Glam memory base = this.glamsterdamRun();
+        vm.revertToState(pre);
+        Glam memory full = this.glamsterdamRun();
+        assertTrue(vm.revertToStateAndDelete(post), "restore the post-crank state");
+        uint256 osaka = full.osaka - base.osaka;
+        uint256 total = full.exec + full.state - base.exec - base.state;
+        emit log_named_uint(string.concat("glamsterdam osaka frame: ", label), osaka);
+        emit log_named_uint(string.concat("glamsterdam exec: ", label), full.exec - base.exec);
+        emit log_named_int(string.concat("glamsterdam state: ", label), int256(full.state) - int256(base.state));
+        emit log_named_uint(string.concat("glamsterdam total: ", label), total);
+        emit log_named_uint(string.concat("glamsterdam admission: ", label), admission);
+        assertLe(osaka, admission, string.concat(label, ": cold Osaka frame exceeds its declared admission"));
+        assertLe(total, admission, string.concat(label, ": Glamsterdam total exceeds its declared admission"));
     }
 
     /// @dev The engine's admission for one ETH bet of `spins` (MineFlipGasBounds), plus the stage's

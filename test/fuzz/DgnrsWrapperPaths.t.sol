@@ -4,6 +4,7 @@ import {GameFunding} from "../helpers/GameFunding.sol";
 import {OwnerTargetCall} from "../helpers/OwnerTargetCall.sol";
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
+import {RedemptionFixture} from "./helpers/RedemptionFixture.sol";
 import {sDGNRS} from "../../contracts/sDGNRS.sol";
 import {DGNRS} from "../../contracts/DGNRS.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
@@ -272,5 +273,55 @@ contract DgnrsWrapperPaths is DeployProtocol {
         assertTrue(icons32.bootstrapClosed());
         vm.prank(ContractAddresses.OWNER_GOVERNANCE);
         icons32.finalize();
+    }
+}
+
+/// @title DgnrsUnwrapRngGuard -- `unwrapTo` is refused from any VRF request until its word is fully
+///        consumed, including a mid-day request that never takes the daily lock.
+contract DgnrsUnwrapRngGuard is RedemptionFixture {
+    uint256 private constant AMOUNT = 1_000e12;
+
+    function _vaultUnwrap() private {
+        vm.prank(ContractAddresses.VAULT);
+        dgnrs.unwrapTo(address(0xBEEF), AMOUNT);
+    }
+
+    function _vaultUnwrapReverts() private {
+        vm.prank(ContractAddresses.VAULT);
+        vm.expectRevert(DGNRS.Unauthorized.selector);
+        dgnrs.unwrapTo(address(0xBEEF), AMOUNT);
+    }
+
+    function test_unwrapWorksWithNoRequestOutstanding() public {
+        assertFalse(game.rngLocked(), "fixture: no daily lock");
+        assertTrue(game.rngComplete(), "fixture: previous cycle fully consumed");
+        _vaultUnwrap();
+        assertEq(sdgnrs.balanceOf(address(0xBEEF)), AMOUNT);
+    }
+
+    function test_unwrapRefusedWhileMiddayRequestUnanswered() public {
+        _sendMiddayRequest();
+        assertFalse(game.rngLocked(), "precondition: a mid-day request takes no daily lock");
+        assertFalse(game.rngComplete(), "precondition: the request is unanswered");
+        _vaultUnwrapReverts();
+        assertEq(sdgnrs.balanceOf(address(0xBEEF)), 0, "nothing moved");
+    }
+
+    function test_unwrapRefusedUntilDeliveredMiddayWordIsConsumed() public {
+        _sendMiddayRequest();
+        assertTrue(_fulfillPending(0xBEEF));
+        assertFalse(game.rngComplete(), "precondition: word delivered but not yet consumed");
+        _vaultUnwrapReverts();
+    }
+
+    function test_unwrapWorksOnceMiddayWordIsConsumed() public {
+        _sendMiddayRequest();
+        _fulfillPending(0xBEEF);
+        _complete(0xBEEF);
+        assertFalse(game.rngLocked(), "precondition: no daily lock");
+        assertTrue(game.rngComplete(), "precondition: the word is fully consumed");
+        _vaultUnwrap();
+        assertEq(sdgnrs.balanceOf(address(0xBEEF)), AMOUNT);
+        assertEq(dgnrs.totalUnwrapped(), AMOUNT);
     }
 }

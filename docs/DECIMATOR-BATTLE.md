@@ -3,7 +3,11 @@
 Decimator burns build a virtual craps starting stack. Entries compete by peak bankroll; that
 bankroll is a score, not a token balance players can withdraw. Ordinary x5 levels, excluding x95,
 combine the original pool with generated entries funded by that level's single jackpot day. x00 is
-an original-only battle.
+an original-only battle. The burn window opens at the daily request that promotes the game to level
+x4 (not x94) or x99 and closes at the request that promotes it to x5 or x00, before that request's
+word exists; burns while level L is current enter the round for L+1. At x5 a nonempty round
+reserves 10% of the future pool after that transition's skim; at x00, 30% of the future pool after
+the skim and the x00 yield-accumulator dump, before the BAF draw.
 
 ## Entry and automatic burn
 
@@ -33,8 +37,8 @@ original count is checked against uint40. Burns that exceed these storage packin
 ## Jackpot-generated entries
 
 Ordinary x5 keeps its ticket legs and solo/golden-ticket delivery. Let E be the sum of the day's
-four priced ETH-leg bucket shares (a bucket with no winner target has no share, so E is then below
-the leg), Q its normal solo share (about 60%), A the total of active non-solo shares, N the original
+four priced ETH-leg bucket shares (equal to the leg: a nonzero leg gives every bucket a winner
+target), Q its normal solo share (about 60%), A the total of active non-solo shares, N the original
 count, C its total credited stack and P the reserved Decimator pool. For positive N and P:
 
 ```text
@@ -95,9 +99,11 @@ id = (pos+r)%T + 1
 ```
 
 Strata give distinct survivors. Over all rotations every slot appears equally often, so inclusion
-probability is S/T under uniform hash draws, independent of ID. The usual negligible modulo bias of
-256-bit hashes remains. Unselected IDs are never visited. The complete survivor set replays from
-(word,T); plan terms bind before any run.
+probability is S/T under uniform hash draws, independent of ID. Survival is not independent across
+IDs: each stratum yields one survivor, so nearby IDs are negatively correlated, while each ID's
+inclusion probability stays S/T. The usual negligible modulo bias of 256-bit hashes remains.
+Unselected IDs are never visited. The complete survivor set replays from (word,T); plan terms bind
+before any run.
 
 `H` is keccak256 over full 32-byte words with a numeric `RngTags` domain first. Sampling uses
 `DECIMATOR_ROTATION` and `DECIMATOR_SAMPLE`. Original and generated runs share `H(DECIMATOR_DICE,

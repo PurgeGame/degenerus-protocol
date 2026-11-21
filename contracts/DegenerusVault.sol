@@ -696,7 +696,9 @@ contract DegenerusVault {
     ///      have no exit, and moves the Vault's AFKing seats.
     ///      No exclusion list, because nothing here needs one: the vault reads no NFT
     ///      ownership or balance for accounting; its own subscription needs no seat; and
-    ///      deity passes are soulbound, so they revert on their own.
+    ///      deity passes are soulbound, so they revert on their own. The selector is also
+    ///      ERC-20 `transferFrom`, which spends the Vault's allowance to itself; the Vault never
+    ///      grants one, so stETH backing cannot leave through this function.
     ///      Plain transferFrom, not safeTransferFrom: the caller picks `to`, and the receiver
     ///      hook would only add a failure mode on contract recipients.
     /// @param token NFT contract to sweep from.
@@ -874,9 +876,12 @@ contract DegenerusVault {
     }
 
     /// @notice Preview ETH/stETH output for burning a given amount of DGVE shares
+    /// @dev The total is the burn's value; the split uses current balances. When that value
+    ///      exceeds the Vault's own balance, the burn first claims Game winnings and withdraws
+    ///      prepaid AFKing funding, which can change the split.
     /// @param amount DGVE shares to burn
-    /// @return ethOut ETH that would be sent
-    /// @return stEthOut stETH that would be sent
+    /// @return ethOut Estimated ETH output (based on current balances)
+    /// @return stEthOut Estimated stETH output (based on current balances)
     /// @custom:reverts Insufficient If amount is 0 or exceeds total supply
     function previewEth(uint256 amount) external view returns (uint256 ethOut, uint256 stEthOut) {
         uint256 supply = ethShare.totalSupply();

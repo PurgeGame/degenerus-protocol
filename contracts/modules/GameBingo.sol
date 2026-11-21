@@ -10,7 +10,7 @@ import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
 abstract contract GameBingo is DegenerusGameStorage {
     /// @notice Thrown when the player (the claim beneficiary — claims are permissionless, so not
     ///         necessarily the caller) is not a deity holder and their affiliate score is below
-    ///         AFFILIATE_DGNRS_MIN_SCORE.
+    ///         AFFILIATE_DGNRS_MIN_SCORE, or when a caller claiming for itself has no wallet ID.
     error ScoreTooLow();
 
     /// @notice Thrown when the claim beneficiary (`player`, not necessarily the caller) does

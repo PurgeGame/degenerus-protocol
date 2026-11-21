@@ -50,8 +50,9 @@ abstract contract MinerloopGasProbe is Test {
         assertTrue(vm.revertToState(snap));
         vm.recordLogs();
         vm.startStateDiffRecording();
-        (, bytes memory replay) = this.minerloopMeasured(target, sender, data, cap);
+        (uint256 replayUsed, bytes memory replay) = this.minerloopMeasured(target, sender, data, cap);
         VmSafe.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
+        vm.stopMappingRecording();
         assertEq(_tableTranscript(vm.getRecordedLogs()), transcript,
             "cold measurement and replay must commit identical ordered table outcomes");
         assertEq(replay, result, "recorded replay must preserve returned progress");
@@ -63,6 +64,12 @@ abstract contract MinerloopGasProbe is Test {
             acc[count++] = acc[i];
         }
         assembly ("memory-safe") { mstore(acc, count) }
+        // After an earlier recording in the same test the "cold" call reads warm; the replay's
+        // cold-equivalent restores it (and equals the measured figure on a test's first probe).
+        uint256 rebuilt = GlamsterdamReprice.coldEquivalent(replayUsed, acc, target, address(this));
+        emit log_named_uint("osaka_cold_measured", used);
+        emit log_named_uint("osaka_cold_rebuilt", rebuilt);
+        if (rebuilt > used) used = rebuilt;
         r = GlamsterdamReprice.reprice(used, acc, target);
         bytes32 replayState = _poststate(acc);
         assertTrue(vm.revertToState(coldPost));

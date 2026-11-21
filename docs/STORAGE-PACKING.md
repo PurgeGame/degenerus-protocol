@@ -49,7 +49,7 @@ Source: [contracts/libraries/BitPackingLib.sol](../contracts/libraries/BitPackin
 
 | Word / field | Bits or lanes | Meaning |
 | --- | --- | --- |
-| `mintPacked_[id]` | 0–23 | Last purchased level (`LAST_LEVEL_SHIFT`). |
+| `mintPacked_[id]` | 0–23 | Last minted level, or a pass's freeze horizon (`LAST_LEVEL_SHIFT`). |
 | `mintPacked_[id]` | 24–47 | Level count (`LEVEL_COUNT_SHIFT`). |
 | `mintPacked_[id]` | 48–71 | Level streak (`LEVEL_STREAK_SHIFT`). |
 | `mintPacked_[id]` | 72–95 | Last purchase day (`DAY_SHIFT`). |

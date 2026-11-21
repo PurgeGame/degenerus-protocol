@@ -39,8 +39,8 @@ pinned call a STATICCALL; the table calls the compact wrapper, which runs `settl
 seat's whole run (board, scatter, shooter boost and rotation) under the shared 600-roll
 between-shooter budget and 1,111-roll ceiling and returns the payment, whole-FLIP bankroll, battle
 ranking score (goals: high point, then ending bankroll; busts: shooters completed, then whether
-anything was kept, then high point, then remainder) and longest hand, so the comparator lives in the
-engine, not the table
+anything was kept, then high point (saturating at 2^33 − 1 FLIP), then remainder) and longest hand,
+so the comparator lives in the engine, not the table
 
 **Jackpot battle lifecycle.** `JackpotBattle is CrapsLifecycleViews, CrapsProgressiveActions` (both
 on `CrapsBattleStorage`). Under `eip170` it is the `CRAPS_LIFECYCLE_MODULE` deployment
@@ -64,25 +64,31 @@ allowance between miner calls. Penalty and neutral boxes draw nothing. Daily AFK
 read nor draw the allowance: their whole amount takes the frozen multiplier, bounded by the 1..8
 daily quantity.
 
-Queued orders use a basis-point eligible fraction shared across their boxes; direct boxes use an
-exact-wei calculation. Pass/cover grants draw against count times the stored per-box value (whole
-0.001 ETH units), with discarded dust remaining in the funded pools. Dust can move the rounded
-fraction by one basis point: a 1 ETH + 1 wei cover at 9 ETH used represents 1 ETH and gets a
-10,000-bps fraction rather than 9,999 bps. Its bonus budget at 145% EV increases by 0.000045 ETH,
-not merely one wei.
+Queued and redemption orders use a basis-point eligible fraction shared across their boxes; direct
+and recirculated boxes use an exact-wei calculation. Pass/cover grants draw against count times the
+stored per-box value (whole 0.001 ETH units), with discarded dust remaining in the funded pools.
+Dust can move the rounded fraction by one basis point: a 1 ETH + 1 wei cover at 9 ETH used
+represents 1 ETH and gets a 10,000-bps fraction rather than 9,999 bps. Its bonus budget at 145% EV
+increases by 0.000045 ETH, not merely one wei.
 
 Each ordinary purchase picks one box type: small, medium or large (1x/5x/25x the purchase level's
 ticket price, resolved at purchase) or a custom of 0.01–2,000 ETH in 0.001 ETH steps, 1–100 boxes
 (input `[quantity:7][kind:2][customUnits:21]`). The queue stores one 85-bit entry per order, three
 per storage word: wallet ID, per-box units, a 12-bit activity-score code (exact to 2,042, then
-14-point steps to 30,000), effective boost bps, quantity and the distress flag. Logical position `p`
+14-point steps to 30,000), the boost (the capped uplift in whole basis points of the order, rounded
+down), quantity and the distress flag. Logical position `p`
 lives in word `p / 3` at bit `(p % 3) * 85`; write counts, `boxCursor`, event tags and seeds stay in
 logical positions, so the worker admits, settles and resumes one order at a time at any lane. A
 lane-0 append overwrites the whole word; lanes 1 and 2 OR into it. System grants (whale, lazy,
 deity, subscription cover) floor per box to whole units and stay inside the 2,000 ETH cap by their
 formulas; a whale purchase of up to 1,000 paid passes folds its 10% box leg to `min(quantity, 100)`
 boxes of at most 4 ETH. Redemption, daily AFKing, direct and recirculated boxes never enter the
-queue and carry full-width wei amounts.
+queue and carry full-width wei amounts. The activity multiplier runs from 90% to 145%: below 100% it
+scales the whole box, and above 100% it scales only the allowance-eligible share, the rest paying
+100%. A multi-box order applies its bonus-eligible share in whole basis points of the order, rounded
+down, while the allowance is debited for the whole draw. A direct box from a Degenerette win or a
+recirculated ETH spin awards tickets on the roll that would otherwise start an ETH spin, and pays no
+WWXRP consolation when a ticket roll rounds to zero.
 
 ## Degenesis sale
 
@@ -100,27 +106,27 @@ AFKing deliveries, Degenesis purchases and the Vault and sDGNRS bodies earn noth
 permission to spend, not payment, and expires unused when the window closes.
 
 **Purchase.** `purchaseDegenesisBox(uint32 id, uint256 amount)` is payable, a standalone entry
-forwarded by the Game facade to the module. Sale day 2..8 and liveness are required, `amount` is at
-least 0.01 ETH in whole 0.0001-ETH units, and the unit count fits 38 bits (about 27.5M ETH per
-order). It consumes `amount` of credit 1:1, pays from `msg.value`, then the buyer's claimable, then
-prepaid AFKing balance (overpay is credited to the payer's AFKing), and adds `amount` to
-`claimablePool`. The Vault wallet ID cannot buy. It pays no affiliate commission and earns no quest,
-streak or activity credit. Orders pack three to a slot (`degenesisOrders`: ID 32, units 38,
-seconds-into-day 15 bits per lane); `degenesisDays[c]` holds the cohort's volume `V` in units, its
-order count and the split flag.
+forwarded by the Game facade to the module. Sale day 2..8 is required and liveness must not have
+triggered; `amount` is at least 0.01 ETH in whole 0.0001-ETH units, and the unit count fits 38 bits
+(about 27.5M ETH per order). It consumes `amount` of credit 1:1, pays from `msg.value`, then the
+buyer's claimable, then prepaid AFKing balance (overpay is credited to the payer's AFKing), and adds
+`amount` to `claimablePool`. The Vault wallet ID cannot buy. It pays no affiliate commission and
+earns no quest, streak or activity credit. Orders pack three to a slot (`degenesisOrders`: ID 32,
+units 38, seconds-into-day 15 bits per lane); `degenesisDays[c]` holds the cohort's volume `V` in
+units, its order count and the split flag.
 
 **Cohort split and pricing.** `prepareDegenesis_g47(day)` runs inside `prepareRequestBoundary`,
 before the daily request, while `degenesisClosed < 7`. A cohort is sealed once its day index is
 below the request day. The split sends one quarter of the cohort's ETH volume to each of the Vault
 budget (`degenesisVaultBudget`, inside `claimablePool`, excluded from Vault claimables), sDGNRS
 AFKing funding, the future pool and insurance in `yieldAccumulator`. The Vault and sDGNRS quarters
-stay inside `claimablePool`; the future and insurance quarters leave it together. A request after a
-stretch with no requests splits every sealed cohort at once. Pricing then closes empty sealed
-cohorts and prices one nonempty cohort once the previous cohort has closed, with `Q = min(2.5T, 2/3
-of the Degenesis pool)` and `T` = 20B tokens on days 1-3, 10B on days 4-7. Pricing writes
-`degenesisActive` (Q, paid, bound day, cursor). A cohort's sDGNRS awards sum to at most `1.5Q`,
-which the 2/3 cap keeps inside the pool balance. Cohorts price strictly in order, so a settlement
-backlog delays the next cohort's randomness and never lowers its rate.
+stay inside `claimablePool`; the future and insurance quarters leave it together. Requests advance
+one logical day at a time, so each request seals and splits at most one cohort. Pricing then closes
+empty sealed cohorts and prices one nonempty cohort once the previous cohort has closed, with `Q =
+min(2.5T, 2/3 of the Degenesis pool)` and `T` = 20B tokens on days 1-3, 10B on days 4-7. Pricing
+writes `degenesisActive` (Q, paid, bound day, cursor). A cohort's sDGNRS awards sum to at most
+`1.5Q`, which the 2/3 cap keeps inside the pool balance. Cohorts price strictly in order, so a
+settlement backlog delays the next cohort's randomness and never lowers its rate.
 
 **Binding.** `_recordDailyRng` copies the bound day's word into `degenesisWord` when
 `degenesisClosed < 7 && boundDay == day`. V, the pool balance and the orders are fixed before the
@@ -155,7 +161,9 @@ and burns the remaining `Pool.Degenesis` balance, once.
 maxCost)` (owner only) reaches the module through the facade. It moves `maxCost` from
 `degenesisVaultBudget` into Vault claimable, runs the ordinary claimable-funded Mint or Whale
 purchase, and returns what the purchase did not take. The selected allocated account receives the
-products and normal rewards, without Degenesis credit or operator approval. Recipient 0 selects the
+products and normal rewards, without Degenesis credit or operator approval. The purchase is the
+recipient's own: a recipient with no stored referral is locked to no referrer, as by its own
+uncoded purchase (GNRUS stores no referral). Recipient 0 selects the
 Vault. The Vault ledger returns to its original balance; the actual cost leaves the restricted
 budget and `claimablePool` for the ordinary purchase pools. sDGNRS's daily subscription spends
 claimable above its sentinel before AFKing funding. `topUpSdgnrsAfking_g318()` tops its AFKing
@@ -184,7 +192,9 @@ introduction](ARCHITECTURE.md#game-days-deadlines-and-the-ending).
 
 Ordinary purchase dailies budget 4% of the future pool, split 75% to ticket backing in the next
 pool, 23% to ETH prizes, and 2% to the insurance accumulator. These are 3%, 0.92%, and 0.08% of the
-future pool respectively, before integer rounding. Unpaid ETH stays in the future pool. Level 0
+future pool respectively, before integer rounding. The ticket leg sizes its winners and pass
+surplus on the same half of its ETH that prices its tickets (see
+[economic disclosures](../ECONOMIC_DISCLOSURES.md)). Unpaid ETH stays in the future pool. Level 0
 (`purchaseLevel == 1`) runs a FLIP-only daily path instead of this ETH drip.
 
 At the purchase-to-jackpot transition, the base next-to-future skim uses the funding age: the
@@ -203,13 +213,18 @@ day later, so the skim steps a consolidation age above 1 back by one day; a day-
 
 The level bonus is one percentage point per ten levels within the century, using the incoming
 purchase level; the trough excludes it. Interpolation floors only after multiplying by elapsed days,
-so day 30 reaches the exact endpoint. If a funded transition finishes later, the rising slope
-continues up to a 100% base-rate ceiling. The x9 bonus (2 points), ratio adjustment, overshoot
-surcharge, randomness, 1% insurance skim, and 80% cap on the actual future-pool take apply on top.
+so day 30 reaches the exact endpoint. A closure latches at the latest at the seal of purchase day
+32, so the funding age is at most 32: the rising slope ends at 47.72% plus 24/22 of the level bonus
+(57.54% at x90–x99), and the 100% base-rate ceiling never binds. The x9 bonus (2 points), ratio
+adjustment, overshoot surcharge, randomness, 1% insurance skim, and 80% cap on the actual
+future-pool take apply on top. The skimmed next pool then merges into the current pool. At every
+transition except x00, 15% of the future pool left after the BAF and Decimator draws becomes the new
+next pool. When its gate wins, the BAF pool is 10% of the future pool at an x0 transition and 20% at
+level 50 and at x00; the Decimator pool is sized in [Decimator battle](DECIMATOR-BATTLE.md).
 
 The level-0 transition (`purchaseLevel == 1`) uses its own curve by funding age: 30% through day 8,
-down to 13% on day 21, back to 30% on day 35, then +0.14 percentage points per day. An x01
-transition in a later century uses the curve in the table.
+down to 13% on day 21, then up by 17/14 percentage points per day to 26.35% at day 32, the latest
+funding age. An x01 transition in a later century uses the curve in the table.
 
 ## AFKing subscriptions
 
@@ -226,9 +241,12 @@ starts the quest-side run with `DegenerusQuests.beginAfking(id, today)`; its fir
 first credited day are the next day. Changing quantity or mode settles the run first and keeps its
 start. Cancelling settles, then `finalizeAfking(id, earnedStreak, endpoint)` hands the accumulated
 streak back to Quests and anchors the manual quest streak at the run's reward endpoint. Unfunded
-members expire at the daily pass (rewards not yet settled are forfeit); loan seizure cancels a
-borrower's run. The member set is capped at 10,002 (`SUBSCRIBER_CAP`): 10,000 player places plus the
-Vault's and sDGNRS's exempt subscriptions, which hold no seat. Live seats plus members are capped at
+members expire at the daily pass; loan seizure stops a borrower's run and the next daily pass
+removes it (no pass runs once liveness has triggered). Either removal forfeits the days not yet
+settled: the member's own FLIP rewards and its referrer chain's affiliate base for those days are
+lost, while the streak handed back to Quests still counts them. The member set is capped at 10,002
+(`SUBSCRIBER_CAP`): 10,000 player places plus the Vault's and sDGNRS's exempt subscriptions, which
+hold no seat. Live seats plus members are capped at
 the same 10,002 (`SEAT_CAP`). The first 5,000 seats (`FREE_TRANCHE`, serials from 1) are minted free
 to pass buyers, one per purchasing account for life; the Vault owner mints the rest
 (`afkingSeatMint`) once all 5,000 are minted. A member leaving the set frees room for another Vault
@@ -247,8 +265,17 @@ Rewards are computed at settlement from the run's checkpoint, not stored per day
 (the slot-0 quest reward), plus 100 per ticket per day in ticket mode, and an affiliate base of 70
 per unit per day; settlement folds the elapsed days into the run's streak. Affiliate claims trigger
 it, and `claimAfkingFlip(uint32[])` settles listed members permissionlessly (crediting them, never
-the caller). A daily subscriber draw pays 10 FLIP per day of run age, capped at 4,000; the Vault is
-never drawn.
+the caller). Settlement pays the base to the member's referrer chain as stored at that moment,
+75/20/5 to the referrer and its two uplines (an upline that is the member itself takes no share;
+its part goes to the referrer), and scores it on the referrer's leaderboard at the level after the
+current one, for all unsettled days at once. A member with no referrer, or referred
+to the Vault (wallet ID 1), splits it evenly between the Vault and sDGNRS and adds no leaderboard
+score, while a purchase by a buyer without a referrer adds its commission basis to the Vault's
+leaderboard score. A subscription stores and locks no referral, so a member whose referral is still
+unset can later be referred, and its unsettled base then goes to that chain. A daily subscriber
+draw pays 10 FLIP per day of run age, capped at 4,000; the Vault is never drawn. The draw picks one
+member position; a pick that lands on a paused protocol seat or a seized run awaiting removal pays
+nobody that day.
 
 Quest interaction: `afkingSince` (uint24 logical day; 0 = not afking) marks a run. During a run, a
 slot-1 completion, or a slot-0 (primary) completion on the run's start day by an account other than
@@ -259,8 +286,20 @@ day at settlement. No day a run covers is billed as a missed quest day: while `a
 quest syncs bill no misses and consume no shields, and the streak view applies no decay. Outside a
 run, each logical day strictly between the anchor day (the last primary completion, streak bonus,
 foil floor or handback) and the current Game day is a miss; shields absorb misses one each, and a
-miss with no shield left resets the streak. The decay reference is the Game's logical day, also
-between a daily request and the quest roll its word performs.
+miss with no shield left resets the streak; a streak of zero spends no shield. Misses are settled
+at the account's next quest action against the shields it holds then, so a shield received after a
+missed day and before that action still absorbs it. The decay reference is the Game's logical day,
+also between a daily request and the quest roll its word performs. Whale, lazy and deity pass
+purchases, including their bundled boxes, add no daily or level quest progress. Quest progress
+comes from ticket, box, foil-pack and FLIP-ticket purchases, Degenerette bets, coinflip stakes,
+affiliate earnings, decimator burns, craps joins and day passes, and Parimutuel growth bets.
+Between a daily request and the quest roll its word performs (every day except a level's final
+jackpot day, whose quests roll at the request), purchases, Degenerette bets, coinflip stakes,
+affiliate earnings, decimator burns and craps joins add no daily or level quest progress. A foil
+pack bought then still raises the streak to its floor of 12, and Craps day passes, the whole-day
+Craps streak credit and growth bets still count in that interval. From the daily request that
+promotes the level until the pool consolidation that rolls the next level quest, the promoted
+level's quest prices its ETH targets at the ticket price of the level after it.
 
 The Vault (wallet ID 1) and sDGNRS (ID 2) subscribe in their constructors at quantity 1 in box mode,
 burn no seat and cannot use ticket mode. The Vault owner can pause and resume the Vault's run;
@@ -305,13 +344,14 @@ covering the current level, earns double. A call that starts while the daily RNG
 double again. The bounty is Coinflip credit (`MinerBounty`).
 
 Admission bounds live in `MineFlipGasBounds` (cold-path, including new-state gas, with no reservoir
-assumed unless a constant says so). Among the largest: `LEVEL_ONE_DRAW` 7.5M, `DAILY_APPLY` 7.2M,
+assumed unless a constant says so). Among the largest: `LEVEL_ONE_DRAW` 7.7M, `DAILY_APPLY` 7.2M,
 `TRANSITION_CLOSE` 6.2M, `TICKET_ROUND_MAX` 5.1M, `JACKPOT_BATTLE_DRAW` 4.7M,
-`TICKET_DIRECT_ROUND_GAS_MAX` 4.5M (each further 32-winner direct ticket award round),
+`TICKET_DIRECT_ROUND_GAS_MAX` 4.5M (each further 32-winner direct ticket award round; at
+Glamsterdam a round that creates up to 80 new slots can cost 9.823M and needs a reservoir, a higher
+multiplier or a call in which it is the call's first unit of work),
 `RNG_DAILY_REQUEST` 4.4M (plus `GNRUS_TICKET_PURCHASE` 2.125M on a request that can end the
-purchase phase), `BAF_VAULT_SETTLE` 3.5M,
-`HUMAN_ENTRY_GAS` 3.2M, `RNG_TERMINAL_REQUEST` 3.1M, `CRAPS_SEAT_GAS_MAX` 2.8M and
-`BAF_AWARD_GROUP` 2.4M. Trusted holder exits that read stETH
+purchase phase), `BAF_AWARD_GROUP` 3.6M, `BAF_VAULT_SETTLE` 3.5M, `HUMAN_ENTRY_GAS` 3.2M,
+`RNG_TERMINAL_REQUEST` 3.1M and `CRAPS_SEAT_GAS_MAX` 2.8M. Trusted holder exits that read stETH
 (`BoundedCall.stethBalanceOrZero`, used by the Vault, sDGNRS and GNRUS) revert
 `InsufficientExecutionGas` unless `gasleft()` is at least `STETH_READ_MIN_GAS + CALL_OVERHEAD +
 ceil(STETH_READ_MIN_GAS / 63)` = 111,588, then forward all gas; a failed read counts as zero.
@@ -359,27 +399,31 @@ at least a tenth of the refill band through the same source order before splitti
 
 A mid-day request is issued only by `mineRun`. Outside a pending craps window: an empty queue never
 requests; pending ETH at or above the owner-set threshold (default 1 ETH) requests at no charge;
-when the threshold is nonzero, pending work below it (FLIP-only included) requests only when the
-`mineRun` caller's donated native request credit (`middayRngCredit`) covers the charge, which it
-then spends. The charge is 300,000 x (max(basefee, 0.01 gwei) + 0.25 gwei) x 2 wei per request. A
-mid-day request is also refused above the owner-set basefee ceiling (default 5 gwei, 0 disables; the
-ceiling is 4x for a pending craps window), in the last minute before the day reset, before the day's
-daily word is recorded, and, outside a craps window, below 1.5 times the subscription's minimum
-fulfillment balance. A pending craps window waives the pending-work, threshold and balance gates.
-Raw values 0 and 1 are refused and remain retryable; 1 is the nonzero waiting sentinel. Mandatory
-miner publication emits the applied word and performs request cleanup outside the callback. The
-request timestamp keeps a nonzero idle value. A consumed session keeps its answered nonzero request
-ID; the ID is 0 before the first request, and terminal paths that close or abandon a request reset
-it to 0, which accepts no answer. Callback authority is the coordinator plus the retained nonzero
-low-64-bit request ID, with no active-flag check (see [the
-callback](ARCHITECTURE.md#request-callback-and-publication)). Terminal advancement bypasses normal
-read completion and ends unfinished boxes, bets and Craps rather than keeping earlier session words.
-Paid ending tickets and already-earned claims follow the terminal distribution.
+pending work below it (FLIP-only included) requests only when the `mineRun` caller's donated native
+request credit (`middayRngCredit`) covers the charge, which it then spends. The charge is 300,000 x
+(max(basefee, 0.01 gwei) + 0.25 gwei) x 2 wei per request. A mid-day request is also refused above
+the owner-set basefee ceiling (default 5 gwei, 0 disables; the ceiling is 4x for a pending craps
+window), in the last minute before the day reset, before the day's daily word is recorded, and,
+outside a craps window, below 1.5 times the subscription's minimum fulfillment balance. A pending
+craps window waives the pending-work, threshold and balance gates. Raw values 0 and 1 are refused
+and remain retryable; 1 is the nonzero waiting sentinel. Mandatory miner publication emits the
+applied word and performs request cleanup outside the callback. The request timestamp keeps a
+nonzero idle value. A consumed session keeps its answered nonzero request ID; the ID is 0 before
+the first request, and terminal paths that close or abandon a request reset it to 0, which accepts
+no answer. Callback authority is the coordinator plus the retained nonzero low-64-bit request ID,
+with no active-flag check (see [the callback](ARCHITECTURE.md#request-callback-and-publication)).
+Terminal advancement bypasses normal read completion and ends unfinished boxes, bets and Craps
+rather than keeping earlier session words. Paid ending tickets and already-earned claims follow the
+terminal distribution.
 
 ## Ticket materialization
 
 Purchases queue owed entries; the drain assigns traits from committed entropy. The round worker
-groups up to four entries per seat. Resume cursors and seated round state persist across chunks.
+groups up to four entries per seat. A balance's entries take the quadrants in order (Crypto, Zodiac,
+Cards, Dice, then Crypto again), so a balance that is not a multiple of four entries holds its extra
+entries in the lower quadrants; an entry won from a fraction is a Crypto entry in the round drain and
+takes the next quadrant in order in the individual drain. Resume cursors and seated round state
+persist across chunks.
 
 Only levels at or below the mint ceiling (`_mintCeiling`) are ever minted: `level + 1`, or `level +
 2` from the seal that latches a level's last purchase day until the next request bumps `level`, or
@@ -445,18 +489,24 @@ pending future pool (the stage runs under the daily lock, with the pools frozen)
 and bumps the bracket epoch. A game-over latch during the stage releases the uncredited reservation
 into the distributable total.
 
-The x0 last-purchase seal arms the next day's weighted depositor draw and settles Vault through
-that day's applied result (`playCoinflip(1, 0)`). Each seal-capable x0 purchase leg keeps
-`BAF_VAULT_SETTLE` (3.5M) in its tail, in addition to `DAILY_PHASE_TAIL` (250k). The separate
-stage-22 checkpoint settles Vault every 45 resolved days. `_settleVaultFlips` stamps
-`vaultFlipSettledDay` after success; failure rolls back the claim and stamp. This field retains
-Game slot 4, byte offset 20. Zero-deposit gifts cannot withdraw or spend the account's winnings.
-See `test/gas/VaultBafSettleGas.t.sol` for cold settlement and full sealing-chunk measurements.
+The x0 last-purchase seal arms the next day's weighted depositor draw and settles Vault through that
+day's applied result (`playCoinflip(1, 0)`). Only direct deposits made after the seal enter that
+draw, each weighted by its raw principal; a deposit made earlier the same day stakes the same flip
+day without draw weight, and bonuses, boon boosts and record claims never carry weight. Each
+seal-capable x0 purchase leg keeps `BAF_VAULT_SETTLE` (3.5M) in its tail, in addition to
+`DAILY_PHASE_TAIL` (250k). The separate stage-22 checkpoint settles Vault every 45 resolved days.
+`_settleVaultFlips` stamps `vaultFlipSettledDay` after success; failure rolls back the claim and
+stamp. This field retains Game slot 4, byte offset 20. Zero-deposit gifts cannot withdraw or spend
+the account's winnings. See `test/gas/VaultBafSettleGas.t.sol` for cold settlement and full
+sealing-chunk measurements.
 
 GNRUS settles separately at the next request, before the level increments or the BAF word is
-requested. Its winning-flip score therefore enters the same closing bracket as a settlement at
-the preceding seal. The BAF day's own flip settles after this request and scores the next bracket.
-Dust does not suppress GNRUS settlement; only the ticket purchase can be skipped.
+requested. Its winning-flip score therefore enters the same closing bracket as a settlement at the
+preceding seal. The BAF day's own flip settles after this request and scores the next bracket. Any
+other claim that settles between that request and the bracket's resolution stamp also scores the
+next bracket, including winning days that a claim before the request would have scored in the
+closing bracket; after the stamp, winning days before the BAF day no longer score. Dust does not
+suppress GNRUS settlement; only the ticket purchase can be skipped.
 
 The Affiliate constructor registers `bytes32("GNRUS")` for GNRUS wallet ID 3 with kickback 10.
 GNRUS has no stored referral; a constructor bootstrap referral naming ID 3 as the referred player
@@ -488,9 +538,10 @@ century. This runs before the header day and level advance. Draw prizes credit w
 Coinflip.
 
 At the final sweep, GNRUS receives its sink payout and then attempts to redeem all held sDGNRS
-and DGNRS. The hook stamps the recovery timestamp and catches refused burns. GNRUS's sDGNRS is
-excluded from the community-vote supply denominator. Holder exits redeem the ETH/stETH backing
-available when they execute.
+and DGNRS. The hook stamps the final-sweep time, which both recovery paths require, and catches
+refused burns; `vaultRedeemFor` opens after sDGNRS's first year sweep, and `sweepResidualToVault`
+three years after it. GNRUS's sDGNRS is excluded from the community-vote supply denominator. Holder
+exits redeem the ETH/stETH backing available when they execute.
 
 GNRUS's 2.125M is reserved only on a daily request that can end the purchase phase: the phase end
 is latched, or the early turbo can latch it (one of the phase's first two requests at a non-x9
@@ -522,23 +573,29 @@ stamp; a per-buffer bitmap validates buckets at that actual level; takeover inva
 without clearing payload words. The individual drain aggregates trait occurrences before writing
 runs; the round drain batches seats. Queue release clears the length in constant time. Bingo stays
 open on completed inventory until that buffer is actually reassigned to L+2, so its deadline depends
-on game progress. Unfinished normal paid ticket work and revealed foil drainage defer takeover. A
+on game progress. A Bingo (all eight colors of one symbol at a level) pays a 1,000 FLIP coinflip
+stake plus 0.05% of the sDGNRS Reward pool balance, once per wallet ID per level whichever symbol
+qualifies; claims revert after game over. Unfinished normal paid ticket work and revealed foil
+drainage defer takeover. A
 foil pack whose next-day entropy lands after its level retired is consumed without writing traits
 into the newer buffer; its record and tagged draw still support unexpired match/gold claims. Its
 old-level Bingo eligibility has expired at the same retirement boundary.
 
 `EntriesQueued` (with its scaled and range variants) identifies the wallet ID and level when entries
 are queued. `WalletRegistered` fires once per wallet ID registered to an address; an account uses
-the same ID across levels. The Lens exposes `walletIdOf` and
-`walletOfId` for direct identity lookup. Pending balances are separate: near balances share one
-reusable word per wallet ID: even/odd levels each have read/write lanes and an absolute-level tag. A
-parity can be rebound only after both balances clear. Near queues reuse two roots per cohort.
-Far-future balances use a fixed `uint256[13]` per owner: slot `(level - 1) % 100` selects one of 100
-32-bit lanes, each holding 30 owed bits, snap-done and presence. The far-future queue tags
-authenticate each slot's level before reading or topping up. Far-future additions saturate at 2^30-1
-through one shared clamp before narrowing. Thanos fractions round on first drain touch using
-committed entropy and stable identity, before a checkpoint persists the whole balance. Far-future
-queues reuse 100 roots; rebinding a nonempty queue reverts.
+the same ID across levels. The Lens exposes `walletIdOf` and `walletOfId` for direct identity
+lookup. Pending balances are separate: near balances share one reusable word per wallet ID: even/odd
+levels each have read/write lanes and an absolute-level tag. A parity can be rebound only after both
+balances clear. Near queues reuse two roots per cohort. Far-future balances use a fixed
+`uint256[13]` per owner: slot `(level - 1) % 100` selects one of 100 32-bit lanes, each holding 30
+owed bits, snap-done and presence. The far-future queue tags authenticate each slot's level before
+reading or topping up. Far-future additions saturate at 2^30-1 through one shared clamp before
+narrowing. One purchase's ticket quantity, after any purchase boost, is carried in 32 bits of scaled
+units (400 per whole ticket): an order of 4,294,967,296 units (10,737,418.24 tickets; 107,374.1824
+ETH at 0.01 ETH, or 10,737,418,240 FLIP) or more is charged in full but queues only the quantity
+modulo 2^32. Thanos fractions round on first drain touch using committed entropy and stable
+identity, before a checkpoint persists the whole balance. Far-future queues reuse 100 roots;
+rebinding a nonempty queue reverts.
 
 The first 3,000,000,000 registered accounts (`PAID_ADMISSION_WALLETS`) are admitted on first contact.
 Beyond that, a new ID is allocated only by a paying Game entry whose quoted ETH-equivalent spend is
@@ -633,24 +690,31 @@ The three non-solo quadrants target 32, 16 and 4 winners and double at 40, 160, 
 10,240 ETH, up to 1,024, 512 and 128. Each non-solo award is a whole multiple of 0.1 ETH: a quadrant
 pays fewer winners than its target when its share, net of pass conversion, cannot fund 0.1 ETH each,
 and its rounding leftover joins the solo prize, which settles last. An empty bucket's share stays
-unpaid. An active Decimator jackpot plan converts the non-solo shares into generated Decimator
-entries and settles the remaining solo ETH separately. The terminal jackpot uses a fixed
-152/104/48/1 geometry. `JackpotWinnerScaling` covers the targets and the worked 5,000 ETH day.
+unpaid. An active Decimator jackpot plan funds generated Decimator entries from the active non-solo
+shares and the solo share above 35% of the leg, pays the solo winner the rest up to its normal
+share, and leaves any unspent part to the final-day sweep ([Decimator battle](DECIMATOR-BATTLE.md)).
+The terminal jackpot uses a fixed 152/104/48/1 geometry. `JackpotWinnerScaling` covers the targets
+and the worked 5,000 ETH day.
 
 Early-bird pricing moves the entire 3% future-pool slice to nextPrizePool. Every ticket leg
 (purchase daily, early bird and jackpot-phase daily) sizes its winners from its ticket budget value:
 up to 96 winners in all, doubling at 40 and 160 ETH to 384, distributed across eligible quadrants;
-every winner gets the same whole tickets, at least one. When that exceeds 25 tickets per winner and
-the surplus after reserving 25 per winner covers at least one full prize pass (4.5 ETH of award
-value), each winner keeps 25 and the surplus converts to even half-pass claim units, derived again
-from the frozen budget at settlement. The leg distributes its tickets over its board's three
-non-solo quadrants (the solo quadrant serves only when it is the one active bucket). Its whole
-passes split across the quadrants that paid tickets in proportion to their winners, with rounding
-passes one each in quadrant order, and each quadrant receiving passes draws one fresh recipient from
-its own bucket at normal entry/deity weights. A recipient need not have won immediate tickets. Pass
-selection uses separate tagged entropy from the leg's committed quadrant seed; award amounts do not
-reroll recipients. Settlement moves no ETH and the sub-pass remainder also stays in next. Below the
-conversion conditions, the leg pays tickets only. `EarlyBirdWhalePass` covers the conversion rules.
+every winner gets the same whole tickets, at least one. Purchase-daily and early-bird tickets are
+queued. Jackpot-phase daily tickets for the next level are written straight to their trait
+buckets, in rounds over groups of 32 winners, while that level's buffer is live and unscaled.
+If that stops holding part-way through a group, its winners keep the rounds already
+written, the rest of that group's tickets stay in nextPrizePool as backing, and the remaining groups
+are queued. When that exceeds 25 tickets per winner and the surplus after reserving 25 per winner
+covers at least one full prize pass (4.5 ETH of award value), each winner keeps 25 and the surplus
+converts to even half-pass claim units, derived again from the frozen budget at settlement. The leg
+distributes its tickets over its board's three non-solo quadrants (the solo quadrant serves only
+when it is the one active bucket). Its whole passes split across the quadrants that paid tickets in
+proportion to their winners, with rounding passes one each in quadrant order, and each quadrant
+receiving passes draws one fresh recipient from its own bucket at normal entry/deity weights. A
+recipient need not have won immediate tickets. Pass selection uses separate tagged entropy from the
+leg's committed quadrant seed; award amounts do not reroll recipients. Settlement moves no ETH and
+the sub-pass remainder also stays in next. Below the conversion conditions, the leg pays tickets
+only. `EarlyBirdWhalePass` covers the conversion rules.
 
 ## Foil packs and liveness
 
@@ -685,9 +749,15 @@ passes. The attempt latch advances even if it buys nothing; later chunks and day
 same level. A purchase consumes the stage's shared work budget. Its ordinary daily box is separate
 from this level-start action.
 
+At level x99 a whale-pass purchase without an active whale boon needs at least two passes, and
+a lazy pass needs an active lazy-pass boon.
+
 At century transitions the BAF reservation (when its gate wins) and the Decimator seal precede the
 tagged 5d4 future-pool keep roll; the BAF awards themselves pay from the staged reservation
-afterwards. The keep range is 50–80%, with mean 65%. Consult the Advance module for the exact pool
+afterwards. The keep range is 50–80%, with mean 65%. Before those draws, 40% of the insurance
+accumulator (`yieldAccumulator`) moves into the future pool, and the x00 transition leaves the next
+pool empty. When the x00 jackpot phase ends, the level's recorded prize pool is reset to 40% of the
+future pool; that value is the x01 purchase target. Consult the Advance module for the exact pool
 snapshots and ordering; altering a pool size must not reroll winners.
 
 At the final transition close after each x00 level, sDGNRS recycles a random 25–75% of burns removed
@@ -701,3 +771,39 @@ the wrapper receive no allocation. A processed-century marker prevents replay, a
 destruction permanently closes the mechanism even when inventory is zero. Recycling moves no backing
 and changes no pending redemption claims. See [economic disclosures](../ECONOMIC_DISCLOSURES.md) for
 dilution and timing, and `SdgnrsCenturyRecycle` for the accounting tests.
+
+## Box boon table
+
+A box's boon roll and a deity menu slot map into one weighted table of 2,856 entries (deity menus
+skip the decimator and deity-pass bands). Box-drawn boons live through their award day plus the days
+shown; deity-granted boons live only on their award day. A box-drawn decimator boon has no expiry.
+A box-drawn deity-pass discount is discarded when the recipient already holds a deity pass or 32
+passes exist.
+
+| Family | Weights | Effect | Base cap | Days |
+| --- | --- | --- | --- | ---: |
+| Coinflip deposit | 200 / 40 / 8 | +5 / 10 / 25% of a direct deposit | 100,000 FLIP | 2 |
+| Lootbox boost | 200 / 30 / 8 | +5 / 15 / 25% box value | 10 ETH of the order | 2 |
+| Purchase boost | 400 / 80 / 16 | +5 / 15 / 25% ticket quantity | 10 ETH of the order | 4 |
+| Decimator | 40 / 8 / 2 | +10 / 25 / 50% burn base | 50,000 FLIP | none |
+| Whale discount | 28 / 10 / 2 | 10 / 20 / 35% off the first pass | | 4 |
+| Deity-pass discount | 28 / 10 / 2 | 10 / 20 / 35% off the pass | | 4 |
+| Activity | 100 / 30 / 4 | +10 / 25 / 50 level count and quest streak, at once | | |
+| Quest shield | 200 | one shield, at once | | |
+| Whale pass | 2 | two half passes, at once | | |
+| Lazy discount | 30 / 8 / 2 | 10 / 25 / 50% off the pass | | 4 |
+| ETH Degenerette | 200 / 50 / 10 | +4 / 8 / 12% stake | 10 ETH of the bet | 2 |
+| FLIP Degenerette | 200 / 50 / 10 | +4 / 8 / 12% stake | 100,000 FLIP of the bet | 2 |
+| WWXRP | 200 / 200 / 200 | see [WWXRP boons](WWXRP-BOONS.md) | | 2 |
+| Craps | 200 / 40 / 8 | +5 / 10 / 15% bankroll return | 60,000 FLIP | 2 |
+
+A box's hit chance divides its boon budget by half the table's weight-averaged maximum value, which
+prices FLIP-denominated boons at `priceForLevel(level)` and lazy discounts at the ten-level lazy-pass
+value from `level + 2`. Each box sets aside 10% of its amount (after the activity multiplier and
+boost), up to 1 ETH, as that budget and rolls its reward on the rest. The divisor runs from about
+0.28 ETH at level 0 up to about 0.45 ETH at levels 100, 200 and so on; the chance is capped at
+100%, so budget above the divisor buys nothing and is not paid out. A box's hit chance and the
+boon type a hit draws are both read when the box opens, from the live level and the box's
+EV-scaled amount. A recirculated box from a foil match claim opens inside the claim, and a match
+stays claimable on its draw day and the next, so the day of the claim decides which level and
+amount that box uses.

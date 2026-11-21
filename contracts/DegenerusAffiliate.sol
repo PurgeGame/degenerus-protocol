@@ -152,9 +152,8 @@ contract DegenerusAffiliate {
     ///      receipt do not: the credit amount is the delta of `newTotal`, and the sender, code
     ///      and target day come from the purchase/claim events and ReferralUpdated.
     ///      Packed layout (LSB -> MSB):
-    ///      - [0..23]   level: the level this credit books against. Deliberately not a topic —
-    ///                  nothing filters by it, and it is not always the current level (the
-    ///                  claim path books at level + 1).
+    ///      - [0..23]   level: the level this credit books against, level + 1 on every path.
+    ///                  Deliberately not a topic — nothing filters by it.
     ///      - [24..255] newTotal: the affiliate's running total at that level — the
     ///                  leaderboard state itself. A single credit's amount is this minus the
     ///                  prior total. Note the winner-takes-all payout roll may pay an upline
@@ -318,7 +317,7 @@ contract DegenerusAffiliate {
 
     /// @notice Wires the VAULT and sDGNRS codes as each other's referrer, then records the
     ///         GNRUS launch code and deploy-time bootstrap affiliate codes and referrals.
-    /// @dev Game and Ticket deploy first, so every bootstrap owner and player receives a
+    /// @dev The Game deploys first, so every bootstrap owner and player receives a
     ///      permanent ID immediately. All runtime referral traversal reads ID-keyed records.
     constructor(
         address[] memory bootstrapOwners,
@@ -469,7 +468,7 @@ contract DegenerusAffiliate {
     /**
      * @notice The three referrer hops of a player as wallet IDs (deity-pass reward chain).
      * @dev View; never allocates. Each hop is the referrer of the previous hop's wallet, so an
-     *      unreferred chain reads (1, 2, 1). A zero hop zeroes every later hop.
+     *      unreferred chain reads (1, 2, 1). No hop reads zero.
      * @param player The player to look up.
      * @return affiliate Direct referrer's wallet ID.
      * @return upline1 The direct referrer's referrer.
@@ -864,8 +863,10 @@ contract DegenerusAffiliate {
      *      (A 75% / U1 20% / U2 5%), floored with the remainder to A so the parts never exceed `sumB`.
      *      `skipU1`/`skipU2` reduce that upline's share for the rare case where the upline is itself
      *      the sub; the freed portion folds into A's remainder (A is never the sub — self-referral
-     *      resolves to VAULT). No-referrer subs split 50/50 VAULT/sDGNRS.
-     *      The split is fixed (no roll, no seed), so claiming on any day yields the same result.
+     *      resolves to VAULT). Subs with no referrer, or referred to the Vault, split 50/50
+     *      VAULT/sDGNRS with no leaderboard write.
+     *      The split is fixed (no roll, no seed). The recipients are the sub's referrer chain as
+     *      stored when the claim runs, and the leaderboard level is the one current then.
      *      Recipients are paid directly via `creditFlip` by wallet ID (FLIP; no ETH/`claimablePool` touch).
      * @param subs Afking subscribers to settle, in any order.
      */
@@ -892,8 +893,8 @@ contract DegenerusAffiliate {
     ///      through `routeCode`.
     function _claimRun(uint32[] calldata subs, uint256 start, uint256 end, uint32 a, bytes32 routeCode) private {
         if (a == VAULT_ID) {
-            // No referrer: no upline and no leaderboard write. 50/50 VAULT/sDGNRS, remainder to
-            // VAULT (whole FLIP).
+            // No referrer, or referred to the Vault: no upline and no leaderboard write. 50/50
+            // VAULT/sDGNRS, remainder to VAULT (whole FLIP).
             (uint256 baseSum, , ) = _drainSubs(subs, start, end, 0);
             if (baseSum == 0) return;
             uint256 sdgnrsShare = baseSum / 2;
@@ -920,8 +921,8 @@ contract DegenerusAffiliate {
         uint256 u1Share = ((sumB - skipU1) * 20) / 100;
         uint256 u2Share = ((sumB - skipU2) * 5) / 100;
 
-        // Leaderboard credit to A at the next level (currentLvl() + 1, the level the subs' tickets buy
-        // into; sumB already uses whole-token units).
+        // Leaderboard credit to A at the next level (currentLvl() + 1 when the claim runs, for every
+        // settled day at once; sumB already uses whole-token units).
         // The Game drain can call other contracts. Reload the score payload afterwards;
         // only immutable, already-validated cache fields may be merged from the old word.
         uint256 beforeWord = _affiliateStorage().affiliateCoinEarned[a];

@@ -8,6 +8,8 @@ import {DegenerusGameLens} from "../../contracts/DegenerusGameLens.sol";
 import {sDGNRS} from "../../contracts/sDGNRS.sol";
 import {GameSlots} from "../helpers/GameSlots.sol";
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
+import {GlamsterdamReprice} from "../helpers/GlamsterdamReprice.sol";
+import {MinerloopGasProbe} from "../helpers/MinerloopGasProbe.sol";
 
 contract SeizureGasSeeder is DegenerusGameStorage {
     function fund(uint32 id, uint128 claimable) external {
@@ -227,7 +229,7 @@ contract LoanTerminalGasWorst is LoanTerminalGasBase {
 }
 
 /// @notice The scan alone: 99 cold empty levels, against the per-level admission estimate.
-contract LoanTerminalGasEmptyScan is LoanTerminalGasBase {
+contract LoanTerminalGasEmptyScan is LoanTerminalGasBase, MinerloopGasProbe {
     function setUp() public {
         _setUpBase();
         _decideTerminal();
@@ -238,6 +240,21 @@ contract LoanTerminalGasEmptyScan is LoanTerminalGasBase {
         assertLe(used, 99 * MineFlipGasBounds.LOAN_TERMINAL_LEVEL + MineFlipGasBounds.LOAN_SEIZE_TAIL
             + MineFlipGasBounds.ENGINE_BOUNDARY + MineFlipGasBounds.ENGINE_RETURN,
             "the per-level estimate covers a cold empty level");
+    }
+
+    /// @dev Glamsterdam: each empty level is a cold count read under canRun(LOAN_TERMINAL_LEVEL,
+    ///      LOAN_SEIZE_TAIL); the call adds the engine boundary and its return credit.
+    function test_Gas_GlamsterdamTerminalEmptyScan() public {
+        (GlamsterdamReprice.Result memory r,) = _probe(address(game), address(this),
+            abi.encodeCall(game.mineRun, (uint32(0))), 30_000_000);
+        vm.stopMappingRecording();
+        assertEq(_loanStep(), 0, "one call finishes the book");
+        uint256 bound = 99 * MineFlipGasBounds.LOAN_TERMINAL_LEVEL + MineFlipGasBounds.LOAN_SEIZE_TAIL
+            + MineFlipGasBounds.ENGINE_BOUNDARY + MineFlipGasBounds.ENGINE_RETURN;
+        _report("terminal_99_level_empty_scan", r, bound);
+        emit log_named_uint("new_slots", r.newSlots);
+        assertLe(r.glamsterdamExec + r.stateGas, bound,
+            "99 * LOAN_TERMINAL_LEVEL + LOAN_SEIZE_TAIL + ENGINE_BOUNDARY + ENGINE_RETURN");
     }
 }
 

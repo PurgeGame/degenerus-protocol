@@ -7,7 +7,8 @@ import {Vm, VmSafe} from "forge-std/Vm.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
-import {PlayerQuestView} from "../../contracts/interfaces/IDegenerusQuests.sol";
+import {PlayerQuestView, QuestInfo} from "../../contracts/interfaces/IDegenerusQuests.sol";
+import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
 import {GameTimeLib} from "../../contracts/libraries/GameTimeLib.sol";
 import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
@@ -21,6 +22,7 @@ contract QuestsWalletIdsTest is DeployProtocol {
     uint256 private constant STATE_ROOT = QaSlots.STATE;
     uint256 private constant LEVEL_ROOT = QaSlots.LEVEL;
     // PlayerQuestState byte offsets.
+    uint256 private constant OFF_LAST_ACTIVE = 3;
     uint256 private constant OFF_LAST_SYNC = 6;
     uint256 private constant OFF_STREAK = 9;
     uint256 private constant OFF_AFKING_SINCE = 26;
@@ -525,6 +527,38 @@ contract QuestsWalletIdsTest is DeployProtocol {
         _assertQuestCredit(acc, id, 800);
     }
 
+    /// @dev A level-quest completion by an account with no reset anchor adds the level-quest bonus to its streak and
+    ///      anchors it on the day before the credit, so that day counts as missed unless the primary completes it.
+    function test_LevelQuestCompletionWithoutAnchorAnchorsTheDayBefore() public {
+        address o = makeAddr("lqNoAnchor");
+        uint32 id = _giveWalletId(o);
+        _eligible(o, false, 5);
+        _setLevelQuest(QT_AFFILIATE);
+        _setDaily(20, QT_DEG_ETH);
+        assertEq(_field(id, OFF_LAST_ACTIVE, 24), 0, "no anchor before");
+        assertEq(_field(id, OFF_STREAK, 16), 0, "no streak before");
+        _as(address(affiliate), abi.encodeCall(quests.handleAffiliate_g2566281, (id, 6_000, 20)));
+        assertEq((_lq(id) >> 152) & 1, 1, "completed");
+        assertEq(_field(id, OFF_STREAK, 16), 5, "level-quest bonus");
+        assertEq(_field(id, OFF_LAST_ACTIVE, 24), 19, "anchored on the day before the credit");
+    }
+
+    /// @dev An account that already holds an anchor keeps it through a level-quest completion; only the streak moves.
+    function test_LevelQuestCompletionKeepsAnExistingAnchor() public {
+        address o = makeAddr("lqAnchored");
+        uint32 id = _giveWalletId(o);
+        _eligible(o, false, 5);
+        _setDaily(20, QT_DEG_ETH);
+        _as(address(game), abi.encodeCall(quests.awardQuestStreakBonus, (id, 5, 20)));
+        assertEq(_field(id, OFF_LAST_ACTIVE, 24), 20, "anchor set today");
+        assertEq(_field(id, OFF_STREAK, 16), 5, "streak before");
+        _setLevelQuest(QT_AFFILIATE);
+        _as(address(affiliate), abi.encodeCall(quests.handleAffiliate_g2566281, (id, 6_000, 20)));
+        assertEq((_lq(id) >> 152) & 1, 1, "completed");
+        assertEq(_field(id, OFF_STREAK, 16), 10, "level-quest bonus added");
+        assertEq(_field(id, OFF_LAST_ACTIVE, 24), 20, "anchor unmoved");
+    }
+
     /// @dev The Affiliate passes the Game day it was handed: a stale day records nothing, a zero
     ///      day (the foil and pass payers hold none) reads the Game's, a current day matches it.
     function test_AffiliateHopTakesTheSuppliedDayAndReadsItAtZero() public {
@@ -607,6 +641,44 @@ contract QuestsWalletIdsTest is DeployProtocol {
         vm.store(address(game), bytes32(GameSlots.LEVEL),
             bytes32((uint256(w) & ~(uint256(0xffffff) << shift)) | (uint256(lvl) << shift)));
         assertEq(game.currentLvl(), lvl);
+    }
+
+    function _setJackpotPhase(bool on) private {
+        bytes32 w = vm.load(address(game), bytes32(GameSlots.JACKPOT_PHASE_FLAG));
+        uint256 shift = GameSlots.JACKPOT_PHASE_FLAG_OFFSET * 8;
+        vm.store(address(game), bytes32(GameSlots.JACKPOT_PHASE_FLAG),
+            bytes32((uint256(w) & ~(uint256(0xff) << shift)) | (uint256(on ? 1 : 0) << shift)));
+        assertEq(game.jackpotPhase(), on);
+    }
+
+    /// @dev In a jackpot phase an ETH bet measures the daily Degenerette quest at the next level's
+    ///      price (GameDegeneretteBet passes priceForLevel(level + 1)), not the ticket price. The
+    ///      quest view reports that target: a bet of it completes the quest, 0.001 ETH less does not.
+    function test_DegeneretteEthViewReportsTheBetTargetInAJackpotPhase() public {
+        _setLevel(4);
+        _setJackpotPhase(true);
+        assertEq(game.mintPrice(), PriceLookupLib.priceForLevel(4), "tickets sell the current level");
+        uint256 betPrice = PriceLookupLib.priceForLevel(5);
+        assertTrue(betPrice != game.mintPrice(), "the two prices differ here");
+        _setDaily(20, QT_DEG_ETH);
+        QuestInfo[2] memory active = quests.getActiveQuests();
+        assertEq(active[1].questType, QT_DEG_ETH);
+        uint256 target = active[1].requirements.tokenAmount;
+        assertEq(target, 2 * betPrice, "the view reports the bet's target");
+
+        uint32 short = _giveWalletId(makeAddr("degJpShort"));
+        _primary(short);
+        _as(address(game), abi.encodeCall(quests.handleDegenerette_g3,
+            (short, target - 0.001 ether, true, betPrice, _fixtureGameDay())));
+        (, bool shortDone) = quests.questCompletionToday(short);
+        assertFalse(shortDone, "below the view's target");
+
+        uint32 full = _giveWalletId(makeAddr("degJpFull"));
+        _primary(full);
+        _as(address(game), abi.encodeCall(quests.handleDegenerette_g3,
+            (full, target, true, betPrice, _fixtureGameDay())));
+        (, bool fullDone) = quests.questCompletionToday(full);
+        assertTrue(fullDone, "the view's target completes it");
     }
 
     function _eligibleView(uint32 id) private view returns (bool eligible) {
@@ -895,6 +967,76 @@ contract QuestsWalletIdsTest is DeployProtocol {
         (uint32 rid,,) = abi.decode(r[0], (uint32, uint24, uint256));
         assertEq(rid, id, "the gate's ID");
         assertEq((_lq(id) >> 153) & 1, 1);
+    }
+
+    /// @dev A bet between the daily request (Game day 21) and the quest roll (quest day still 20) is credited on the
+    ///      Game day: the sync bills against it and the streak gains the participation point; the roll then
+    ///      continues the run without a reset or a shield spend.
+    function test_GrowthBetBetweenRequestAndRollCreditsStreak() public {
+        address p = makeAddr("growthWindow");
+        uint32 id = _giveWalletId(p);
+        _eligible(p, false, 5);
+        _setDaily(20, QT_DEG_ETH);
+        _primary(id);
+        assertEq(_field(id, OFF_STREAK, 16), 1, "primary credit");
+        _setRequestedFixtureDay(21);
+        assertEq(_questDay(), 20, "quests still on the previous day");
+
+        bytes memory ret = _as(address(parimutuel), abi.encodeCall(quests.recordGrowthBet, (id, game.currentLvl(), 50)));
+        assertEq(abi.decode(ret, (uint256)), 50);
+        assertEq(_field(id, OFF_STREAK, 16), 2, "bet credited the participation point");
+        assertEq(_field(id, OFF_LAST_SYNC, 24), 21, "synced on the Game day");
+        assertEq(_field(id, OFF_LAST_ACTIVE, 24), 20, "anchor day unmoved");
+
+        vm.recordLogs();
+        _setDaily(21, QT_DEG_ETH);
+        _primary(id);
+        assertEq(_field(id, OFF_STREAK, 16), 3, "the roll continues the run");
+        assertEq(_field(id, OFF_SHIELD, 8), 0, "no shield spent");
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        assertEq(_countTopic(logs, E_RESET, id), 0, "no streak reset");
+        assertEq(_countTopic(logs, E_SHIELD_USED, id), 0, "no shield used");
+    }
+
+    /// @dev In the same window a lapsed streak is billed before the credit: it resets and the bet leaves 1, not the
+    ///      stale value plus one.
+    function test_GrowthBetBetweenRequestAndRollBillsLapsedStreakFirst() public {
+        address p = makeAddr("growthWindowLapsed");
+        uint32 id = _giveWalletId(p);
+        _eligible(p, false, 5);
+        _setDaily(10, QT_DEG_ETH);
+        _as(address(game), abi.encodeCall(quests.awardQuestStreakBonus, (id, 5, 10)));
+        assertEq(_field(id, OFF_STREAK, 16), 5);
+        assertEq(_field(id, OFF_LAST_ACTIVE, 24), 10);
+        _setRequestedFixtureDay(21);
+
+        vm.recordLogs();
+        bytes memory ret = _as(address(parimutuel), abi.encodeCall(quests.recordGrowthBet, (id, game.currentLvl(), 50)));
+        assertEq(abi.decode(ret, (uint256)), 50);
+        assertEq(_countTopic(vm.getRecordedLogs(), E_RESET, id), 1, "the lapsed streak reset");
+        assertEq(_field(id, OFF_STREAK, 16), 1, "reset, then the participation point");
+        assertEq(_field(id, OFF_LAST_SYNC, 24), 21);
+    }
+
+    /// @dev An afking account's bet in the same window feeds the run's streak base once, and the manual streak
+    ///      stays dormant.
+    function test_GrowthBetBetweenRequestAndRollFeedsAfkingRun() public {
+        address p = makeAddr("growthWindowAfking");
+        uint32 id = _giveWalletId(p);
+        _setDaily(20, QT_DEG_ETH);
+        _setRequestedFixtureDay(21);
+        vm.store(
+            address(quests),
+            _stateSlot(id),
+            bytes32(_qs(id) | (uint256(20) << (OFF_AFKING_SINCE * 8)))
+        );
+        vm.mockCall(address(game), abi.encodeWithSelector(game.recordAfkingSecondary_g3316.selector), "");
+        vm.expectCall(address(game), abi.encodeCall(game.recordAfkingSecondary_g3316, (id, 1)), 1);
+
+        bytes memory ret = _as(address(parimutuel), abi.encodeCall(quests.recordGrowthBet, (id, game.currentLvl(), 50)));
+        assertEq(abi.decode(ret, (uint256)), 50);
+        assertEq(_field(id, OFF_LAST_SYNC, 24), 21, "synced on the Game day");
+        assertEq(_field(id, OFF_STREAK, 16), 0, "manual streak dormant while afking");
     }
 
     // =====================================================================

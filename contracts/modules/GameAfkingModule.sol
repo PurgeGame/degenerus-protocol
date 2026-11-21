@@ -98,8 +98,9 @@ abstract contract GameAfkingModule is GameBoxInternals, DegenerusGameMintStreakU
                               Custom errors
     ------------------------------------------------------------------*/
     // error RngLocked() — inherited from DegenerusGameStorage. Reverts a subscribe
-    // (create / replace / cancel) from daily preparation being due through the last
-    // paid AFKing box opening, and a new run before the day's subscriber pass completed.
+    // (create / replace / cancel) from daily preparation being due until the day's daily
+    // session completes (every read consumer drained, AFKing boxes included), and a new run
+    // before the day's subscriber pass completed.
     /// @notice Thrown when smite() targets an active afking subscriber, which is immune to
     ///         smite stacks.
     error SmiteeAfkingImmune();
@@ -163,8 +164,9 @@ abstract contract GameAfkingModule is GameBoxInternals, DegenerusGameMintStreakU
     /// @notice The SINGLE subscription entrypoint — create, change, or cancel a daily
     ///         subscription for account `id` (0 = caller). dailyQuantity 1..8 upserts;
     ///         dailyQuantity == 0 cancels (the Vault's pauses instead).
-    /// @dev Lock create/change/cancel from the day boundary through preparation, RNG and all
-    ///      AFKing opens. Outside that window, mode changes may safely relocate IDs.
+    /// @dev Lock create/change/cancel from the day boundary until the day's daily session
+    ///      completes: preparation, RNG and every read consumer, AFKing opens included. Outside
+    ///      that window, mode changes may safely relocate IDs.
     /// @dev Authorization is checked ONCE here under the account rule (`_resolveAccount`:
     ///      the caller is the account's payee or an operator
     ///      approved for its ID). Authorization is NEVER re-checked at process-time.
@@ -320,8 +322,8 @@ abstract contract GameAfkingModule is GameBoxInternals, DegenerusGameMintStreakU
     ///      ordinary insufficient-funding policy. The 1M outer minimum admits the inner calls and
     ///      the receipt/credit tail; all gas beyond the caller's 300k tail reserve is forwarded,
     ///      so caller starvation fails admission before the atomic attempt. Protocol custody is
-    ///      never pulled: sDGNRS preapproves GAME for redemptions whose stETH backing must remain
-    ///      segregated.
+    ///      never pulled: the Vault and sDGNRS are excluded because their stETH backs their own
+    ///      holders' redemptions (neither grants GAME a stETH allowance).
     /// @param subscriber The subscriber's wallet ID.
     function _tryFundAfkingSteth(
         uint32 subscriber,
@@ -452,8 +454,9 @@ abstract contract GameAfkingModule is GameBoxInternals, DegenerusGameMintStreakU
     ///        (4) 1-wei claimable sentinel → the claimable leg never takes the whole balance;
     ///        (5) ethValue = cost - claimableUse with claimableUse ∈ [0, cost].
     ///      Claimable always pays first; the subscriber's prepaid afking ETH covers the rest.
-    ///      The caller passes `claimable` as 0 once the game-over sweep has run (GO_SWEPT,
-    ///      written only by that one-time sweep, so it is invariant within a tx).
+    ///      The caller passes `claimable` as 0 when GO_SWEPT is set; GO_SWEPT is written only
+    ///      after game over and the pass returns from the liveness trigger onward, so the pass
+    ///      always reads it as 0 and passes the balance.
     /// @param claimable The subscriber's claimable balance, sentinel included.
     /// @return ethValue Prepaid portion debited from the subscriber's prepaid afking balance.
     /// @return amount Ticket entry-units (isTicket) or lootbox spend in wei (!isTicket).
@@ -587,8 +590,8 @@ abstract contract GameAfkingModule is GameBoxInternals, DegenerusGameMintStreakU
 
     /// @notice Prepare the pinned day's subscriptions, boxes first and tickets second.
     /// @dev The previous read cohort completes before this pass. Public subscription changes
-    ///      remain locked from daily due through the last AFKing open, so each member is visited
-    ///      once and no signup can join this day. Same-section removal reprocesses its
+    ///      remain locked from daily due until the daily session completes, so each member is
+    ///      visited once and no signup can join this day. Same-section removal reprocesses its
     ///      unvisited tail mover. A funded box freezes its score into the lane; tickets queue
     ///      directly. The cohort's unit price and which protocol seats bought live in the shared
     ///      header. The daily commitment follows completion, and boxes consume that published
@@ -632,8 +635,8 @@ abstract contract GameAfkingModule is GameBoxInternals, DegenerusGameMintStreakU
         // Hoist the level read once.
         c.currentLevel = level;
         // Chunk-invariant global reads, hoisted once: the GO_SWEPT flag (written only by
-        // the one-time game-over sweep, unreachable from this loop) and the ticket target
-        // level (jackpotPhaseFlag is fixed across the pre-RNG stage). Quest finalization
+        // the one-time game-over sweep, so always 0 past the liveness gate above) and the
+        // ticket target level (jackpotPhaseFlag is fixed across the pre-RNG stage). Quest finalization
         // writes only quests-side storage; the pinned Lido stETH funding path has no
         // sender or recipient callbacks that could change these game-phase inputs.
         c.swept = _goRead(GO_SWEPT_SHIFT, GO_SWEPT_MASK) != 0;
@@ -1076,7 +1079,7 @@ abstract contract GameAfkingModule is GameBoxInternals, DegenerusGameMintStreakU
     /// @notice A deity (soulbound pass owner) adds a saturating +2 curse stack to account
     ///         `smiteeId` for 200 FLIP from the caller. Validated before the burn: active afkers
     ///         are immune (the sole immunity), the smite path caps at a 10-point (5-stack)
-    ///         ceiling below the 20-point counter cap, and the protocol accounts are skipped (the
+    ///         ceiling below the 20-point counter cap, and the protocol accounts are refused (the
     ///         redemption-snapshot reason). Self-smite is allowed — harmless, since the counter
     ///         only lowers the score. The pass NFT sits at the deity account's payee wallet, so
     ///         the payee smites.

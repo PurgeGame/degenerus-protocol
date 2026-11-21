@@ -88,9 +88,9 @@ library JackpotBucketLib {
     // -------------------------------------------------------------------------
 
     /// @dev Computes ETH shares for each bucket; the remainder goes to the solo bucket.
-    ///      Empty non-remainder buckets (count==0) contribute their computed share to
-    ///      `distributed` without receiving ETH, reducing the remainder bucket allocation.
-    ///      The caller is responsible for refunding ethPool - paidEth to the source pool.
+    ///      A non-remainder bucket with a zero count gets no share, and its computed share
+    ///      still counts toward `distributed`; both count sources are nonzero for a nonzero
+    ///      pool. Callers debit the source per quadrant as they pay, so an unpaid share stays there.
     function bucketShares(
         uint256 pool,
         uint16[4] memory shareBps,

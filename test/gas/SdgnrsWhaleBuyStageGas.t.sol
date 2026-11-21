@@ -48,54 +48,53 @@ contract SdgnrsWhaleBuyStageGas is DeployProtocol {
     }
 
     function test_WhalePurchaseIncrement_FitsChargedWeight() public {
+        // Every cold measurement runs before the first recorded replay of the test: a recording
+        // leaves the accounts and slots it touched warm for the rest of the test.
         uint256 snap = vm.snapshotState();
-        uint256 g0 = _measureFirstAdvanceOfDay(10 ether, TOP_UP_TARGET, 0);
+        // Cold stage calls: no purchase, 5, 10, 100 and 1,000 passes, then the capped claimable.
+        uint256[6] memory g;
+        g[0] = _measureFirstAdvanceOfDay(10 ether, TOP_UP_TARGET, 0, 0);
         vm.revertToState(snap);
-        uint256 g5 = _measureFirstAdvanceOfDay(80 ether + TOP_UP_TARGET, 0, 5);
+        g[1] = _measureFirstAdvanceOfDay(80 ether + TOP_UP_TARGET, 0, 5, 0);
         vm.revertToState(snap);
-        uint256 g10 = _measureFirstAdvanceOfDay(160 ether + TOP_UP_TARGET, 0, 10);
+        g[2] = _measureFirstAdvanceOfDay(160 ether + TOP_UP_TARGET, 0, 10, 0);
         vm.revertToState(snap);
-        uint256 g100 = _measureFirstAdvanceOfDay(1_600 ether + TOP_UP_TARGET, 0, 100);
+        g[3] = _measureFirstAdvanceOfDay(1_600 ether + TOP_UP_TARGET, 0, 100, 0);
         vm.revertToState(snap);
-        uint256 g1000 = _measureFirstAdvanceOfDay(16_000 ether + TOP_UP_TARGET, 0, 1000);
+        g[4] = _measureFirstAdvanceOfDay(16_000 ether + TOP_UP_TARGET, 0, 1000, 0);
         vm.revertToState(snap);
-        uint256 r0;
-        uint256 r100;
-        uint256 r1000;
-        uint256 gCap;
-        {
-            vm.revertToState(snap);
-            _measureFirstAdvanceOfDay(10 ether, TOP_UP_TARGET, 0);
-            r0 = _lastRepriced;
-            vm.revertToState(snap);
-            _measureFirstAdvanceOfDay(1_600 ether + TOP_UP_TARGET, 0, 100);
-            r100 = _lastRepriced;
-            vm.revertToState(snap);
-            _measureFirstAdvanceOfDay(16_000 ether + TOP_UP_TARGET, 0, 1000);
-            r1000 = _lastRepriced;
-            vm.revertToState(snap);
-            gCap = _measureFirstAdvanceOfDay(1_000_000 ether, 0, 1000);
-        }
-        emit log_named_uint("repriced increment incl. state gas, 100 passes", r100 - r0);
-        emit log_named_uint("repriced increment incl. state gas, 1,000 passes", r1000 - r0);
-        assertLe(r1000 - r0, GasBounds.SUBSCRIBER_WHALE_GAS, "state-inclusive 1,000-pass increment <= bound");
+        g[5] = _measureFirstAdvanceOfDay(1_000_000 ether, 0, 1000, 0);
+        vm.revertToState(snap);
+        // Recorded replays of the no-purchase, 100-pass and 1,000-pass calls, re-priced.
+        uint256[3] memory r;
+        _measureFirstAdvanceOfDay(10 ether, TOP_UP_TARGET, 0, g[0]);
+        r[0] = _lastRepriced;
+        vm.revertToState(snap);
+        _measureFirstAdvanceOfDay(1_600 ether + TOP_UP_TARGET, 0, 100, g[3]);
+        r[1] = _lastRepriced;
+        vm.revertToState(snap);
+        _measureFirstAdvanceOfDay(16_000 ether + TOP_UP_TARGET, 0, 1000, g[4]);
+        r[2] = _lastRepriced;
+        emit log_named_uint("repriced increment incl. state gas, 100 passes", r[1] - r[0]);
+        emit log_named_uint("repriced increment incl. state gas, 1,000 passes", r[2] - r[0]);
+        assertLe(r[2] - r[0], GasBounds.SUBSCRIBER_WHALE_GAS, "state-inclusive 1,000-pass increment <= bound");
 
-        emit log_named_uint("stage call, no purchase (cold)", g0);
-        emit log_named_uint("stage call, 5 passes (cold)", g5);
-        emit log_named_uint("stage call, 10 passes (cold)", g10);
-        emit log_named_uint("stage call, 100 passes (cold)", g100);
-        emit log_named_uint("stage call, 1,000 passes (cold)", g1000);
-        emit log_named_uint("increment, 5 passes", g5 - g0);
-        emit log_named_uint("increment, 10 passes", g10 - g0);
-        emit log_named_uint("increment, 100 passes", g100 - g0);
-        emit log_named_uint("increment, 1,000 passes", g1000 - g0);
-        emit log_named_uint("increment, 1,000,000 ETH claimable (capped at 1,000)", gCap - g0);
+        emit log_named_uint("stage call, no purchase (cold)", g[0]);
+        emit log_named_uint("stage call, 5 passes (cold)", g[1]);
+        emit log_named_uint("stage call, 10 passes (cold)", g[2]);
+        emit log_named_uint("stage call, 100 passes (cold)", g[3]);
+        emit log_named_uint("stage call, 1,000 passes (cold)", g[4]);
+        emit log_named_uint("increment, 5 passes", g[1] - g[0]);
+        emit log_named_uint("increment, 10 passes", g[2] - g[0]);
+        emit log_named_uint("increment, 100 passes", g[3] - g[0]);
+        emit log_named_uint("increment, 1,000 passes", g[4] - g[0]);
+        emit log_named_uint("increment, 1,000,000 ETH claimable (capped at 1,000)", g[5] - g[0]);
         emit log_named_uint("declared whale checkpoint bound", GasBounds.SUBSCRIBER_WHALE_GAS);
 
-        assertGt(g1000, g0, "the purchase did real work");
-        assertLe(g100 - g0, GasBounds.SUBSCRIBER_WHALE_GAS, "100-pass increment <= declared whale checkpoint bound");
-        assertLe(g1000 - g0, GasBounds.SUBSCRIBER_WHALE_GAS, "1,000-pass increment <= declared whale checkpoint bound");
-        assertLe(gCap - g0, GasBounds.SUBSCRIBER_WHALE_GAS, "capped increment <= declared whale checkpoint bound");
+        assertGt(g[4], g[0], "the purchase did real work");
+        assertLe(g[3] - g[0], GasBounds.SUBSCRIBER_WHALE_GAS, "100-pass increment <= declared whale checkpoint bound");
+        assertLe(g[4] - g[0], GasBounds.SUBSCRIBER_WHALE_GAS, "1,000-pass increment <= declared whale checkpoint bound");
+        assertLe(g[5] - g[0], GasBounds.SUBSCRIBER_WHALE_GAS, "capped increment <= declared whale checkpoint bound");
         assertLe(GasBounds.SUBSCRIBER_WHALE_GAS + GasBounds.SUBSCRIBER_TAIL_GAS, uint256(10_000_000),
             "whale checkpoint inside the realistic chunk limit");
     }
@@ -107,7 +106,9 @@ contract SdgnrsWhaleBuyStageGas is DeployProtocol {
     ///      first mineFlip call, which runs the day's reset + STAGE (+ the RNG request). An AFKing
     ///      balance below the target forces the top-up write. Non-vacuity: the latch flips inside
     ///      that call and the claimable debit equals the top-up plus exactly `passes` passes.
-    function _measureFirstAdvanceOfDay(uint256 claimable, uint256 afking, uint256 passes)
+    ///      `coldUsed` zero: an unrecorded cold measurement. Otherwise the call is a recorded replay
+    ///      of a case measured cold as `coldUsed`, and `_lastRepriced` is that figure re-priced.
+    function _measureFirstAdvanceOfDay(uint256 claimable, uint256 afking, uint256 passes, uint256 coldUsed)
         internal
         returns (uint256 used)
     {
@@ -130,13 +131,19 @@ contract SdgnrsWhaleBuyStageGas is DeployProtocol {
         vm.cool(address(afkingSubToken));
         // A realistic allowance succeeds; the engine keeps admitting chunks while it lasts.
         vm.recordLogs();
-        vm.startStateDiffRecording();
-        uint256 before = gasleft();
-        game.mineRun{gas: KEEPER_ALLOWANCE}(0);
-        used = before - gasleft();
-        VmSafe.AccountAccess[] memory accesses = vm.stopAndReturnStateDiff();
-        GlamsterdamReprice.Result memory r = GlamsterdamReprice.reprice(used, accesses, address(game));
-        _lastRepriced = r.glamsterdamExec + r.stateGas;
+        if (coldUsed == 0) {
+            uint256 before = gasleft();
+            game.mineRun{gas: KEEPER_ALLOWANCE}(0);
+            used = before - gasleft();
+        } else {
+            vm.startStateDiffRecording();
+            uint256 before = gasleft();
+            game.mineRun{gas: KEEPER_ALLOWANCE}(0);
+            used = before - gasleft();
+            VmSafe.AccountAccess[] memory accesses = vm.stopAndReturnStateDiff();
+            GlamsterdamReprice.Result memory r = GlamsterdamReprice.reprice(coldUsed, accesses, address(game));
+            _lastRepriced = r.glamsterdamExec + r.stateGas;
+        }
 
         // The attempt latches the level either way; the claimable debit tells buy from no-buy.
         require(_sdgnrsBonusLevel() == 4, "fixture: the attempt ran in the measured call");

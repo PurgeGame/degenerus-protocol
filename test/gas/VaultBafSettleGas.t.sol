@@ -426,14 +426,18 @@ contract ProtocolSettleUnlimitedGas is DeployProtocol {
         vm.etch(address(coinflip), original);
     }
 
+    /// @dev Every pattern is measured cold before the first recorded replay of the test: a
+    ///      recording leaves the accounts and slots it touched warm for the rest of the test.
     function _measure(uint8 mask) private {
         require(vm.envOr("FOUNDRY_ISOLATE", false), "cold measurement requires isolation");
         uint256 maximum;
+        uint256[] memory cold = new uint256[](95);
         for (uint8 pattern; pattern < 95; ++pattern) {
             uint256 snap = vm.snapshotState();
             _seed(pattern);
             VaultSettleHost(payable(address(game))).settleAccounts(mask);
             uint256 used = vm.lastCallGas().gasTotalUsed;
+            cold[pattern] = used;
             emit log_named_uint("pattern", pattern);
             emit log_named_uint("osaka_settle_gas", used);
             assertLt(used, GasBounds.BAF_VAULT_SETTLE / 2, "twofold settlement reserve margin");
@@ -443,12 +447,17 @@ contract ProtocolSettleUnlimitedGas is DeployProtocol {
                 uint256 state = uint256(vm.load(address(coinflip), keccak256(abi.encode(id, uint256(2)))));
                 assertEq(uint24(state >> 128), LATEST);
             }
-            vm.revertToState(snap);
+            assertTrue(vm.revertToState(snap));
+            vm.deleteStateSnapshot(snap);
+        }
+        for (uint8 pattern; pattern < 95; ++pattern) {
+            uint256 snap = vm.snapshotState();
             _seed(pattern);
             vm.startStateDiffRecording();
             VaultSettleHost(payable(address(game))).settleAccounts(mask);
             VmSafe.AccountAccess[] memory accesses = vm.stopAndReturnStateDiff();
-            GlamsterdamReprice.Result memory r = this.repriceCall(used, accesses);
+            GlamsterdamReprice.Result memory r = this.repriceCall(cold[pattern], accesses);
+            emit log_named_uint("pattern", pattern);
             emit log_named_uint("glamsterdam_exec_gas", r.glamsterdamExec);
             emit log_named_uint("glamsterdam_state_gas", r.stateGas);
             assertLt(r.glamsterdamExec + r.stateGas, GasBounds.BAF_VAULT_SETTLE / 2);

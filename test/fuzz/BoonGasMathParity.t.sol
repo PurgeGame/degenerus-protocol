@@ -99,7 +99,7 @@ contract BoonGasMathParity is Test {
 
         // Craps bankroll-payout boons: 5/10/15% of a 60k-FLIP payout base, weights 200/40/8. The
         // top tier is 15% rather than a quarter because the boon lifts EVERY window a ticket
-        // plays, and a whole-day ticket plays seven.
+        // plays, and a whole-day ticket plays six.
         weighted += 200 * _flipValue(3000, priceWei);
         weighted += 40 * _flipValue(6000, priceWei);
         weighted += 8 * _flipValue(9000, priceWei);

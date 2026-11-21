@@ -2,6 +2,8 @@
 pragma solidity 0.8.38;
 
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
+import {DegenerusGameLens} from "../../contracts/DegenerusGameLens.sol";
+import {GameSlotKeys} from "../helpers/GameSlots.sol";
 
 /// @title Afking deposits close at game over.
 /// @notice depositAfkingFunding refuses ETH once gameOver is set, like receive(): a deposit after
@@ -12,6 +14,7 @@ contract PostGameOverAfkingDeposit is DeployProtocol {
     address internal stranger = address(0x5712A);
 
     bytes4 internal constant GAME_OVER = bytes4(keccak256("GameOver()"));
+    bytes4 internal constant ALREADY_SWEPT = bytes4(keccak256("AlreadySwept()"));
 
     function setUp() public {
         _deployProtocol();
@@ -79,5 +82,38 @@ contract PostGameOverAfkingDeposit is DeployProtocol {
 
         assertEq(address(game).balance, gameBal0, "no ETH is stranded in the Game");
         assertEq(game.afkingFundingOf(address(vault)), 0, "vault afking stays zero after the sweep");
+    }
+
+    /// @notice Prepaid AFKing left in an ordinary account at the final sweep is forfeited: the
+    ///         stored figure remains, no path pays it, and every balance view reads zero.
+    function test_afkingViewsReadZeroAfterFinalSweep() public {
+        uint32 sid = _giveWalletId(stranger);
+        vm.prank(stranger);
+        game.depositAfkingFunding{value: 2 ether}(sid);
+        DegenerusGameLens lens = new DegenerusGameLens();
+        address[] memory who = new address[](1);
+        who[0] = stranger;
+        (,,, uint256[] memory fundings) = lens.afkingSnapshot(address(game), who);
+        assertEq(fundings[0], 2 ether, "fixture: the Lens reports the deposit before the sweep");
+        assertEq(game.afkingFundingOf(stranger), 2 ether, "fixture: the Game reports the deposit before the sweep");
+
+        _driveToFinalSweep();
+
+        assertEq(
+            uint256(vm.load(address(game), GameSlotKeys.balances(sid))) >> 128,
+            2 ether,
+            "fixture: the stored prepaid figure survives the sweep"
+        );
+        vm.prank(stranger);
+        vm.expectRevert(ALREADY_SWEPT);
+        game.withdrawAfkingFunding(sid, 1);
+
+        assertEq(game.afkingFundingOf(stranger), 0, "the Game view reads zero after the sweep");
+        uint256[] memory claimables;
+        (,, claimables, fundings) = lens.afkingSnapshot(address(game), who);
+        assertEq(claimables[0], 0, "the Lens batch view reads zero claimable after the sweep");
+        assertEq(fundings[0], 0, "the Lens batch view reads zero prepaid AFKing after the sweep");
+        (uint128 claimable, uint128 afking) = lens.accountBalances(address(game), sid);
+        assertEq(uint256(claimable) + afking, 0, "the Lens account view reads zero after the sweep");
     }
 }

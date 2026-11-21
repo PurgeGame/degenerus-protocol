@@ -19,7 +19,9 @@ abstract contract BoundedGasProbe is Test {
         if (!ok) assembly ("memory-safe") { revert(add(reason, 32), mload(reason)) }
     }
 
-    function _measureBounded(string memory label, address target, address sender, uint256 value, bytes memory data, bool warm) internal {
+    function _measureBounded(string memory label, address target, address sender, uint256 value, bytes memory data, bool warm)
+        internal returns (uint256 projectedExec, uint256 projectedState)
+    {
         // Measure cold first: this Forge version retains recorder state across
         // isolated transactions after a recorded replay. The fully warm replay is
         // valid and independently cross-checks this initial uninstrumented call.
@@ -30,6 +32,7 @@ abstract contract BoundedGasProbe is Test {
         vm.startStateDiffRecording();
         this.boundedMeasured(target, sender, value, data);
         VmSafe.AccountAccess[] memory accesses = vm.stopAndReturnStateDiff();
+        vm.stopMappingRecording();
         assertTrue(vm.revertToState(snapshot));
         {
             uint256 n = accesses.length;
@@ -85,10 +88,14 @@ abstract contract BoundedGasProbe is Test {
         uint256 used = warm ? warmGas : coldGas;
         int64 refund = warm ? warmRefund : coldRefund;
         GlamsterdamReprice.Result memory g = GlamsterdamReprice.reprice(used, acc, target);
-        uint256 projectedExec = uint256(int256(used) + g.execDelta - int256(g.coldAccounts * 400))
-            + (warm ? 0 : coldAccounts * 400) + extcodes * 100 + valueCalls * 2300
-            - (warm ? 0 : firstWrites * 100) - newAccounts * 25_000;
-        uint256 projectedState = g.stateGas + newAccounts * 183600;
+        // The repricer counts value calls, new accounts and code reads from the access records;
+        // the opcode census and the record scan must agree with it.
+        assertEq(g.codeReads, extcodes, "EXTCODESIZE/EXTCODECOPY census matches the access records");
+        assertEq(g.valueCalls, valueCalls, "value calls inside the frame");
+        assertEq(g.newAccounts, newAccounts, "accounts created by value calls");
+        projectedExec = uint256(int256(used) + g.execDelta - int256(g.coldAccounts * 400))
+            + (warm ? 0 : coldAccounts * 400) - (warm ? 0 : firstWrites * 100);
+        projectedState = g.stateGas;
         emit log_named_string("bounded_case", label);
         emit log_named_uint("osaka_frame_gross", used);
         emit log_named_int("refund_counter", refund);

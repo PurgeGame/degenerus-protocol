@@ -2,6 +2,7 @@
 pragma solidity 0.8.38;
 
 import {FinalSweepPayoutLegs} from "../fuzz/FinalSweepPayoutLegs.t.sol";
+import {VmSafe} from "forge-std/Vm.sol";
 import {MinerloopGasProbe} from "../helpers/MinerloopGasProbe.sol";
 import {GlamsterdamReprice} from "../helpers/GlamsterdamReprice.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
@@ -98,6 +99,116 @@ contract GnrusFinalSweepGasTest is FinalSweepPayoutLegs, MinerloopGasProbe {
         assertEq(dgnrs.balanceOf(ContractAddresses.GNRUS), 0);
     }
 
+    // VRF shutdown admission as TERMINAL_SWEEP_AFTER_READ composes it: 1M floor + 250k reserve
+    // + 15,873 EIP-150 + 10k frame.
+    uint256 private constant SHUTDOWN_ADMISSION = 1_275_873;
+
+    /// @dev The sweep with GNRUS holding no tokens (its hook makes no cash-out). Mode 0: every
+    ///      payout leg is an stETH transfer into a receiver holding none, the last one finished
+    ///      with a 1-wei ETH call; 1: the mixed fixture; 2: ETH only.
+    function seedAfterRead(uint8 mode) external {
+        require(msg.sender == address(this));
+        this.seedSweep(mode == 2 ? 1 : 2, false);
+        if (mode != 0) return;
+        address[3] memory sinks = [ContractAddresses.VAULT, ContractAddresses.SDGNRS, ContractAddresses.GNRUS];
+        // MockStETH.sharesOf is slot 0: each receiver's share word starts empty.
+        for (uint256 i; i < 3; ++i) vm.store(address(mockStETH), keccak256(abi.encode(sinks[i], uint256(0))), 0);
+        // stETH above every sink's balance, so each of the three legs takes a share of it.
+        mockStETH.mint(address(game), 1000 ether);
+        vm.deal(address(game), 1);
+    }
+
+    /// @dev Last call-family step of `opcode` to `target` before `end`, and its gas operand.
+    function _traced(VmSafe.DebugStep[] memory steps, uint8 opcode, address target, uint256 end)
+        private pure returns (uint256 at, uint256 operand)
+    {
+        at = type(uint256).max;
+        for (uint256 i; i < end && i < steps.length; ++i) {
+            if (steps[i].opcode != opcode || steps[i].stack.length < 2) continue;
+            if (address(uint160(steps[i].stack[1])) != target) continue;
+            at = i;
+            operand = steps[i].stack[0];
+            if (end == type(uint256).max) break;
+        }
+        require(at != type(uint256).max, "call not traced");
+    }
+
+    /// @dev Last `kind` record of `account` before `end`.
+    function _record(VmSafe.AccountAccess[] memory acc, VmSafe.AccountAccessKind kind, address account, uint256 end)
+        private pure returns (uint256 at)
+    {
+        at = type(uint256).max;
+        for (uint256 i; i < end && i < acc.length; ++i) {
+            if (acc[i].kind != kind || acc[i].account != account) continue;
+            at = i;
+            if (end == type(uint256).max) break;
+        }
+        require(at != type(uint256).max, "call not recorded");
+    }
+
+    function sweepTraced() external {
+        require(msg.sender == address(this));
+        vm.prank(keeper);
+        game.mineRun(0);
+    }
+
+    /// @notice TERMINAL_SWEEP_AFTER_READ: everything from the sweep's stETH read to the VRF shutdown
+    ///         call (the read, the event, the three payout legs and GNRUS's hook without a
+    ///         cash-out), plus the shutdown admission. Both calls forward all gas in the sweep's
+    ///         first unit, so their gas operands bracket the region in one frame. The region's
+    ///         Glamsterdam deltas come from its own access records.
+    function _afterRead(uint8 mode) private {
+        this.seedAfterRead(mode);
+        uint256 snap = vm.snapshotState();
+        vm.startDebugTraceRecording();
+        this.sweepTraced();
+        VmSafe.DebugStep[] memory steps = vm.stopAndReturnDebugTraceRecording();
+        (uint256 shutdownStep, uint256 atShutdown) = _traced(steps, 0xF1, ContractAddresses.ADMIN, type(uint256).max);
+        (, uint256 atRead) = _traced(steps, 0xFA, ContractAddresses.STETH_TOKEN, shutdownStep);
+        assertTrue(vm.revertToState(snap));
+        vm.startStateDiffRecording();
+        this.sweepTraced();
+        VmSafe.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
+        vm.stopMappingRecording();
+        assertTrue(vm.revertToState(snap));
+        uint256 count;
+        for (uint256 i; i < acc.length; ++i) {
+            if (acc[i].account == address(vm)) continue;
+            if (acc[i].account == address(this) && acc[i].kind != VmSafe.AccountAccessKind.Resume) continue;
+            assertFalse(acc[i].reverted, "repricing assumes successful frames");
+            acc[count++] = acc[i];
+        }
+        assembly ("memory-safe") { mstore(acc, count) }
+        uint256 shutdownRecord = _record(acc, VmSafe.AccountAccessKind.Call, ContractAddresses.ADMIN, type(uint256).max);
+        uint256 readRecord = _record(acc, VmSafe.AccountAccessKind.StaticCall, ContractAddresses.STETH_TOKEN, shutdownRecord);
+        VmSafe.AccountAccess[] memory toShutdown = new VmSafe.AccountAccess[](shutdownRecord);
+        for (uint256 k; k < shutdownRecord; ++k) toShutdown[k] = acc[k];
+        VmSafe.AccountAccess[] memory toRead = new VmSafe.AccountAccess[](readRecord);
+        for (uint256 k; k < readRecord; ++k) toRead[k] = acc[k];
+        GlamsterdamReprice.Result memory a = GlamsterdamReprice.reprice(atRead, toShutdown, address(game));
+        GlamsterdamReprice.Result memory b = GlamsterdamReprice.reprice(atRead, toRead, address(game));
+        uint256 osaka = atRead - atShutdown;
+        uint256 exec = uint256(int256(osaka) + a.execDelta - b.execDelta);
+        uint256 state = a.finalStateGas - b.finalStateGas;
+        emit log_named_string("unit", string.concat("sweep_after_read_mode_", vm.toString(mode)));
+        emit log_named_uint("osaka", osaka);
+        emit log_named_uint("glamsterdam_exec", exec);
+        emit log_named_uint("glamsterdam_state", state);
+        emit log_named_uint("glamsterdam_total", exec + state);
+        emit log_named_uint("new_slots", a.newSlots - b.newSlots);
+        emit log_named_uint("value_calls", a.valueCalls - b.valueCalls);
+        emit log_named_uint("plus_shutdown_admission_glamsterdam", exec + state + SHUTDOWN_ADMISSION);
+        emit log_named_uint("bound", GasBounds.TERMINAL_SWEEP_AFTER_READ);
+        assertLe(osaka + SHUTDOWN_ADMISSION, GasBounds.TERMINAL_SWEEP_AFTER_READ,
+            "Osaka legs and shutdown admission fit TERMINAL_SWEEP_AFTER_READ");
+        assertLe(exec + state + SHUTDOWN_ADMISSION, GasBounds.TERMINAL_SWEEP_AFTER_READ,
+            "Glamsterdam legs and shutdown admission fit TERMINAL_SWEEP_AFTER_READ");
+    }
+
+    function test_GasAfterReadFreshStethLegs() public { _afterRead(0); }
+    function test_GasAfterReadMixedLegs() public { _afterRead(1); }
+    function test_GasAfterReadEthLegs() public { _afterRead(2); }
+
     /// @dev The sweep with GNRUS's hook mocked: every sink paid, GNRUS still holding both tokens.
     function _sinksPaid(uint8 assets) private {
         this.seedSweep(assets, true);
@@ -193,7 +304,9 @@ contract GnrusFinalSweepGasTest is FinalSweepPayoutLegs, MinerloopGasProbe {
         assertLt(lowest, (uint256(1) << 24) - 21_000, "the sweep fits one transaction");
     }
 
-    function test_afterReadReserveWithGnrusCanRefuseOptionalSweep() public {
+    /// @dev A read that burns all the gas forwarded to it leaves a continuation exactly the
+    ///      after-read reserve: the legs, both GNRUS cash-outs and the VRF shutdown complete from it.
+    function test_afterReadReserveCarriesTheSweepWhenTheReadBurnsItsGas() public {
         this.seedSweep(2, true);
         // Copy the healthy mock's runtime into a fresh implementation; retain all token storage.
         address implementation = address(0x5D6701);
@@ -201,14 +314,12 @@ contract GnrusFinalSweepGasTest is FinalSweepPayoutLegs, MinerloopGasProbe {
         GnrusSweepReadFailure proxy = new GnrusSweepReadFailure(implementation);
         vm.etch(address(mockStETH), address(proxy).code);
         vm.etch(address(game), type(GnrusSweepHost).runtimeCode);
-        (bool ok, bytes memory reason) = address(game).call{gas: 4_000_000}(abi.encodeCall(GnrusSweepHost.optionalSweep, (3_000_000)));
-        assertFalse(ok, "cashout plus shutdown must not be assumed to fit the reserved after-read tail");
-        assertEq(bytes4(reason), bytes4(keccak256("InsufficientExecutionGas()")));
-        assertEq(gnrus.sweptAt(), 0, "failed continuation rolls back the sweep");
-        // Isolate the added hook: the same failing read and same meter complete without cashout.
-        vm.mockCall(address(gnrus), abi.encodeCall(gnrus.onFinalSweep, ()), bytes(""));
-        (ok,) = address(game).call{gas: 4_000_000}(abi.encodeCall(GnrusSweepHost.optionalSweep, (3_000_000)));
-        assertTrue(ok, "control without cashout completes");
+        uint256 nativeHeld = sdgnrs.balanceOf(ContractAddresses.GNRUS);
+        assertGt(nativeHeld, 0, "fixture: GNRUS holds sDGNRS to cash out");
+        (bool ok,) = address(game).call{gas: 4_000_000}(abi.encodeCall(GnrusSweepHost.optionalSweep, (3_000_000)));
+        assertTrue(ok, "the reserve after a failed read carries the legs, the cash-outs and the shutdown");
+        assertGt(gnrus.sweptAt(), 0, "the sweep committed");
+        assertEq(sdgnrs.balanceOf(ContractAddresses.GNRUS), 0, "the cash-out ran");
         assertEq(address(game).balance, 0);
     }
 

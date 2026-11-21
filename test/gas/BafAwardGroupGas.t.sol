@@ -8,11 +8,15 @@ import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
+import {IDegenerusJackpots} from "../../contracts/interfaces/IDegenerusJackpots.sol";
 import {EntropyLib} from "../../contracts/libraries/EntropyLib.sol";
+import {RngTags} from "../../contracts/libraries/RngTags.sol";
 import {TicketQueueStorage as TQ} from "../fuzz/helpers/TicketQueueStorage.sol";
 import {BafPairDraw, BafSchedule, CenturyBafScores} from "./AdvanceCenturyConsolidationGas.t.sol";
 import {CenturyConsolidationSeeder} from "../helpers/CenturyConsolidationSeeder.sol";
 import {WalletSeed} from "../helpers/WalletSeed.sol";
+import {GlamsterdamFrameProbe} from "../helpers/GlamsterdamFrameProbe.sol";
+import {GlamsterdamReprice} from "../helpers/GlamsterdamReprice.sol";
 
 /// @dev Production game facade plus a native runDailyPhase_g2582 seam. `seedBafStage` writes the state
 ///      the x00 consolidation leaves behind, positioned at a group boundary: a kind-7 work record
@@ -94,6 +98,15 @@ contract BafGroupGasHost is DegenerusGame, WalletSeed {
     }
 }
 
+/// @dev The last group's three level-100 head draws alone, as one frame.
+contract BafHeadDrawProbe {
+    function draws(address jackpots, uint256 word) external view returns (uint32 a, uint32 b, uint32 c) {
+        a = IDegenerusJackpots(jackpots).bafHeadWinner(100, word, 0);
+        b = IDegenerusJackpots(jackpots).bafHeadWinner(100, word, 1);
+        c = IDegenerusJackpots(jackpots).bafHeadWinner(100, word, 2);
+    }
+}
+
 /// @title BafAwardGroupGas — one BAF award group of the level-100 bracket, cold, at its worst mix.
 /// @notice The bracket is the century fixture's: every trait bucket the minted-level rounds select
 ///         holds 2048 distinct wallets, every level 102..199 holds a far-future queue (2048 deep at
@@ -101,16 +114,17 @@ contract BafGroupGasHost is DegenerusGame, WalletSeed {
 ///         qualifying BAF score, the head board holds four bettors and the depositor draw walks a
 ///         4096-interval book. The stage is seeded at the measured group's boundary and one call
 ///         pays exactly that group. The word is the one, of 2048 candidates, whose ticket legs in
-///         the group reach the most distinct target levels (each first touch appends a new lane
-///         and starts a fresh queue word), tie-broken by rolls onto far-future levels.
+///         the group write the most fresh slots: distinct target levels (each first touch appends a
+///         new lane and starts a fresh queue word) plus each award's distinct owner words, tie-broken
+///         by rolls onto far-future levels.
 /// @dev Before the measured call a reference run of the same group and the bracket views draw each
 ///      round pair on the state it starts from (`BafPairDraw`); the state is restored and the engine
 ///      accounts cooled, so the measured call starts on a cold access list. The call is checked
-///      position by position against that draw (BafSchedule.checkGroupR).
-abstract contract BafAwardGroupFixture is DeployProtocol {
+///      position by position against that draw (BafSchedule.checkGroupR), then re-priced under
+///      Glamsterdam from the same state.
+abstract contract BafAwardGroupFixture is DeployProtocol, GlamsterdamFrameProbe {
     uint256 internal constant CAP = 10_000_000;
     uint8 internal constant STAGE_JACKPOT_BAF_AWARDS = 19;
-    uint256 internal constant BAF_TICKET_TAG = 0x4261665469636b6574;
     uint256 internal constant GROUP = BafSchedule.GROUP;
     uint256 internal constant SEARCH = 2048;
     uint24 internal constant DAY = 400;
@@ -123,6 +137,7 @@ abstract contract BafAwardGroupFixture is DeployProtocol {
     BafGroupGasHost internal host;
     uint256 internal word;
     uint256 internal spreadLevels;
+    uint256 internal spreadOwners;
     uint256 internal start;
     uint256 internal end;
     uint256 internal positions;
@@ -154,7 +169,7 @@ abstract contract BafAwardGroupFixture is DeployProtocol {
         positions = 2 * _rounds() + 3;
         start = _group() * GROUP;
         end = start + GROUP < positions ? start + GROUP : positions;
-        (word, spreadLevels) = _pickWord();
+        (word, spreadLevels, spreadOwners) = _pickWord();
 
         vm.etch(address(game), type(CenturyConsolidationSeeder).runtimeCode);
         CenturyConsolidationSeeder(payable(address(game))).seed(word, 100 ether, 100 ether);
@@ -194,29 +209,41 @@ abstract contract BafAwardGroupFixture is DeployProtocol {
         if (lootbox > 5 ether) lootbox = 0;
     }
 
-    function _pickWord() private view returns (uint256 best, uint256 bestLevels) {
+    function _pickWord() private view returns (uint256 best, uint256 bestLevels, uint256 bestOwners) {
         uint256[] memory words = _topWords(start, end, 1);
         best = words[0];
-        (bestLevels,) = _spread(best, start, end);
+        (bestLevels, bestOwners,) = _spread(best, start, end);
     }
 
-    /// @dev Distinct target levels and far-future rolls of the ticket legs of positions `from`..`to` - 1
-    ///      under word `w`.
-    function _spread(uint256 w, uint256 from, uint256 to) private pure returns (uint256 levels, uint256 far) {
+    /// @dev The ticket legs of positions `from`..`to` - 1 under word `w`, rolled as `_payBafAward`
+    ///      derives them: distinct target levels, the sum over awards of distinct owner words their
+    ///      rolls write (the pending word for levels 100..101, one far-future word per eight levels),
+    ///      and far-future rolls.
+    function _spread(uint256 w, uint256 from, uint256 to)
+        private
+        pure
+        returns (uint256 levels, uint256 owners, uint256 far)
+    {
         uint256 pool = _pool();
         uint256 seen;
         for (uint256 i = from; i < to; ++i) {
             uint256 lootbox = _rolledLootbox(pool, i);
             if (lootbox == 0) continue;
-            uint256 e = EntropyLib.hash4(w, 100, BAF_TICKET_TAG, i);
+            uint256 e = EntropyLib.hash3(RngTags.BAF_TICKET, w, i);
             uint256 rolls = lootbox <= 0.5 ether ? 1 : 2;
+            uint256 ownerWords;
             for (uint256 r; r < rolls; ++r) {
-                e = EntropyLib.hash2(e, e);
+                e = EntropyLib.hash2(RngTags.JACKPOT_TICKET_ROLL, e);
                 uint24 t = _target(e);
                 uint256 bit = uint256(1) << (t - 100);
                 if (seen & bit == 0) {
                     seen |= bit;
                     ++levels;
+                }
+                uint256 ownerBit = uint256(1) << (t <= 101 ? 0 : 1 + ((t - 1) % 100) / 8);
+                if (ownerWords & ownerBit == 0) {
+                    ownerWords |= ownerBit;
+                    ++owners;
                 }
                 if (t >= 102) ++far;
             }
@@ -224,14 +251,15 @@ abstract contract BafAwardGroupFixture is DeployProtocol {
     }
 
     /// @dev The `k` words of `SEARCH` candidates whose ticket legs over positions `from`..`to` - 1
-    ///      reach the most distinct target levels, tie-broken by far-future rolls, best first.
+    ///      write the most fresh slots (distinct levels plus owner words), tie-broken by far-future
+    ///      rolls, best first.
     function _topWords(uint256 from, uint256 to, uint256 k) internal pure returns (uint256[] memory words) {
         words = new uint256[](k);
         uint256[] memory scores = new uint256[](k);
         for (uint256 c; c < SEARCH; ++c) {
             uint256 w = uint256(keccak256(abi.encode("baf-award-group-worst", c))) | 1;
-            (uint256 levels, uint256 far) = _spread(w, from, to);
-            uint256 score = levels * 16 + far + 1;
+            (uint256 levels, uint256 owners, uint256 far) = _spread(w, from, to);
+            uint256 score = (levels + owners) * 16 + far + 1;
             for (uint256 j; j < k; ++j) {
                 if (score <= scores[j]) continue;
                 for (uint256 m = k - 1; m > j; --m) {
@@ -246,11 +274,16 @@ abstract contract BafAwardGroupFixture is DeployProtocol {
     }
 
     /// @dev Measures every scatter group `gFrom`..`gTo` - 1 cold under each of its `perGroup`
-    ///      widest-spread words (the stage re-pointed from a snapshot each time) and logs the largest.
+    ///      most fresh-slot-heavy words (the stage re-pointed from a snapshot each time) and logs the
+    ///      largest; then re-prices every measured call under Glamsterdam and logs the largest.
     function _sweep(uint256 gFrom, uint256 gTo, uint256 perGroup, string memory label) internal returns (uint256 worst) {
         uint256 worstGroup;
         string memory worstMix;
         uint256 runs;
+        uint256 base = vm.snapshotState();
+        uint256[] memory measuredWord = new uint256[]((gTo - gFrom) * perGroup);
+        uint256[] memory measuredGroup = new uint256[](measuredWord.length);
+        uint256[] memory measuredGas = new uint256[](measuredWord.length);
         for (uint256 g = gFrom; g < gTo; ++g) {
             uint256[] memory words = _topWords(g * GROUP, g * GROUP + GROUP, perGroup);
             for (uint256 k; k < words.length; ++k) {
@@ -267,6 +300,9 @@ abstract contract BafAwardGroupFixture is DeployProtocol {
                     worstGroup = g;
                     worstMix = _composition(logs);
                 }
+                measuredWord[runs] = words[k];
+                measuredGroup[runs] = g;
+                measuredGas[runs] = used;
                 ++runs;
                 vm.revertToState(snap);
                 vm.deleteStateSnapshot(snap);
@@ -276,6 +312,35 @@ abstract contract BafAwardGroupFixture is DeployProtocol {
         emit log_named_uint(string.concat(label, "_group"), worstGroup);
         emit log_named_string(string.concat(label, "_composition"), worstMix);
         emit log_named_uint(string.concat(label, "_measured_calls"), runs);
+
+        GlamsterdamReprice.Result memory glamWorst;
+        uint256 glamWorstGroup;
+        for (uint256 i; i < runs; ++i) {
+            vm.revertToState(base);
+            host.repointBafStage(measuredWord[i], uint16(measuredGroup[i] * GROUP));
+            GlamsterdamReprice.Result memory r = _glamsterdamGroup(measuredGas[i]);
+            if (_glamsterdamTotal(r) > _glamsterdamTotal(glamWorst)) {
+                glamWorst = r;
+                glamWorstGroup = measuredGroup[i];
+            }
+        }
+        vm.revertToState(base);
+        vm.deleteStateSnapshot(base);
+        _logGlamsterdam(string.concat(label, "_glamsterdam_worst"), glamWorst, GasBounds.BAF_AWARD_GROUP);
+        emit log_named_uint("  group", glamWorstGroup);
+    }
+
+    /// @dev The one-group call from the current state, measured cold as `osakaTx`, re-priced under
+    ///      Glamsterdam. The whole frame (preamble, group, stage tail and phase tail) must fit the
+    ///      group bound alone.
+    function _glamsterdamGroup(uint256 osakaTx) internal returns (GlamsterdamReprice.Result memory r) {
+        bytes memory ret;
+        (r,, ret) = _glamsterdamRecorded(
+            address(host), abi.encodeCall(BafGroupGasHost.dailyWith, (ONE_GROUP_ALLOWANCE)), osakaTx
+        );
+        assertEq(abi.decode(ret, (MineFlipGas.Result)).rewardBasis, 1, "the recorded run pays one group");
+        assertLe(_glamsterdamTotal(r), GasBounds.BAF_AWARD_GROUP,
+            "Glamsterdam one-group call (preamble and tails included) exceeds BAF_AWARD_GROUP");
     }
 
     function _coldCallGas() internal view returns (uint256 used) {
@@ -378,11 +443,13 @@ abstract contract BafAwardGroupFixture is DeployProtocol {
         (uint256 claimableBefore, uint256 futureBefore) = host.poolsProbe();
         uint256 levelBefore = CenturyBafScores.levelWord(address(jackpots));
         (uint32[] memory atStart, uint32[] memory expected, bytes32 refDigest) = _referenceDraw();
+        uint256 seeded = vm.snapshotState();
 
         (uint256 used, MineFlipGas.Result memory result, Vm.Log[] memory logs) = _measure(ONE_GROUP_ALLOWANCE);
         emit log_named_uint(label, used);
         emit log_named_string("group_composition", _composition(logs));
         emit log_named_uint("searched_distinct_roll_levels", spreadLevels);
+        emit log_named_uint("searched_distinct_owner_words", spreadOwners);
 
         assertTrue(result.progressed, "one group is admitted");
         assertEq(_lastStage(logs), STAGE_JACKPOT_BAF_AWARDS, "the BAF award stage ran");
@@ -426,6 +493,10 @@ abstract contract BafAwardGroupFixture is DeployProtocol {
         }
         assertLe(used, GasBounds.BAF_AWARD_GROUP, "cold BAF group exceeds its saved bound");
         _assertDeclaredFits();
+
+        vm.revertToState(seeded);
+        vm.deleteStateSnapshot(seeded);
+        _logGlamsterdam(label, _glamsterdamGroup(used), GasBounds.BAF_AWARD_GROUP);
     }
 }
 
@@ -537,9 +608,9 @@ contract BafAwardHeadWhaleGas is BafAwardGroupFixture {
 /// @notice Tail probe: a last group whose three head slots are empty (a four-entry board of empty
 ///         players, no draw book) pays nothing, so the call is the preamble, three empty draws and
 ///         the completion: the residue release into the frozen pending pool, the four-entry board
-///         close with the epoch bump and the work-record delete. Against
-///         BafAwardGroupGas.test_BelowOneGroupCold (the preamble alone), the difference bounds the
-///         completion tail BAF_AWARD_TAIL reserves.
+///         close with the epoch bump and the work-record delete. Against the preamble alone (an
+///         allowance below one group, from the same state) less the three draws, the difference is
+///         the completion tail BAF_AWARD_TAIL reserves.
 contract BafAwardTailProbeGas is BafAwardGroupFixture {
     function _group() internal pure override returns (uint256) {
         return 12;
@@ -567,6 +638,8 @@ contract BafAwardTailProbeGas is BafAwardGroupFixture {
     }
 
     function test_TailProbeCold() public {
+        BafHeadDrawProbe drawProbe = new BafHeadDrawProbe();
+        uint256 seeded = vm.snapshotState();
         uint256 headReserve = BafSchedule.ethTerms(_pool(), start, positions);
         (uint256 claimableBefore, uint256 futureBefore) = host.poolsProbe();
         uint256 levelBefore = CenturyBafScores.levelWord(address(jackpots));
@@ -587,6 +660,36 @@ contract BafAwardTailProbeGas is BafAwardGroupFixture {
         assertEq(uint8(levelAfter >> 64), 0, "the board is emptied (its stale words stay in place)");
         assertLe(used, GasBounds.BAF_AWARD_GROUP, "the tail probe exceeds the group bound");
         _assertDeclaredFits();
+
+        // Cold measurements first, then the recorded runs.
+        vm.revertToState(seeded);
+        (uint256 preambleTx,,) = _measure(400_000);
+        vm.revertToState(seeded);
+        bytes memory drawCall = abi.encodeCall(BafHeadDrawProbe.draws, (address(jackpots), word));
+        _coolEngine();
+        (bool ok,) = address(drawProbe).call{gas: 12_000_000}(drawCall);
+        assertTrue(ok, "the head draws run");
+        uint256 drawsTx = _coldCallGas();
+        vm.revertToState(seeded);
+        (GlamsterdamReprice.Result memory preamble,,) = _glamsterdamRecorded(
+            address(host), abi.encodeCall(BafGroupGasHost.dailyWith, (400_000)), preambleTx
+        );
+        vm.revertToState(seeded);
+        (GlamsterdamReprice.Result memory draws,,) = _glamsterdamRecorded(address(drawProbe), drawCall, drawsTx);
+        vm.revertToState(seeded);
+        vm.deleteStateSnapshot(seeded);
+        GlamsterdamReprice.Result memory full = _glamsterdamGroup(used);
+        _logGlamsterdam("baf_tail_probe_call", full, GasBounds.BAF_AWARD_GROUP);
+        _logGlamsterdam("baf_preamble_call", preamble, GasBounds.BAF_AWARD_GROUP);
+        _logGlamsterdam("baf_three_head_draws", draws, GasBounds.BAF_AWARD_GROUP);
+        uint256 parts = _glamsterdamTotal(preamble) + _glamsterdamTotal(draws);
+        assertGt(_glamsterdamTotal(full), parts, "the tail probe call contains the preamble and the draws");
+        uint256 tail = _glamsterdamTotal(full) - parts;
+        emit log_named_int("baf_completion_tail_osaka",
+            int256(full.osakaExec) - int256(preamble.osakaExec) - int256(draws.osakaExec));
+        emit log_named_uint("baf_completion_tail_glamsterdam_total", tail);
+        emit log_named_uint("baf_award_tail_bound", GasBounds.BAF_AWARD_TAIL);
+        assertLe(tail, GasBounds.BAF_AWARD_TAIL, "Glamsterdam completion tail exceeds BAF_AWARD_TAIL");
     }
 }
 

@@ -1103,6 +1103,31 @@ contract TicketLifecycleTest is DeployProtocol {
             "aligned split boundaries keep the per-quadrant spread even");
     }
 
+    /// @notice A page that starts past the first entry and asks for the rest of the bucket
+    ///         (`limit = type(uint32).max`) returns the remainder: `offset + limit` is clamped to
+    ///         the bucket length, whatever the two sum to.
+    /// @dev 400 claimed entries over 256 level-1 traits put at least two entries in one bucket.
+    function testGetEntriesScansToEndFromALaterOffset() public {
+        address claimant = makeAddr("paging_claimant");
+        _creditHalfPasses(claimant, 400);
+        game.claimWhalePass(game.walletIdOf_g3120(claimant));
+        _driveToLevel(1);
+        assertEq(_traitBufferLevel(1), 1, "level 1 still owns its parity trait buffer");
+
+        bool paged;
+        for (uint16 t = 0; t < 256; t++) {
+            (uint24 whole, uint32 next, uint32 total) = game.getEntries(uint8(t), 1, 0, type(uint32).max, claimant);
+            assertEq(uint256(next), uint256(total), "a full scan ends at the bucket length");
+            if (total < 2) continue;
+            (uint24 head,,) = game.getEntries(uint8(t), 1, 0, 1, claimant);
+            (uint24 rest, uint32 restNext,) = game.getEntries(uint8(t), 1, 1, type(uint32).max, claimant);
+            assertEq(uint256(restNext), uint256(total), "the remainder page ends at the bucket length");
+            assertEq(uint256(head) + rest, uint256(whole), "two pages count what one scan counts");
+            paged = true;
+        }
+        assertTrue(paged, "fixture: a level-1 bucket holds at least two entries");
+    }
+
     // =========================================================================
     // Test 16: At a non-zero game level (3+), verify the
     //         near/far boundary: level+5 goes to write key, level+6 goes to FF.

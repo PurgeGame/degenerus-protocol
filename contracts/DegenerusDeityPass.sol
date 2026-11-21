@@ -48,8 +48,9 @@ interface IDegenerusVaultOwner {
 }
 
 /// @notice Optional external renderer interface (v1).
-/// @dev A reverting or empty external render falls back to the internal renderer;
-///      the staticcall is not gas-capped, and the renderer is owner-set and trusted.
+/// @dev A reverting or empty external render falls back to the internal renderer; a return
+///      that does not decode as a string reverts tokenURI. The staticcall is not gas-capped,
+///      and the renderer is owner-set and trusted.
 interface IDeityPassRendererV1 {
     function render(
         uint256 tokenId,
@@ -74,10 +75,11 @@ contract DegenerusDeityPass {
     // -------------------------------------------------------------------------
 
     /// @notice Thrown when the caller is neither the DGVE governance executor (owner-only
-    ///         setters) nor the game contract (`mint`).
+    ///         setters) nor the game contract (`mint`, `seize`).
     error NotAuthorized();
-    /// @notice Thrown when a token query targets a token that does not exist, or `mint`
-    ///         targets a tokenId >= 32 or one already minted.
+    /// @notice Thrown when a token query or `seize` targets a token that does not exist, when
+    ///         `seize` names the zero address, or when `mint` targets a tokenId >= 32 or one
+    ///         already minted.
     error InvalidToken();
 
     /// @notice A nonzero renderer must have deployed code.
@@ -215,8 +217,9 @@ contract DegenerusDeityPass {
 
     /// @notice On-chain SVG metadata for each deity pass.
     /// @dev Uses the internal renderer by default; an owner-set external renderer may override.
-    ///      A reverting or empty return falls back to internal render. The staticcall is not
-    ///      gas-capped, so tokenURI integrity relies on the owner setting a sane renderer.
+    ///      A reverting or empty return falls back to internal render; a return that does not
+    ///      decode as a string reverts. The staticcall is not gas-capped, so tokenURI integrity
+    ///      relies on the owner setting a sane renderer.
     function tokenURI(uint256 tokenId) external view returns (string memory) {
         if (_owners[tokenId] == address(0)) revert InvalidToken();
 
@@ -557,7 +560,8 @@ contract DegenerusDeityPass {
     // Game-Only Mint
     // -------------------------------------------------------------------------
 
-    /// @notice Mint a deity pass. Only callable by the game contract during purchase.
+    /// @notice Mint a deity pass. Only callable by the game contract, on a purchase or a
+    ///         genesis grant.
     /// @param to Recipient address for the minted pass.
     /// @param tokenId Symbol ID to mint (0-31, must not already exist).
     function mint(address to, uint256 tokenId) external {

@@ -552,7 +552,7 @@ interface IDegenerusGameFoilPackModule {
     ) external payable;
 
     /// @notice Claim a foil ticket's match against a day's draw (permissionless).
-    /// @dev The win credits to `player`, never the caller, and a tuple pays at most
+    /// @dev The win credits account `id`, never the caller, and a tuple pays at most
     ///      once, so anyone may resolve any player's claim. Reverts if the tuple is not
     ///      a claimable win. Claims are valid on the draw day and the following day,
     ///      revert with RngLocked under the daily RNG lock, and close when terminal
@@ -571,7 +571,7 @@ interface IDegenerusGameFoilPackModule {
     /// @dev A FLIP ladder on the pack's total gold count from three up, plus a kicker
     ///      for one all-gold ticket. Two all-gold tickets take the grand instead — pushed
     ///      automatically by the foil drain, so this call reverts for such a pack. The
-    ///      pack's lines are the ones the drain stored in its pack record. The win credits to `player`,
+    ///      pack's lines are the ones the drain stored in its pack record. The win credits account `id`,
     ///      never the caller, and a pack pays at most once.
     ///      Raw msg.data target of Game.claimGoldenTicket; payouts go to the payee.
     /// @param id Pack owner the win credits to (0 = caller; otherwise allocated, else E).

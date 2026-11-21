@@ -22,10 +22,9 @@ import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
 ///   ticket+lootbox-bundle buys — each is proven twice, once funded with FRESH ETH (Combined leg) and once
 ///   funded with CLAIMABLE (Claimable leg), asserting the cure is funding-agnostic.
 ///
-///   The separate `purchaseWhalePass()` pass-purchase host (WhaleModule._purchaseWhalePass) is NOT a cure
-///   path — it writes mintPacked_ via field-isolated setPacked calls and never calls `_clearCurse`, so it
-///   PRESERVES an existing curse. That truthful non-cure behavior is asserted by contrast (a curse survives a
-///   whale-pass purchase) so the cure-vs-no-cure boundary is falsifiable in both directions.
+///   Pass and foil purchases cure too: whale, lazy and deity pass purchases (WhaleModule) and a foil-only
+///   order (FoilCore._buyFoilPack, before the score it freezes) each cost more than one ticket and call
+///   `_clearCurse(buyer)`. Each is proven against an uncursed control making the same purchase.
 ///
 ///   MINT-DAY STAMP: the cumulative whole-ticket floor stamps DAY_SHIFT without curing a
 ///   curse when each individual buy remains below the cure threshold. Read the saved field directly;
@@ -235,20 +234,78 @@ contract V61CureBountyDecurse is DeployProtocol {
         assertEq(curedScore - notCuredScore, curse, "post-buy score gap equals the cleared curse");
     }
 
-    /// @notice CONTRAST — the separate purchaseWhalePass() pass-host does NOT cure (it is not a
-    ///         _purchaseForWith path; it writes mintPacked_ field-isolated and never calls _clearCurse). A
-    ///         curse survives a whale-pass purchase. This pins the cure to the purchase() host only and
-    ///         keeps the cure-vs-no-cure boundary falsifiable.
-    function testWhalePassPurchaseDoesNotCure() public {
-        address p = makeAddr("whalepass_nocure");
+    /// @notice A whale pass purchase clears the curse; the buyer then scores like an uncursed control.
+    function testWhalePassPurchaseCures() public {
+        address p = makeAddr("whalepass_cure");
+        address c = makeAddr("whalepass_control");
         _seedCurse(p, 6);
-        // A single whale pass purchase at the early price (2.4 ETH at levels 0-4). The pass host reverts on
-        // OVER-payment (msg.value > totalPrice), so send EXACTLY the price.
-        uint256 price = 2.4 ether;
-        vm.deal(p, price);
+        _buyWhalePass(p);
+        _buyWhalePass(c);
+        assertEq(game.curseCountOf(p), 0, "whale-pass purchase cures the curse");
+        assertEq(activityScoreOf(address(game), p), activityScoreOf(address(game), c), "scores like a control");
+    }
+
+    /// @notice A lazy pass purchase clears the curse.
+    function testLazyPassPurchaseCures() public {
+        address p = makeAddr("lazypass_cure");
+        address c = makeAddr("lazypass_control");
+        _seedCurse(p, 6);
+        _buyLazyPass(p);
+        _buyLazyPass(c);
+        assertEq(game.curseCountOf(p), 0, "lazy-pass purchase cures the curse");
+        assertEq(activityScoreOf(address(game), p), activityScoreOf(address(game), c), "scores like a control");
+    }
+
+    /// @notice A deity pass purchase clears the curse.
+    function testDeityPassPurchaseCures() public {
+        address p = makeAddr("deitypass_cure");
+        _seedCurse(p, 6);
+        vm.deal(p, 100 ether);
         vm.prank(p);
-        game.purchaseWhalePass{value: price}(0, 1, bytes32(0));
-        assertEq(game.curseCountOf(p), 6, "whale-pass purchase preserves the curse (not a cure path)");
+        game.purchaseDeityPass{value: 100 ether}(0, 5, bytes32(0));
+        assertEq(game.curseCountOf(p), 0, "deity-pass purchase cures the curse");
+    }
+
+    /// @notice A foil-only order (no ticket or box leg) clears the curse before the pack freezes its score:
+    ///         the frozen boost and the post-buy score match an uncursed control's.
+    function testFoilOnlyOrderCures() public {
+        address p = makeAddr("foil_cure");
+        address c = makeAddr("foil_control");
+        _seedCurse(p, 6);
+        _buyFoilOnly(p);
+        _buyFoilOnly(c);
+        assertEq(game.curseCountOf(p), 0, "foil-only order cures the curse");
+        assertEq(_foilMult(p), _foilMult(c), "frozen foil boost matches the control");
+        assertEq(activityScoreOf(address(game), p), activityScoreOf(address(game), c), "scores like a control");
+    }
+
+    function _buyWhalePass(address who) private {
+        vm.deal(who, 2.4 ether);
+        vm.prank(who);
+        game.purchaseWhalePass{value: 2.4 ether}(0, 1, bytes32(0));
+    }
+
+    function _buyLazyPass(address who) private {
+        vm.deal(who, 0.24 ether);
+        vm.prank(who);
+        game.purchaseLazyPass{value: 0.24 ether}(0, bytes32(0));
+    }
+
+    function _buyFoilOnly(address who) private {
+        vm.deal(who, 1 ether);
+        vm.prank(who);
+        game.purchaseOrderFor{value: 1 ether}(0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true);
+    }
+
+    /// @dev The boost multiplier frozen into `who`'s foil record (16 bits at shift 24), from whichever
+    ///      of the four level lanes holds it.
+    function _foilMult(address who) private returns (uint256) {
+        uint256 id = _aid(who);
+        for (uint256 lane; lane < 4; ++lane) {
+            uint256 rec = uint256(vm.load(address(game), keccak256(abi.encode(id, GameSlots.FOIL_RECORD + lane))));
+            if (rec != 0) return (rec >> 24) & 0xFFFF;
+        }
+        revert("foil record not written");
     }
 
     // =========================================================================

@@ -63,7 +63,8 @@ pragma solidity 0.8.38;
  *      inked in the trim RGB (as tickets ink them in the trait color).
  *      Free 24-bit picks, stored per token. An owner-set external renderer
  *      may override; a reverting or empty external render falls back to
- *      the internal renderer.
+ *      the internal renderer, and a return that does not decode as a
+ *      string reverts tokenURI.
  */
 
 import {ContractAddresses} from "./ContractAddresses.sol";
@@ -99,8 +100,9 @@ interface IDegenerusVaultOwner {
 }
 
 /// @notice Optional external renderer interface.
-/// @dev A reverting or empty external render falls back to the internal renderer;
-///      the staticcall is not gas-capped, and the renderer is owner-set and trusted.
+/// @dev A reverting or empty external render falls back to the internal renderer; a return
+///      that does not decode as a string reverts tokenURI. The staticcall is not gas-capped,
+///      and the renderer is owner-set and trusted.
 interface ISeatRenderer {
     /// @notice Renders a seat's full SVG/metadata art, as implemented by the owner-set renderer.
     function render(
@@ -618,8 +620,9 @@ contract AFKingSubscriptionToken {
 
     /// @notice On-chain SVG metadata for each live seat: the seat's own art and traits.
     /// @dev Uses the internal renderer by default; an owner-set external renderer may override.
-    ///      A reverting or empty return falls back to internal render. The staticcall is not
-    ///      gas-capped, so tokenURI integrity relies on the owner setting a sane renderer.
+    ///      A reverting or empty return falls back to internal render; a return that does not
+    ///      decode as a string reverts. The staticcall is not gas-capped, so tokenURI integrity
+    ///      relies on the owner setting a sane renderer.
     /// @custom:reverts InvalidToken When the serial is not live (never minted, or burned)
     function tokenURI(uint256 tokenId) external view returns (string memory) {
         (uint8 symbolId, uint24 bgRgb, uint24 trimRgb) = seatTraits(tokenId);

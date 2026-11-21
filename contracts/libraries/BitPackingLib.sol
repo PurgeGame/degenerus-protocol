@@ -30,7 +30,7 @@ pragma solidity 0.8.38;
  * @dev Consolidates packed field manipulation used across DegenerusGame, modules, and helpers.
  *
  *      Mint data layout (256 bits, contiguous):
- *      [0-23]    LAST_LEVEL_SHIFT            - Last level purchased (24 bits)
+ *      [0-23]    LAST_LEVEL_SHIFT            - Last minted level, or a pass's freeze horizon (24 bits)
  *      [24-47]   LEVEL_COUNT_SHIFT           - Total level purchases (24 bits)
  *      [48-71]   LEVEL_STREAK_SHIFT          - Consecutive level streak (24 bits, managed by MintStreakUtils)
  *      [72-95]   DAY_SHIFT                   - Day index of last purchase (24 bits)
@@ -68,7 +68,7 @@ library BitPackingLib {
     // Bit Shift Positions
     // -------------------------------------------------------------------------
 
-    /// @notice Bit position for last level purchased (bits 0-23)
+    /// @notice Bit position for the last minted level or a pass's freeze horizon (bits 0-23)
     uint256 internal constant LAST_LEVEL_SHIFT = 0;
 
     /// @notice Bit position for total level count (bits 24-47)
@@ -90,7 +90,8 @@ library BitPackingLib {
     uint256 internal constant WHALE_PASS_TYPE_SHIFT = 144;
 
     /// @notice Bit position for the AFKing seat latch (bit 146). Set on an
-    ///         account's FIRST pass PURCHASE (whale/lazy/deity), which is also
+    ///         account's FIRST pass PURCHASE (whale/lazy/deity, including a Vault
+    ///         Degenesis whale purchase made for the account), which is also
     ///         when the seat is minted to the account's payee; one free-tranche
     ///         seat per account, ever. Passes that are won (the whale-pass claim
     ///         lane) or conferred (a deity buyer's affiliate) never set it; the

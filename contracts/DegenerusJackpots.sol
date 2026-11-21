@@ -69,7 +69,7 @@ interface IWwxrpMintPrize {
 ///      - BAF: Leaderboard-based distribution to top BAF bettors, plus one
 ///        amount-weighted random final-day coinflip depositor
 ///      - Decimator: handled in the game decimator module
-///      - Skipped brackets (daily flip lost): players claim a WWXRP consolation
+///      - Skipped brackets (tagged BAF gate lost): players claim a WWXRP consolation
 ///        proportional to their frozen bracket score via claimBafConsolation
 /// @custom:security-contact burnie@degener.us
 contract DegenerusJackpots is IDegenerusJackpots {
@@ -108,7 +108,7 @@ contract DegenerusJackpots is IDegenerusJackpots {
         uint256 newTotal
     );
 
-    /// @notice Emitted when a BAF bracket is skipped because the daily flip lost.
+    /// @notice Emitted when a BAF bracket is skipped because the tagged BAF gate lost.
     /// @param lvl Level whose BAF was skipped.
     /// @param day Day index on which the skip occurred.
     event BafSkipped(uint24 indexed lvl, uint24 day);
@@ -154,7 +154,7 @@ contract DegenerusJackpots is IDegenerusJackpots {
         uint64 epoch;
         /// @notice Current length of the bafTop board (0-4).
         uint8 topLen;
-        /// @notice True once the bracket's BAF was skipped (daily flip lost). Terminal:
+        /// @notice True once the bracket's BAF was skipped (BAF gate lost). Terminal:
         ///         a skipped bracket can never resolve, so this is the exact gate for
         ///         WWXRP consolation claims against the bracket's frozen scores.
         bool skipped;
@@ -416,7 +416,7 @@ contract DegenerusJackpots is IDegenerusJackpots {
         }
     }
 
-    /// @notice Mark a BAF bracket as skipped because the daily flip lost.
+    /// @notice Mark a BAF bracket as skipped because the tagged BAF gate lost.
     /// @dev Bumps lastBafResolvedDay so pre-skip winning-flip credit is filtered
     ///      out of future claims (Coinflip gates winningBafCredit on
     ///      cursor >= lastBafResolvedDay). Leaderboard state for lvl is left
@@ -435,7 +435,7 @@ contract DegenerusJackpots is IDegenerusJackpots {
     /*+======================================================================+
       |                  SKIPPED-BRACKET WWXRP CONSOLATION                   |
       +======================================================================+
-      |  When a bracket's BAF skips (daily flip lost), the ETH pool rolls    |
+      |  When a bracket's BAF skips (BAF gate lost), the ETH pool rolls      |
       |  forward but the players' accumulated scores are wasted. Those       |
       |  scores are frozen in storage (the epoch only bumps on resolution,   |
       |  and no new credit can target a past bracket), so each score can be  |

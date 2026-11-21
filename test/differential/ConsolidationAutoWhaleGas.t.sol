@@ -12,11 +12,16 @@ import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlip
 ///      are reported explicitly; the live checkpoint must satisfy its current declared bound.
 contract ConsolidationAutoWhaleGas is SdgnrsWhaleBuyStageGas {
     function test_CurrentWhaleCheckpointAgainstRecordedBaseline() public {
+        // Both cold measurements run before the first recorded replay of the test.
         uint256 snapshot = vm.snapshotState();
-        uint256 empty = _measureFirstAdvanceOfDay(10 ether, 10 ether, 0);
+        uint256 empty = _measureFirstAdvanceOfDay(10 ether, 10 ether, 0, 0);
+        assertTrue(vm.revertToState(snapshot));
+        uint256 funded = _measureFirstAdvanceOfDay(16010 ether, 0, 1000, 0);
+        assertTrue(vm.revertToState(snapshot));
+        _measureFirstAdvanceOfDay(10 ether, 10 ether, 0, empty);
         uint256 emptyRepriced = _lastRepriced;
         assertTrue(vm.revertToState(snapshot));
-        uint256 funded = _measureFirstAdvanceOfDay(16010 ether, 0, 1000);
+        _measureFirstAdvanceOfDay(16010 ether, 0, 1000, funded);
         uint256 repriced = _lastRepriced - emptyRepriced;
         uint256 increment = funded - empty;
         emit log_named_uint("P1 recorded execution increment", 531619);

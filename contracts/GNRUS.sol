@@ -71,7 +71,7 @@ interface IDegenerusVaultOwner {
  * - 1T GNRUS minted to address(this) at deploy (unallocated pool)
  * - Each level, governance distributes 2% of remaining unallocated GNRUS to winning recipient
  * - GNRUS holders burn tokens to claim proportional ETH + stETH
- * - At GAMEOVER: all unallocated GNRUS burned, game pushes final ETH/stETH
+ * - At GAMEOVER: all unallocated GNRUS burned; the game's final sweep pushes final ETH/stETH
  * - Soulbound: transfer, transferFrom, approve all revert
  */
 contract GNRUS {
@@ -221,7 +221,7 @@ contract GNRUS {
     /// @notice Bitmap of slots with a pending edit; bit `i` set ⇔ a pending edit exists for slot `i`
     uint32 public pendingEditSet;
 
-    /// @notice Timestamp of the final sweep (set once by onFinalSweep); anchors the residual-recovery delay
+    /// @notice Timestamp of the final sweep (set once by onFinalSweep); the recovery functions need it set
     uint40 public sweptAt;
 
     // ^ currentLevel (3) + finalized (1) + currentActiveBitmap (4) + pendingEditSet (4) + sweptAt (5) = 17 bytes, one slot, 15 free
@@ -270,8 +270,8 @@ contract GNRUS {
     /// @notice Minimum burn amount: 1 GNRUS
     uint256 private constant MIN_BURN = 1e18;
 
-    /// @notice Delay after the final sweep before the vault owner may recover unredeemed GNRUS
-    ///         residual: a 3-year holder grace period measured from the sweep.
+    /// @notice Delay before the vault owner may recover unredeemed GNRUS residual: a 3-year holder
+    ///         grace period measured from sDGNRS's first year sweep.
     uint256 private constant RESIDUAL_RECOVERY_DELAY = 3 * 365 days;
 
     /// @notice Distribution per level: 2% of remaining unallocated GNRUS
@@ -364,25 +364,17 @@ contract GNRUS {
     /// @notice Burn GNRUS to receive a proportional share of the backing, as ETH and/or stETH
     /// @dev Burns `amount` GNRUS from msg.sender and pays its proportional share of the
     ///      combined backing (ETH + stETH + game claimable), ETH-first with stETH covering
-    ///      the remainder. Last-holder sweep: if the caller's
-    ///      entire balance equals `amount` or all externally-held GNRUS equals `amount`,
-    ///      sweeps the full caller balance to avoid dust.
+    ///      the remainder. A partial burn must be at least MIN_BURN; a holder's whole balance can
+    ///      always be burned, so no balance is left that its holder cannot redeem.
     ///      CEI: state updates and events before external transfers. stETH before ETH (ETH last).
-    /// @param amount Amount of GNRUS to burn (minimum 1 GNRUS)
+    /// @param amount Amount of GNRUS to burn (minimum 1 GNRUS, or the caller's whole balance)
     function burn(uint256 amount) external {
-        if (amount < MIN_BURN) revert InsufficientBurn();
-
-        uint256 supply = totalSupply;
         address burner = msg.sender;
         uint256 burnerBal = balanceOf[burner];
+        // A partial burn must reach the minimum; a holder's whole balance can always leave.
+        if (amount == 0 || (amount < MIN_BURN && amount != burnerBal)) revert InsufficientBurn();
 
-        // Last-holder sweep: if burning all remaining non-contract balance,
-        // use the full balance even if slightly above `amount`
-        if (burnerBal == amount || (supply - balanceOf[address(this)]) == amount) {
-            amount = burnerBal; // sweep
-        }
-
-        _redeemTo(burner, amount, burnerBal, supply);
+        _redeemTo(burner, amount, burnerBal, totalSupply);
     }
 
     /// @dev Shared proportional-redemption core. Burns `amount` GNRUS from `account` and pays it the
@@ -435,9 +427,9 @@ contract GNRUS {
 
     /// @notice Finalize at gameover: burn all remaining unallocated GNRUS
     /// @dev Only callable by the game contract. Can only be called once.
-    ///      The game contract pushes final ETH/stETH to VAULT, sDGNRS, and GNRUS
-    ///      during gameover processing. This function handles the GNRUS-side cleanup
-    ///      of burning unallocated tokens.
+    ///      Runs at the game-over latch. The game pushes final ETH/stETH to VAULT, sDGNRS, and
+    ///      GNRUS later, in its final sweep (30 days after the terminal payout completes). This
+    ///      function handles the GNRUS-side cleanup of burning unallocated tokens.
     function burnAtGameOver() external onlyGame {
         if (finalized) revert AlreadyFinalized();
         finalized = true;
@@ -452,10 +444,12 @@ contract GNRUS {
         emit GameOverFinalized(unallocated, 0, 0);
     }
 
-    /// @notice Record the final-sweep timestamp; the game calls this once from its final sweep when
-    ///         the terminal ETH/stETH has been distributed to sDGNRS, GNRUS, and the vault.
-    /// @dev onlyGame. Anchors the post-sweep recovery gates (vaultRedeemFor availability and the
-    ///      3-year sweepResidualToVault delay). The game's final sweep is one-shot (GO_SWEPT latch).
+    /// @notice Record the final-sweep timestamp and cash out GNRUS's sDGNRS and DGNRS; the game
+    ///         calls this once from its final sweep when the terminal ETH/stETH has been
+    ///         distributed to sDGNRS, GNRUS, and the vault.
+    /// @dev onlyGame. A prerequisite of both recovery functions (vaultRedeemFor and
+    ///      sweepResidualToVault); the 3-year residual delay itself counts from sDGNRS's first year
+    ///      sweep. The game's final sweep is one-shot (GO_SWEPT latch).
     function onFinalSweep() external onlyGame {
         sweptAt = uint40(block.timestamp);
         // The sweep has already paid sDGNRS, so cash out the sDGNRS and DGNRS GNRUS earned at the
@@ -509,13 +503,14 @@ contract GNRUS {
     /// @notice Sweep any ETH and stETH still held by GNRUS to the vault, after a long recovery delay.
     /// @dev Vault-owner-only. Recovers charity backing left unredeemed once the game is long over —
     ///      the final-sweep residual pushed when no holders remained, or the share of a holder that
-    ///      never redeemed. Gated on the final sweep having run plus RESIDUAL_RECOVERY_DELAY (three
-    ///      years from the actual `sweptAt` timestamp), so holders have a multi-year window to redeem
-    ///      (directly or via vaultRedeemFor) before the residual is reclaimed.
+    ///      never redeemed. Opens RESIDUAL_RECOVERY_DELAY (three years) after sDGNRS's first year
+    ///      sweep, which sends GNRUS its last scheduled inflow, so holders have that long to redeem
+    ///      (directly or via vaultRedeemFor) against everything GNRUS is due.
     function sweepResidualToVault() external {
         if (!vault.isVaultOwner(msg.sender)) revert Unauthorized();
         if (sweptAt == 0) revert NotSwept();
-        if (block.timestamp < uint256(sweptAt) + RESIDUAL_RECOVERY_DELAY) revert TooEarly();
+        uint256 yearSwept = sdgnrs.yearSweptAt();
+        if (yearSwept == 0 || block.timestamp < yearSwept + RESIDUAL_RECOVERY_DELAY) revert TooEarly();
 
         uint256 ethBal = address(this).balance;
         uint256 stethBal = BoundedCall.stethBalanceOrZero(ContractAddresses.STETH_TOKEN, address(this));
@@ -558,9 +553,9 @@ contract GNRUS {
             // Instant-apply branch (or removal special case if recipient == 0)
             if (recipient == address(0)) {
                 // Removal special case: empty current + zero recipient.
-                // SlotAlreadyEmpty fires only when no pending edit exists for this slot.
-                // If a pending edit IS set, this call cancels the queued add: clear the bitmap bit
-                // (the stale mapping value is never read while the bit is clear).
+                // Edits are queued only for filled slots, and the flush that empties a slot clears
+                // every pending bit, so an empty slot has no pending edit and this reverts
+                // SlotAlreadyEmpty. A queued edit is replaced by queueing another, not cancelled.
                 if ((pendingEditSet & slotMask) == 0) revert SlotAlreadyEmpty();
                 pendingEditSet &= ~slotMask;
                 emit CharityQueued(slot, address(0));

@@ -87,8 +87,8 @@ import {EntropyLib} from "./libraries/EntropyLib.sol";
  * • The secondary is gated behind the primary, so the missed-day reset stays keyed
  *   to the primary; while afking the funded auto-buy stands in for the primary
  * • No tiers or difficulty variance; targets are fixed
- * • Missed logical days consume stacked streak shields before resetting the streak.
- *   Calendar delays do not create logical days.
+ * • Missed logical days consume stacked streak shields before resetting the streak; a zero
+ *   streak spends none. Calendar delays do not create logical days.
  */
 contract DegenerusQuests is IDegenerusQuests {
     /// @custom:storage-location erc7201:degenerus.storage.quests.v1
@@ -388,7 +388,8 @@ contract DegenerusQuests is IDegenerusQuests {
      * Streak Mechanics:
      * - `streak` increments on every completion (primary, secondary, level credit
      *   independently; each slot is deduped to once per day by `completionMask`)
-     * - `baseStreak` snapshots streak at day start for consistent view rendering
+     * - `baseStreak` snapshots streak at day start for consistent view rendering; an afking
+     *   handback rewrites it
      * - `lastActiveDay` tracks slot-0 (the funded primary mint) — the reset anchor
      * - Missing a logical day after lastActiveDay resets the streak unless shields cover it;
      *   while afking nothing is billed, the manual streak is dormant and finalizeAfking
@@ -413,7 +414,7 @@ contract DegenerusQuests is IDegenerusQuests {
         uint24 lastActiveDay;      // Reset anchor: last primary (slot-0) completion, streak-bonus award, foil floor or afking handback day
         uint24 lastSyncDay;        // Day we last reset progress/completionMask
         uint16 streak;             // Running quest-completion streak (primary + secondary + level); uint16-capped, bounded downstream by the activity-score hard cap
-        uint16 baseStreak;         // Snapshot of streak at start of day (for rewards)
+        uint16 baseStreak;         // Snapshot of streak at start of day, or the afking handback (for rewards)
         uint8 shieldCenturyHighWater; // Highest streak-century credited a milestone shield this run; re-arms down on a streak reset so a genuine re-climb re-earns, while preventing double-credit of a century already passed within the run
         uint24 lastProgressDay0;   // Slot 0: day when progress was recorded
         uint24 lastProgressDay1;   // Slot 1: day when progress was recorded
@@ -612,8 +613,8 @@ contract DegenerusQuests is IDegenerusQuests {
      *      Clamps at uint16 max on overflow.
      * @param id Wallet ID of the player to receive the streak bonus.
      * @param amount Number of streak days to add.
-     * @param currentDay The caller's current logical game day; synchronization is pinned to the
-     *        newest rolled quest day when one exists.
+     * @param currentDay The caller's current logical game day; the streak syncs on it, whether or
+     *        not that day's quests have rolled.
      * @custom:reverts OnlyGame When caller is not the GAME contract.
      */
     function awardQuestStreakBonus(uint32 id, uint16 amount, uint24 currentDay) external questsContext {
@@ -665,18 +666,21 @@ contract DegenerusQuests is IDegenerusQuests {
      * @notice Raise a player's quest streak to a floor of 12 as a foil-pack benefit.
      * @dev Called from handleFoilPurchase (GAME-gated) AFTER the buy's own primary + secondary
      *      quest completions, so it applies on top of them. Unconditional on quest state (a foil
-     *      purchase boosts the streak even if no daily quest completed); never lowers an already-
-     *      higher streak. The preceding primary/foil leg syncs the day-lapse state, so a foil
-     *      buy restores the streak floor even after a missed-day reset.
+     *      purchase boosts the streak even if no daily quest completed, and between a daily
+     *      request and the quest roll); never lowers an already-higher streak. The caller syncs
+     *      the day-lapse state first, so a foil buy restores the streak floor even after a
+     *      missed-day reset.
      *      For a mid-run afker, whose reward streak is the afking sub base plus funded delivered
      *      days (independent of state.streak), the same floor is applied to that base via the
      *      afking module — before the manual-streak early-return below, so it reaches the afker
      *      even when their manual streak is already at the floor.
      * @param id Wallet ID of the player who bought the foil pack.
+     * @param currentDay The day the caller synced: the live quest day, else the Game's logical
+     *        day.
      */
     function _foilStreakFloor(uint32 id, PlayerQuestState storage state, uint24 currentDay) private {
         if (currentDay == 0) return;
-        // The primary/foil leg already synced this day. Neither its credit nor the
+        // The caller already synced this day. Neither the purchase legs' credits nor the
         // afking callbacks can roll quests or reset lastSyncDay.
         if (state.afkingSince != 0) {
             questGame.floorAfkingStreakBase(id, FOIL_STREAK_FLOOR);
@@ -751,8 +755,8 @@ contract DegenerusQuests is IDegenerusQuests {
      *      so a primary completed on `currentDay` still credits like one off a run. Does not
      *      touch the slot-1 quest.
      * @param id Wallet ID of the subscriber starting an afking run.
-     * @param currentDay The caller's current logical game day (1 or later); synchronization is
-     *        pinned to the newest rolled quest day when one exists.
+     * @param currentDay The caller's current logical game day (1 or later); the streak syncs on
+     *        it, whether or not that day's quests have rolled.
      * @return streak The player's synced streak at the start of the run.
      * @custom:reverts OnlyGame When caller is not GAME contract.
      */
@@ -784,8 +788,9 @@ contract DegenerusQuests is IDegenerusQuests {
      *      the logical days after it. A manual primary completion during the run sets
      *      `lastActiveDay` to a day no later than the endpoint, so the endpoint is the later
      *      anchor. No miss is billed while the run is open (`_questSyncState`), so nothing here
-     *      restores or re-bills shields. A double-call is safe: the second finds `afkingSince`
-     *      already 0 and returns.
+     *      restores or re-bills shields. The day's streak snapshot takes the handed-back streak,
+     *      so the streak readers show it on a day the account already synced. A double-call is
+     *      safe: the second finds `afkingSince` already 0 and returns.
      * @param id Wallet ID of the subscriber whose run is ending.
      * @param earnedStreak The run's live streak at the reward endpoint, Game-computed.
      * @param afkingCoveredDay The run's reward endpoint (its last delivered day).
@@ -798,7 +803,9 @@ contract DegenerusQuests is IDegenerusQuests {
     ) external questsContext onlyGame {
         PlayerQuestState storage state = _questsStorage().questPlayerState[id];
         if (state.afkingSince == 0) return; // idempotent: already finalized / never afking
-        state.streak = earnedStreak > type(uint16).max ? type(uint16).max : uint16(earnedStreak);
+        uint16 handed = earnedStreak > type(uint16).max ? type(uint16).max : uint16(earnedStreak);
+        state.streak = handed;
+        state.baseStreak = handed;
         _grantCenturyShield(id, state);
 
         state.lastActiveDay = afkingCoveredDay;
@@ -977,15 +984,15 @@ contract DegenerusQuests is IDegenerusQuests {
         if (msg.sender != ContractAddresses.COIN) revert OnlyCoin();
         if (actionFlags == 0) return;
 
-        // Sync the day-lapse state ONCE, before either quest leg. `_handleLevelQuestProgress`
-        // credits the streak on completion and, exactly like every other handler's call into it,
-        // requires the current quest day to already be live; the streak and join legs re-enter the
-        // same sync idempotently. Without this the pass-only path — a `buyFutureCrapsDays` burn —
-        // would bump a streak that a missed day should have reset.
+        // Sync the day-lapse state ONCE, before either quest leg, on the Game's logical day:
+        // also between the daily request and the quest roll, as the streak bonus does.
+        // `_handleLevelQuestProgress` credits the streak on completion and never syncs; the
+        // streak and join legs re-enter the same sync idempotently. Without this the pass-only
+        // path — a `buyFutureCrapsDays` burn — would bump a streak that a missed day should
+        // have reset.
         // One Game day read serves every leg of this call.
         uint24 gameDay = _questGameDay();
-        uint24 questDay = _currentQuestDayFast(gameDay);
-        if (questDay != 0) _questSyncState(_questsStorage().questPlayerState[id], id, questDay);
+        if (gameDay != 0) _questSyncState(_questsStorage().questPlayerState[id], id, gameDay);
 
         // The whole-day ticket's streak credit. Reached through the private body so the period-0
         // purchase keeps its +1/+5 off the burn it already routes here.
@@ -1210,13 +1217,16 @@ contract DegenerusQuests is IDegenerusQuests {
      *         secondary quest and streak floor, in one GAME call.
      * @dev Access: GAME contract only (the foil module runs in GAME's context). Runs the
      *      shared primary purchase legs, snapshots the reward streak, then the foil secondary
-     *      quest and streak floor. The returned streakSnapshot is the reward streak AFTER the
-     *      primary legs but BEFORE the secondary quest and streak floor — the basis the
-     *      foil-EV boost freezes against.
+     *      quest and streak floor. The returned streakSnapshot is the effective reward streak
+     *      as the streak view reads it: the day's snapshot, which excludes completions made after
+     *      it (this call's primary included) and is rewritten only by an afking handback, taken
+     *      before the secondary quest and streak floor — the basis the foil-EV boost freezes
+     *      against.
      *      The secondary self-credits its FLIP reward; only the primary leg's reward/type/
      *      completion are returned (the caller batches the primary reward).
      * @param id Wallet ID of the player who bought the foil pack.
-     * @param ethMintSpendWei Gross ETH-denominated foil spend in wei, credited 1:1 to MINT_ETH.
+     * @param ethMintSpendWei Gross ETH-denominated foil spend in wei, credited to MINT_ETH (daily
+     *        progress in milli-ETH after per-action truncation; level progress in wei).
      * @param flipMintQty FLIP-paid ticket-equivalent mint units.
      * @param lootBoxAmount ETH spent on lootbox in wei.
      * @param mintPrice Current ticket price in wei (daily targets).
@@ -1249,9 +1259,9 @@ contract DegenerusQuests is IDegenerusQuests {
             PurchaseQuestInputs(id, ethMintSpendWei, flipMintQty, lootBoxAmount, mintPrice, levelQuestPrice, gameDay),
             quests
         );
-        // Snapshot the reward streak post-primary, pre-floor: the foil-EV boost freezes
-        // against this streak, captured before the secondary quest and streak floor below
-        // mutate it.
+        // Snapshot the effective reward streak (the streak view's value: the day's snapshot,
+        // without completions made after it), pre-floor: the foil-EV boost freezes against this
+        // streak, captured before the secondary quest and streak floor below mutate it.
         PlayerQuestState storage state = _questsStorage().questPlayerState[id];
         uint24 currentDay = _currentQuestDay(quests, gameDay);
         streakSnapshot = _effectiveBaseStreak(state, gameDay);
@@ -1259,6 +1269,13 @@ contract DegenerusQuests is IDegenerusQuests {
             id, state, quests, currentDay,
             ethMintSpendWei == 0 && flipMintQty == 0 && lootBoxAmount == 0
         );
+        // Between a daily request and its quest roll no quest day is live and the legs above
+        // did not sync: the floor syncs and anchors on the Game's logical day, as the streak
+        // bonus does.
+        if (currentDay == 0) {
+            currentDay = gameDay;
+            _questSyncState(state, id, currentDay);
+        }
         _foilStreakFloor(id, state, currentDay);
         afking = state.afkingSince != 0;
     }
@@ -1290,8 +1307,8 @@ contract DegenerusQuests is IDegenerusQuests {
         uint24 currentDay = _currentQuestDay(quests, p.day);
         PlayerQuestState storage state = _questsStorage().questPlayerState[p.id];
         if (currentDay == 0) {
-            // Between the daily request and its quest roll: no quest is live, and the streak
-            // reads decay-aware against the Game day.
+            // Between the daily request and its quest roll: no daily quest is live and the level
+            // quest is not credited; the streak reads decay-aware against the Game day.
             return (0, quests[0].questType, _effectiveBaseStreak(state, p.day), false);
         }
         if (p.ethMintSpendWei == 0 && p.flipMintQty == 0 && p.lootBoxAmount == 0) {
@@ -1409,7 +1426,9 @@ contract DegenerusQuests is IDegenerusQuests {
      * @param id Wallet ID of the bet's funder.
      * @param amount The bet amount (wei for ETH, base units for FLIP).
      * @param paidWithEth True if bet was paid with ETH, false for FLIP.
-     * @param mintPrice Current ticket price in wei (0 for FLIP bets).
+     * @param mintPrice The next level's ticket price, priceForLevel(level + 1), in wei (0 for FLIP
+     *        bets). It prices this bet's daily and level quest targets; in a jackpot phase it
+     *        differs from the routed ticket price that a purchase's pair check uses.
      * @param day The Game's current logical day.
      * @return reward FLIP earned (whole FLIP).
      * @return questType The type of quest that was processed.
@@ -1620,8 +1639,9 @@ contract DegenerusQuests is IDegenerusQuests {
     ///      effectiveBaseStreak and the purchase streak). `currentDay` is the Game's logical day,
     ///      also between its daily request and the quest roll: every earlier day has rolled, so
     ///      the day count is the same one the next sync bills. A streak lapsed past its shields
-    ///      reads 0; once synced today the start-of-day baseStreak snapshot is used. While an
-    ///      afking run is open nothing is billed, as in `_questSyncState`.
+    ///      reads 0; once synced today the day's baseStreak snapshot is used: the start-of-day
+    ///      streak, or the streak an afking handback wrote since. While an afking run is open
+    ///      nothing is billed, as in `_questSyncState`.
     function _effectiveBaseStreak(
         PlayerQuestState memory state,
         uint24 currentDay
@@ -1692,11 +1712,11 @@ contract DegenerusQuests is IDegenerusQuests {
             req.mints = uint32(_questTargetValue(quest, slot, 0));
         } else {
             uint256 currentPrice = 0;
-            if (
-                qType == QUEST_TYPE_MINT_ETH ||
-                qType == QUEST_TYPE_LOOTBOX ||
-                qType == QUEST_TYPE_DEGENERETTE_ETH
-            ) {
+            if (qType == QUEST_TYPE_DEGENERETTE_ETH) {
+                // The bet measures this target at the next level's price (GameDegeneretteBet),
+                // which differs from mintPrice in a jackpot phase.
+                currentPrice = PriceLookupLib.priceForLevel(questGame.currentLvl() + 1);
+            } else if (qType == QUEST_TYPE_MINT_ETH || qType == QUEST_TYPE_LOOTBOX) {
                 currentPrice = questGame.mintPrice();
             }
             req.tokenAmount = _toNativeProgress(qType, _questTargetValue(quest, slot, currentPrice));
@@ -1939,7 +1959,8 @@ contract DegenerusQuests is IDegenerusQuests {
      *      - Anchors at lastActiveDay (primary completions, streak-bonus awards, the foil floor
      *        and afking finalize write it)
      *      - Each logical day strictly between the anchor and the current day is a miss; the
-     *        streak resets unless shields cover every missed day
+     *        streak resets unless shields cover every missed day, and a zero streak spends no
+     *        shield
      *      - While an afking run is open nothing is billed: the run delivers those days, and
      *        finalize anchors the manual system at the run's endpoint
      *      - On new day, resets completionMask and snapshots baseStreak
@@ -1948,7 +1969,8 @@ contract DegenerusQuests is IDegenerusQuests {
      *      - Captures streak at start of day for consistent view rendering
      * @param state Storage reference to player's quest state.
      * @param id Wallet ID for event emission.
-     * @param currentDay The current quest day.
+     * @param currentDay The live quest day, or the Game's logical day between a daily request
+     *        and the quest roll.
      */
     function _questSyncState(PlayerQuestState storage state, uint32 id, uint24 currentDay) private {
         if (state.lastSyncDay >= currentDay) return; // already synced this quest day
@@ -1964,7 +1986,8 @@ contract DegenerusQuests is IDegenerusQuests {
             uint32 missedDays = _missedQuestDays(anchorDay, currentDay);
             if (missedDays != 0) {
                 uint8 shields = state.streakShield;
-                if (shields != 0) {
+                // A zero streak has nothing to preserve, so it spends no shield.
+                if (shields != 0 && state.streak != 0) {
                     // used >= 1: both missedDays and shields are nonzero here.
                     uint8 left = missedDays > shields ? 0 : uint8(shields - missedDays);
                     state.streakShield = left;
@@ -2565,10 +2588,11 @@ contract DegenerusQuests is IDegenerusQuests {
     }
 
     /// @dev Returns the 10x target for a level quest type.
-    ///      MINT_FLIP targets 10 tickets, MINT_ETH targets mintPrice * 10,
+    ///      MINT_ETH targets mintPrice * 10,
     ///      LOOTBOX and DEGENERETTE_ETH target mintPrice * 20,
     ///      FLIP-denominated types target 20,000 FLIP, and AFFILIATE 6,000 FLIP
-    ///      (10x its own lower daily target).
+    ///      (10x its own lower daily target). MINT_FLIP is never rolled as a level quest;
+    ///      its branch returns 10 tickets.
     ///      No ETH cap applied (unlike daily quests).
     /// @param questType The level quest type (0 is the unrolled sentinel and targets 0).
     /// @param mintPrice Current mint price in wei.
@@ -2710,8 +2734,9 @@ contract DegenerusQuests is IDegenerusQuests {
         mayBet = earnsReward || mintData & PARTICIPATION_MASK != 0;
     }
 
-    /// @dev Mint-word fields only the account's own purchases and passes write: bits 0-223 (last
-    ///      level through LEVEL_UNITS) less the curse counter (203-207) and the unused bit 147.
+    /// @dev Mint-word fields written by purchases, passes (bought, won or conferred) and activity
+    ///      awards (box boons and deity gifts, which add to LEVEL_COUNT): bits 0-223 (last level
+    ///      through LEVEL_UNITS) less the curse counter (203-207) and the unused bit 147.
     ///      Bits 224-255 are unused and excluded.
     uint256 private constant PARTICIPATION_MASK =
         ((uint256(1) << (BitPackingLib.LEVEL_UNITS_SHIFT + 16)) - 1)
@@ -2761,7 +2786,9 @@ contract DegenerusQuests is IDegenerusQuests {
         // stays keyed to the daily primary and a bet never stands in for a daily quest.
         // Sync first so the bump lands on a post-lapse streak rather than resurrecting one
         // already missed; while afking it feeds the Sub streak base so finalize reconciles it.
-        uint24 questDay = _currentQuestDayFast(_questGameDay());
+        // The sync bills against the Game's logical day, as the streak view does, so a bet
+        // between the daily request and the quest roll is credited like any other.
+        uint24 questDay = _questGameDay();
         if (questDay != 0) {
             PlayerQuestState storage qs = _questsStorage().questPlayerState[id];
             _questSyncState(qs, id, questDay);

@@ -18,7 +18,8 @@ abstract contract GameDegeneretteBet is DegenerusGamePayoutUtils, DegenerusGameM
 
     /// @notice Emitted when a Degenerette bet is placed.
     /// @param player The bet owner's wallet ID.
-    /// @param index The lootbox RNG index this bet is tied to.
+    /// @param index The physical RNG buffer (0 or 1) the bet is queued in; `(index, betId)`
+    ///        repeats once the buffer is reused.
     /// @param betId The bet's id within `index`: its queue position + 1.
     /// @param packed The queued bet word (layout on DegenerusGameStorage.degeneretteQueue).
     event DegeneretteBetPlaced(
@@ -110,7 +111,7 @@ abstract contract GameDegeneretteBet is DegenerusGamePayoutUtils, DegenerusGameM
     }
 
     /// @notice Places a Degenerette bet with one chosen symbol and a generated ticket.
-    /// @dev Each spin resolves independently from the bet's lootbox RNG index word.
+    /// @dev Each spin resolves independently from the session word of the bet's RNG buffer.
     ///      The bet always belongs to account `id` (0 = caller). Funding source: a caller
     ///      authorized for the account (its payee or an approved
     ///      operator) spends the account's funds: fresh ETH from the caller, the claimable
@@ -193,9 +194,11 @@ abstract contract GameDegeneretteBet is DegenerusGamePayoutUtils, DegenerusGameM
         // returning-inactive player can't snapshot a
         // stale-high streak into the bet's activityScore (which scales the ETH ROI and the
         // lootbox-share EV multiplier). This snapshot precedes the new bet's quest credit.
+        // The mint streak reads against the routed ticket level, the base every score
+        // consumer uses.
         c.questStreak = _effectiveQuestStreak(c.playerId);
         c.activityScore = uint16(
-            _playerActivityScoreCachedAt(c.playerId, c.questStreak, c.lvl + 1, c.lvl)
+            _playerActivityScoreCachedAt(c.playerId, c.questStreak, _activeTicketLevel(), c.lvl)
         );
 
         // ETH-only per-bet bookkeeping: biggest-spin record and protocol boon entries.
@@ -224,13 +227,9 @@ abstract contract GameDegeneretteBet is DegenerusGamePayoutUtils, DegenerusGameM
 
             uint256 wagerUnit = c.totalBet / 1e14;
             if (c.symbol == 0 || c.symbol == 6) {
-                // Canonical boon score uses the routed ticket level. Reuse the
-                // effective quest streak already read, before this bet's quest credit.
-                uint16 boonScore = _activeTicketLevel() == c.lvl + 1
-                    ? c.activityScore
-                    : uint16(_playerActivityScore(c.playerId, c.questStreak));
+                // The boon entry carries the bet's own score.
                 _enterProtocolBoonDraw(
-                    c.playerId, c.symbol, day, c.totalBet, wagerUnit, boonScore
+                    c.playerId, c.symbol, day, c.totalBet, wagerUnit, c.activityScore
                 );
             }
         }

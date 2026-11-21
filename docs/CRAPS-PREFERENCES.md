@@ -12,7 +12,23 @@ unused pass credits when they cannot reserve a day. Unspent pass credits do not 
 Scheduled day D can settle, or receive its unopened-day pass refund, through D+30. Starting D+31,
 remaining work is skipped without payment or refund, including unfinished jackpot fields. Payments
 already made stand. The deadline uses the logical game day. An RNG outage does not advance that day
-and adds no lag. Custom battles are not subject to this deadline.
+and adds no lag. Each RNG request settles at most one non-empty ordinary window (the daily request
+also settles the previous day's jackpot battle), so a day's five ordinary windows need the daily
+request and four mid-day requests; while mid-day requests are refused (for example while the basefee
+is above four times the owner-set ceiling), unsettled windows wait in order and count toward this
+deadline. Custom battles are not subject to this deadline.
+
+A scheduled day opens when its daily word is applied. A word applied after some of the day's windows
+have passed still opens all six: a window whose period has passed takes no new entry and plays the
+seats committed before the word (day tickets, the house and Vault day seats and prepaid
+reservations), each window settling on its own later word. A word applied only after the next
+wall-clock reset opens nothing: the day stays unopened and its day tickets and reservations take the
+unopened-day refund above. A craps boon spent on a future-day purchase is not restored.
+
+Windows are timed from the 22:57 UTC wall-clock reset, not from the day's opening: the first five
+stop taking entries 20 minutes, 6h03m, 12h03m, 18h03m and 23h40m after it, and the sixth (the
+jackpot battle) at the next reset. The whole-day ticket is sold only while the first window takes
+entries, so a word applied more than 20 minutes after the reset leaves no live sale of it that day.
 
 Scheduled bets, boards, cursors, reserve draws, high fields, day counters, budgets and jackpot
 rounds reuse 64 day banks. Each wallet's day-seat record packs four tagged days per word. Public bet
@@ -86,8 +102,21 @@ stored counts to the API encoding. Do not pass the compact field directly to a p
 `deliverPasses` and vault comp kinds 0, 1, 2 and 5 snapshot the recipient's preference. Kind 3
 upgrades the existing ticket without changing its board; kind 4 banks passes. Window-ahead batches
 reserve before the future day's terms are known. Kind 5 refuses the house and vault (IDs 2 and 1),
-because one reserved window would replace their whole-day seat. Protocol house and vault seats
-(`_seatBody`) play the body's saved board, fully random when unset.
+because one reserved window would replace their whole-day seat. For any other recipient a
+window-ahead seat occupies that wallet's day in the same way: the wallet cannot also take a
+whole-day seat on that day and enters the remaining windows one at a time. A window-ahead slip
+keeps the board snapshotted at its grant until its day opens: `amendSlip` accepts it only from the
+day's opening until its window closes, so a slip whose window has already passed when a late word
+opens the day keeps that board. Protocol house and vault seats (`_seatBody`) play the body's saved
+board, fully random when unset. Each takes a whole-day seat when a day opens, paying with a banked
+pass first and FLIP second. When neither covers the day, the vault sits out and the house (sDGNRS)
+is seated unfunded: one seat that counts as an entrant and can win, so every window has a field.
+From the wall-clock reset until the day's word is applied, `convertNormalToHigh`,
+`applyCrapsPasses` and comp kind 4 revert `BetLocked()` for these two accounts, and
+`upgradeReservedDay` reverts `DayNotReservable()` for every account, so the high passes a body
+brings to a day's opening are the ones it held before that day's word was requested. A whale-pass
+purchase for either account can still bank normal passes in that interval; a normal pass pays for
+the day's ordinary seat in place of FLIP.
 
 ## The jackpot battle
 
@@ -106,7 +135,8 @@ with two kinds of seat:
 
 Warm-up and skipped days have no paid field. Their award-only battle uses the otherwise unused slot
 `day * 8 + 7`, which the lapse sweep never walks. `donate(false, 5, granules)` can add FLIP to the
-day's jackpot battle while `Game.rngLocked()` is false; donations join the pot in full.
+open day's jackpot battle once the daily RNG lock that opened the day is released and until the
+next wall-clock reset; donations join the pot in full.
 
 ### Lock and funding
 
@@ -173,7 +203,8 @@ runs and competitive prizes. These are nominal funding expectations. Engine limi
 4,294,967,295-FLIP stake cap per wallet/day still apply; the credit event reports the amount
 actually accepted when several large awards reach the same wallet.
 
-Preference edits and entries freeze with the request, which also latches the battle's pending bit.
+Entries and donations close at the wall-clock reset. Preference edits freeze with the request,
+which also latches the battle's pending bit.
 The RNG lock stays held, across midnight if necessary, until the field completes, so the paid field,
 preferences, queues and the committed word cannot change. Fees, award targets, reserve funding,
 multipliers, and draw identities remain fixed across midnight, word retirement, retries, and resumed
@@ -206,13 +237,20 @@ allocation under the same multiplier. With N base paid seats plus awarded seats:
 
 - each base seat's bankroll is half the main pool per seat, rounded down to a multiple of 300 FLIP
   (at least 300, at most 41,943,000, `JackpotBattle.sol` `maxBank`);
-- the rest of each unit's share is its bounty, in 100-FLIP granules, never above its bankroll;
-- rounding dust stays in the pot.
+- the rest of each unit's share is its bounty, in 100-FLIP granules, never above its bankroll or
+  26,214,300 FLIP (`_BSTAKE_MAX` granules);
+- rounding dust and any share above these caps stay in the pot.
 
 Only the base seats' fee-funded bankroll is booked as the day's craps action, and the comp lane
 earns 2% of it, both once at seal. Extra high fees earn comps equal to 9.6% of their pre-roll
 at-risk value: all extra fees for a sole high seat, half for a contested high field. These extras,
-Added and multiplier gains never enter the action books.
+Added and multiplier gains never enter the action books. A day's budgets are drawn when it opens,
+from 12% of the action booked over the seven days before it, divided by seven (a day with none
+counts as zero). Three fifths of the high seats' part is the high budget; the other two fifths,
+the rest of the action's part and a fixed 50,000-FLIP base form the main allocation, split in half
+between the five ordinary windows and the progressive. The seal runs in the next day's daily
+phase, after that day's budgets are drawn, so the battle's action reaches the six later budgets; a
+window settled on or after the next day's word is booked the same way.
 
 ### Settlement
 
@@ -223,7 +261,10 @@ window seats, then day tickets, then awarded seats.
   of its own bet id (`RngTags.CRAPS_BET_KEY`) rather than to the wallet. Repeat awards to one
   wallet, and repeat paid seats in a multi-entry custom battle, are therefore separate runs. A paid
   seat in a day-derived window (one per wallet) keys both to its owner ID. The shooter-boost turn
-  follows the seat's position in the field.
+  follows the seat's position in the field. In a scheduled field each seat has one turn: the seat
+  at the field's drawn start throws the first hand and a seat k places after it throws hand k + 1,
+  so a seat 512 or more places after the start has none, and in a field of N seats hands after the
+  Nth carry no rotation uplift. Custom-battle seats have no turn.
 - After the first mandatory checkpoint, each advance step admits further seats against
   `CRAPS_SEAT_GAS_MAX` (2,800,000) and draw chunks against `JACKPOT_BATTLE_DRAW` (4,700,000),
   including their return tails. The first mandatory checkpoint bypasses the estimate gate.
@@ -233,12 +274,24 @@ window seats, then day tickets, then awarded seats.
   starts in the next call.
 - Every jackpot battle run has the shared 600-roll between-shooter budget (1,111-roll ceiling).
 
+Every craps battle run (scheduled window, jackpot battle or custom battle) wagers its round on each
+shooter, doubling after every third shooter through the thirtieth and after every shooter from the
+thirty-first (capped at 2^32 − 1 rounds); before its goal, a run holding less than half the next
+wager busts, and one holding at least half but less than all of it stakes its whole bankroll on one
+even coin. Reaching the goal latches the win: the run then plays a shooter only while what it holds
+above the goal covers that shooter's whole wager, and is paid its ending bankroll (stochastically
+rounded to hundreds above 1,000 FLIP, before high-seat copies and boons apply), while a run that
+stops before its goal, including at the 512-shooter cap or the 600-roll budget, is paid nothing and
+its remainder is not returned.
+
 Scoring, the pot, the high-roller lane and payment follow any scheduled battle. The last seat
 finalizes the field once:
 
 - The bounties, the seal's remainder and any donations form the pot. With a hottest shooter, it
   splits 90/10 between the best-ranked run and that shooter; without one, the winner receives it
-  all.
+  all. The hottest shooter is the seat whose rotation turn falls on the longest hand any seat
+  threw (the earlier hand on a tie), counting round the field again when that hand comes after
+  every seat has had a turn.
 - A contested high lane pays its winner.
 - The pot winner's high point can also claim a progressive share
   (`CrapsProgressiveActions._jackpotPayProgressive`). At **25×** it pays **5%** of the live

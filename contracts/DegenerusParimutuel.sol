@@ -78,10 +78,10 @@ contract DegenerusParimutuel is IDegenerusParimutuel {
     ///      than chosen, so the two pools are counts and every winner is paid the same.
     uint256 public constant STAKE = 1_000;
 
-    /// @dev Participation-quest reward on the first day betting is open, before the
-    ///      per-day decay. Parimutuel pays the last mover best, since the final bettor sees
-    ///      the book before committing; a decaying reward prices that advantage back out
-    ///      without a hard cutoff.
+    /// @dev Participation-quest reward while the jackpot counter is 0 or 1; from counter 2
+    ///      it is a quarter (37 FLIP). Parimutuel pays the last mover best, since the final
+    ///      bettor sees the book before committing; the lower late reward prices that
+    ///      advantage back out without a hard cutoff.
     uint256 public constant QUEST_BASE = 150;
 
     uint8 private constant SIDE_OVER = 1;
@@ -126,9 +126,9 @@ contract DegenerusParimutuel is IDegenerusParimutuel {
     ///         approved operator.
     error NotApproved();
 
-    /// @notice No round is open for betting: outside the jackpot phase — game over
-    ///         included, since no phase ever opens again — or on round 0, which can
-    ///         never settle.
+    /// @notice No round is open for betting: outside a standard jackpot phase before its
+    ///         third draw, or on round 0, which can never settle. A game over inside such a
+    ///         phase leaves it open.
     error MarketClosed();
 
     /// @notice The player's wallet already holds a bet on the open round.
@@ -222,8 +222,8 @@ contract DegenerusParimutuel is IDegenerusParimutuel {
         // for it, so it could never settle and a stake left there would strand.
         if (!open || round == 0) revert MarketClosed();
 
-        // A wallet that has never bought anything cannot take a position on how the game
-        // grows. The gate reads the mint word that also carries the wallet ID; every Game
+        // A wallet with no purchase, pass or activity award cannot take a position on how the
+        // game grows. The gate reads the mint word that also carries the wallet ID; every Game
         // door that writes a field passing it registers the wallet first, so `mayBet`
         // implies a nonzero ID (for a resolved account, `id` itself).
         bool mayBet;

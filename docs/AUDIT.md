@@ -6,7 +6,9 @@
 profile**, selected by `PROFILE=eip170`, with deployment order and aliases in
 [deployments/eip170.json](../deployments/eip170.json). Runtime and initcode ceilings are 24,576 and
 49,152 bytes per deployment. Compiler settings are Solidity 0.8.38, via IR, optimizer runs 1,000 and
-EVM Osaka.
+EVM Osaka. Solidity lists one bug for 0.8.38 (SOL-2026-8, a storage copy between overlapping
+recursive structs); it needs a struct type that contains a dynamic array of its own type, and no
+contract here declares one (`make check-compiler-bugs`).
 
 [scope.txt](../scope.txt) lists the deployment import closure plus optional lenses and readers. Its
 final **display data: dependency review only** section separates artwork and renderer code;
@@ -69,10 +71,9 @@ stake, an unfunded VRF top-up, a balance read as zero, a skipped cancellation, a
 subscriber or a skipped GNRUS cash-out) is therefore a gas shortage the caller chose. For the
 protocol's own subscription and holdings, each minimum is at least 20% above the gas the
 dependency's cold call uses on the mainnet fork at Glamsterdam prices
-(`test/fork/ForkGlamsterdamBudgets.t.sol`). A callee can need more gas at entry than it uses: a
-cold stETH `balanceOf` uses 29,893 but needs 39,719 at entry, and `EXTERNAL_READ_GAS` (50,000) is
-1.26x that. A gas refusal inside a trusted protocol frame is re-raised, never swallowed. Nested
-funding can refuse a caller's calibration. A failed attempt alone is not a protocol stall if another caller can complete
+(`test/fork/ForkGlamsterdamBudgets.t.sol`). A gas refusal inside a trusted protocol frame is
+re-raised, never swallowed. Nested funding can refuse a caller's calibration. A failed attempt alone
+is not a protocol stall if another caller can complete
 the chain. Caller gas must not select a committed outcome or turn an out-of-gas failure into a
 semantic fallback. Terminal ETH distribution is reviewed independently of unfinished FLIP
 bookkeeping.
@@ -86,12 +87,16 @@ Start with [Architecture](ARCHITECTURE.md), [Token units](TOKEN-UNITS.md) and
 identifies entropy sources and consumers. [ETH exit assurance](audit/ETH-EXIT-ASSURANCE.md)
 describes the retained helper proof and its limits.
 
-Seven internal low-level calls encode one word more than their interface declares:
+Seven internal low-level calls encode more words than their interface declares:
 `stakeExcessEth`, `distributeYieldSurplus`, `requestDailyRng_g8190`, `requestMinerRng_g4954` (two
-lengths), `pullAfkingSteth` and `DegenerusAdmin.shutdownVrf`. The extra word is the caller's gas
+lengths), `pullAfkingSteth` and `DegenerusAdmin.shutdownVrf`. The last word is the caller's gas
 budget, which the receiver reads with `MineFlipGas.fromCall(headSize)` only when the calldata length
-is exactly `headSize + 32`. Each of these receivers accepts only protocol callers, so no outside
-caller supplies that word.
+is exactly `headSize + 32`. The longer `requestMinerRng_g4954` form also leads with a flag word
+(subscription floor already checked); the receiver takes the 68-byte length as the flag, never reads
+the word's value, and reads the meter after a 36-byte head. Each of these receivers accepts only
+protocol callers, so no outside caller supplies those words. `retryRng` also reads its meter with
+`MineFlipGas.fromCall(4)`; its only caller, Admin, appends no word, so it always runs with the
+default meter.
 
 [TESTING.md](TESTING.md) is the build/test companion to this handoff: dependency setup, a sliced
 build smoke test, production size/layout checks, source gates, Foundry and Hardhat groups, mainnet
@@ -129,5 +134,7 @@ Outcomes requiring valid sDGNRS governance approval are the governance mechanism
 findings. Bypassing its authorization, voting or execution rules remains in scope. Findings about
 WWXRP value, supply or draw weighting are excluded; a path where WWXRP moves ETH, stETH, sDGNRS or
 tickets, or pays FLIP beyond what its draws pay by rule, remains in scope. See [the audit
-boundaries](../SECURITY.md#audit-boundaries). Style-only reports and gas micro-optimizations are not
-audit priorities; see [out_of_scope.txt](../out_of_scope.txt).
+boundaries](../SECURITY.md#audit-boundaries). Findings that need a VRF outage approaching the 14-day
+hard-stall window, such as a word delivered in the last moments before that deadline, are excluded;
+shorter outages are assessed on their own facts. Style-only reports and gas micro-optimizations are
+not audit priorities; see [out_of_scope.txt](../out_of_scope.txt).

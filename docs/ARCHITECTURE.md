@@ -223,7 +223,11 @@ The ending, in order:
    unallocated inventory and zeroes the prize pools. Unfinished boxes and bets are abandoned;
    Craps cannot read a session word after the terminal latch.
 3. **Payout.** With a terminal word, the entire remaining amount budgets the terminal ticket jackpot
-   (fixed 152/104/48/1 geometry); unused allocations stay in the Game until the final sweep. A hard
+   (fixed 152/104/48/1 geometry); unused allocations stay in the Game until the final sweep. Before
+   that draw, the terminal level's queued tickets and foil packs receive traits in metered batches; a
+   batch that runs short of gas reverts the call, and a batch that fails with an error of its own
+   ends that cohort's draining so the ending proceeds, the cohort's unprocessed entries taking no part
+   in the terminal draw. A hard
    stall stops further loan settlement and issues no terminal request: the remainder is split
    across every ticket of the terminal level and claimed through `claimDeadVrf`. Terminal jackpot
    completion, or fixing the hard-stall pot, stamps `GO_TIME` (`_finishTerminalPayout`).
@@ -235,7 +239,7 @@ The ending, in order:
    The sweep then clears Admin's active subscription reference and attempts to cancel the VRF subscription.
    A refused cancellation can be retried through `Admin.retrySubCancel`. Game balance claims revert
    after the sweep.
-5. **Year sweep.** From game over + 365 days, after the final sweep, anyone may call
+5. **Year sweep.** From `GO_TIME` + 365 days, after the final sweep, anyone may call
    `sDGNRS.yearSweep`: all sDGNRS ETH and stETH goes half to GNRUS and half to the Vault, and the
    first call ends every sDGNRS and DGNRS burn and redemption claim. It is repeatable, so nothing
    that reaches sDGNRS later is stranded.
@@ -286,8 +290,10 @@ specialist references.
   state.
 - Entropy-dependent processing has the documented freeze boundaries; caller gas may select a safe
   checkpoint, never a committed outcome.
-- Pool writes, unchecked arithmetic and advance-chain external calls remain covered by the source
-  manifests.
+- Pool writes and advance-chain external calls remain covered by the source manifests. Every
+  `unchecked` block in the deployed contracts (`contracts/` except `interfaces/`, `test/` and
+  `mocks/`) is registered with the bound that keeps its arithmetic in range in
+  `scripts/unchecked-manifest.tsv` (`make check-unchecked`).
 
 [Properties](PROPERTIES.md) maps each to implementation symbols and test assertions.
 

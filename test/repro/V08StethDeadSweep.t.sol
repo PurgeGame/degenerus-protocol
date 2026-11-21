@@ -192,6 +192,9 @@ contract V08StethDeadSweep is DeployProtocol {
         vm.warp(vm.getBlockTimestamp() + 30 days + 1);
         vm.prank(keeper);
         game.mineRun(0);
+        // The residual delay counts from sDGNRS's year sweep; its stETH read is the dead token's.
+        vm.warp(vm.getBlockTimestamp() + 365 days);
+        sdgnrs.yearSweep();
         vm.warp(vm.getBlockTimestamp() + 3 * 365 days + 1);
         uint256 vaultBefore = address(vault).balance;
         uint256 residual = address(gnrus).balance;

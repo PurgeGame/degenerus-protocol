@@ -120,6 +120,22 @@ describe("GNRUS (GNRUS)", function () {
       ).to.be.revertedWithCustomError(charity, "InsufficientBurn");
     });
 
+    it("a balance left below MIN_BURN can still be burned whole", async function () {
+      const { charity, deployer, voter1, recipient1, gameAddress } = await loadFixture(deployCharityFixture);
+      await distributeGNRUS(charity, deployer, recipient1.address, gameAddress, voter1);
+
+      const bal = await charity.balanceOf(recipient1.address);
+      await charity.connect(recipient1).burn(bal - eth("0.5"));
+      expect(await charity.balanceOf(recipient1.address)).to.equal(eth("0.5"));
+
+      // A part of it is still below the minimum; the whole of it leaves.
+      await expect(
+        charity.connect(recipient1).burn(eth("0.25"))
+      ).to.be.revertedWithCustomError(charity, "InsufficientBurn");
+      await charity.connect(recipient1).burn(eth("0.5"));
+      expect(await charity.balanceOf(recipient1.address)).to.equal(0n);
+    });
+
     it("burn reduces totalSupply by burned amount", async function () {
       const { charity, deployer, voter1, recipient1, gameAddress } = await loadFixture(deployCharityFixture);
       await distributeGNRUS(charity, deployer, recipient1.address, gameAddress, voter1);

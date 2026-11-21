@@ -3,7 +3,7 @@ import {sDGNRS} from "../../contracts/sDGNRS.sol";
 
 pragma solidity 0.8.38;
 
-import {Vm, VmSafe} from "forge-std/Vm.sol";
+import {Vm} from "forge-std/Vm.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
@@ -16,6 +16,7 @@ import {IDegenerusJackpots} from "../../contracts/interfaces/IDegenerusJackpots.
 import {EntropyLib} from "../../contracts/libraries/EntropyLib.sol";
 import {BucketSeed} from "../helpers/BucketSeed.sol";
 import {GlamsterdamReprice} from "../helpers/GlamsterdamReprice.sol";
+import {GlamsterdamFrameProbe} from "../helpers/GlamsterdamFrameProbe.sol";
 import {FreshWordLeg} from "./PurchaseDailyWorstCase.t.sol";
 import {ProtocolBoonDrawSeeder} from "./helpers/ProtocolBoonDrawSeeder.sol";
 import {VaultHistorySeeder} from "./AdvanceNestedSettlementGas.t.sol";
@@ -398,7 +399,7 @@ contract CenturyNativeGasHost is DegenerusGame, WalletSeed, DegenerusGameRngUtil
     }
 }
 
-abstract contract CenturyConsolidationFixture is FreshWordLeg {
+abstract contract CenturyConsolidationFixture is FreshWordLeg, GlamsterdamFrameProbe {
     uint256 internal constant CAP = 10_000_000;
     uint8 internal constant STAGE_PURCHASE_BATTLE = 17;
     uint8 internal constant STAGE_ENTERED_JACKPOT = 7;
@@ -715,7 +716,8 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg {
     }
 
     /// @dev The word apply re-priced under Glamsterdam (EIP-8037 / EIP-8038) from its recorded
-    ///      accesses; the figures include the call's intrinsic gas.
+    ///      accesses. The miner admits the apply worker call at DAILY_APPLY (plus the Degenesis
+    ///      word copy while Degenesis is open); the measured frame is that call through the host.
     function _glamsterdamWordApply() internal {
         vm.etch(address(game), type(CenturyNativeGasHost).runtimeCode);
         CenturyNativeGasHost host = CenturyNativeGasHost(payable(address(game)));
@@ -724,22 +726,17 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg {
         while (!host.prepareTicketsOnly{gas: 12_000_000}()) {
             assertLt(++reads, 32, "century ticket prerequisites stalled");
         }
-        // The cold figure comes from an isolated call; the recorded replay of the same call
-        // supplies the accesses (recording does not keep the call's own cold state).
         uint256 snap = vm.snapshotState();
         host.applyOnly{gas: 12_000_000}();
         uint256 used = _coldCallGas();
         vm.revertToState(snap);
-        vm.startStateDiffRecording();
-        host.applyOnly{gas: 12_000_000}();
-        VmSafe.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
-        GlamsterdamReprice.Result memory r = GlamsterdamReprice.reprice(used - 21_192, acc, address(game));
-        emit log_named_uint("osaka_gas_including_intrinsic", used);
-        emit log_named_uint("glamsterdam_exec_gas_including_intrinsic", r.glamsterdamExec + 21_192);
-        emit log_named_uint("glamsterdam_state_gas", r.stateGas);
-        emit log_named_uint("new_slots_0_to_x", r.newSlots);
-        emit log_named_uint("cold_accounts", r.coldAccounts);
-        assertLt(r.glamsterdamExec + 21_192 + r.stateGas, CAP, "the daily apply stays under 10M under Glamsterdam");
+        vm.deleteStateSnapshot(snap);
+        (GlamsterdamReprice.Result memory r,,) =
+            _glamsterdamRecorded(address(game), abi.encodeCall(CenturyNativeGasHost.applyOnly, ()), used);
+        _logGlamsterdam("century_word_apply", r, GasBounds.DAILY_APPLY);
+        emit log_named_uint("  cold_accounts", r.coldAccounts);
+        assertLt(_glamsterdamTotal(r), CAP, "the daily apply stays under 10M under Glamsterdam");
+        assertLe(_glamsterdamTotal(r), GasBounds.DAILY_APPLY, "Glamsterdam century word apply exceeds DAILY_APPLY");
     }
 
     function _coldCallGas() private returns (uint256 used) {
@@ -786,6 +783,7 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg {
     ///      in the following award stage.
     function _checkConsolidation(bool measureComposition) private {
         CenturyNativeGasHost host = CenturyNativeGasHost(payable(address(game)));
+        uint256 battled = vm.snapshotState();
         (uint8 stage, uint256 used, Vm.Log[] memory logs) = _nativePhaseTx();
         assertEq(stage, STAGE_ENTERED_JACKPOT, "century consolidation must finish");
         assertEq(host.bafPool(), expectedPool, "the armed BAF pool is the fixture's");
@@ -812,7 +810,44 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg {
             "declared consolidation plus tail exceeds the 10M chunk limit");
 
         if (measureComposition) _checkRealisticMinerCalls("century_composed_baf_awards_including_intrinsic");
-        _checkBafAwardStage(used);
+        uint256[] memory groupGas = _checkBafAwardStage(used);
+        vm.revertToState(battled);
+        vm.deleteStateSnapshot(battled);
+        _glamsterdamCentury(used, groupGas);
+    }
+
+    /// @dev After every cold measurement of the test: the consolidation and then each award group
+    ///      in order, recorded from the states the cold calls started from and re-priced under
+    ///      Glamsterdam with their cold figures. Each whole frame (phase preamble and tails included)
+    ///      must fit its unit's bound alone.
+    function _glamsterdamCentury(uint256 consolidationTx, uint256[] memory groupGas) private {
+        CenturyNativeGasHost host = CenturyNativeGasHost(payable(address(game)));
+        (GlamsterdamReprice.Result memory r,,) = _glamsterdamRecorded(
+            address(game), abi.encodeCall(CenturyNativeGasHost.dailyOnly, ()), consolidationTx
+        );
+        _logGlamsterdam("century_consolidation", r, GasBounds.POOL_CONSOLIDATION);
+        assertLe(_glamsterdamTotal(r), GasBounds.POOL_CONSOLIDATION,
+            "Glamsterdam century consolidation (phase preamble and tail included) exceeds POOL_CONSOLIDATION");
+        GlamsterdamReprice.Result memory worst;
+        uint256 worstGroup;
+        for (uint256 g; g < groupGas.length; ++g) {
+            (r,,) = _glamsterdamRecorded(
+                address(game), abi.encodeCall(CenturyNativeGasHost.dailyWith, (ONE_GROUP_ALLOWANCE)), groupGas[g]
+            );
+            (uint8 kind, uint16 cursor,,) = host.bafWork();
+            uint256 end = (g + 1) * BAF_GROUP;
+            // The last group retires the record by clearing its kind; the cursor stays at the end.
+            assertEq(cursor, end < positions ? end : positions, "each recorded run pays one group");
+            assertEq(kind, end < positions ? 7 : 0, "only the last group retires the work record");
+            assertLe(_glamsterdamTotal(r), GasBounds.BAF_AWARD_GROUP,
+                "Glamsterdam one-group call (preamble and tails included) exceeds BAF_AWARD_GROUP");
+            if (_glamsterdamTotal(r) > _glamsterdamTotal(worst)) {
+                worst = r;
+                worstGroup = g;
+            }
+        }
+        _logGlamsterdam("baf_worst_group_glamsterdam", worst, GasBounds.BAF_AWARD_GROUP);
+        emit log_named_uint("  group", worstGroup);
     }
 
     /// @dev Engine accounts the award stage touches start every measured call cold.
@@ -852,7 +887,7 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg {
     ///      untouched until the last group closes it. Every position is filled, so no residue
     ///      returns: claimablePool and futurePool are unchanged by the stage. A composed run of the
     ///      same stage (several groups per call) must emit the identical award stream.
-    function _checkBafAwardStage(uint256 consolidationUsed) private {
+    function _checkBafAwardStage(uint256 consolidationUsed) private returns (uint256[] memory) {
         CenturyNativeGasHost host = CenturyNativeGasHost(payable(address(game)));
         (uint256 claimableBefore, uint256 futureBefore, uint256 pendingBefore) = host.poolsProbe();
         uint256 levelBefore = CenturyBafScores.levelWord(address(jackpots));
@@ -904,6 +939,7 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg {
         assertEq(a.decimator + a.yieldEvents + a.growth + a.quest, 0, "the award stage runs no consolidation step");
         assertLe(GasBounds.BAF_AWARD_GROUP + GasBounds.BAF_AWARD_TAIL + GasBounds.DAILY_PHASE_TAIL
             + MineFlipGas.CHECK_RESERVE, CAP, "declared BAF group plus tails exceeds the 10M chunk limit");
+        return run.groupGas;
     }
 
     /// @dev One measured group call starting at `cursor`, checked against the reference draw.
@@ -1119,6 +1155,10 @@ contract AdvanceCenturyConsolidationGas is CenturyConsolidationFixture {
     function _shape() internal pure override returns (Shape memory) {
         return Shape(3500 ether, 25_118_441_764_309_335_121, 158_126_247_524_580_441_470, 100, 1, true);
     }
+
+    function test_CenturyWordApplyGlamsterdam() public {
+        _glamsterdamWordApply();
+    }
 }
 
 contract AdvanceCenturyAtHundredThreshold is CenturyConsolidationFixture {
@@ -1208,5 +1248,9 @@ contract AdvanceCenturyVaultHistoryFailed is AdvanceCenturyDiverseDestinations {
 
     function _centuryDay() internal pure override returns (uint24) {
         return 792;
+    }
+
+    function test_CenturyWordApplyGlamsterdam() public {
+        _glamsterdamWordApply();
     }
 }

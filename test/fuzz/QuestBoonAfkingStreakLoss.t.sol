@@ -148,14 +148,20 @@ contract QuestBoonAfkingStreakLossTest is DeployProtocol {
         vm.prank(p);
         game.subscribe(0, false, 0, 0); // explicit cancel -> finalizeAfking
 
-        // finalizeAfking writes the earned streak into the manual `state.streak` (slot off9). Read it DIRECTLY
-        // (not via effectiveBaseStreakAndAfking, which would return the stale start-of-day baseStreak snapshot
-        // taken at the parked 95 before the run was finalized).
+        // finalizeAfking writes the earned streak into the manual `state.streak` (slot off9), read here from
+        // the slot.
         uint256 finalizedStreak = _manualStreakSlotOf(p);
         // The bonus survives into the earned streak because it rode the sub streak base; finalize hands it back.
         // Under the buggy code the bonus was on the dormant manual streak and was OVERWRITTEN here, so finalize
         // would hand back earned-without-bonus (one century lower) -- this asserts the bonus is reflected ONCE.
         assertEq(finalizedStreak, earnedExpected, "finalize hands back the earned streak (which now includes the bonus)");
+        // The award above synced this day while the manual streak was dormant at 95; the handback rewrites
+        // that day's snapshot, so the streak readers show the earned streak at once.
+        assertEq(
+            uint256(quests.effectiveBaseStreak(pId)),
+            finalizedStreak,
+            "readers see the handed-back streak the same day"
+        );
 
         // No orphaned/double-credited century shield: the shield count and high-water must be EXACTLY what the
         // finalized streak's century justifies (here streak 106 -> century 1 -> exactly one shield, high-water 1),
@@ -218,9 +224,8 @@ contract QuestBoonAfkingStreakLossTest is DeployProtocol {
         return _questField(who, 26, 24) != 0; // afkingSince u24 off26
     }
 
-    /// @dev The manual quest streak `state.streak` (DegenerusQuests slot 1, off 9) read DIRECTLY -- the value
-    ///      finalizeAfking writes back. Not effectiveBaseStreakAndAfking: that returns the stale start-of-day
-    ///      baseStreak snapshot (taken at the parked pre-run value), which finalize does not refresh.
+    /// @dev The manual quest streak `state.streak` (DegenerusQuests slot 1, off 9) read from the slot -- the
+    ///      value finalizeAfking writes back.
     function _manualStreakSlotOf(address who) internal view returns (uint256) {
         return _questField(who, OFF_QS_STREAK, 16);
     }

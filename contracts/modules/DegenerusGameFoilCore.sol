@@ -304,7 +304,7 @@ abstract contract DegenerusGameFoilCore is
     ) private {
         // Block once the liveness-timeout game-over trigger is active, or the game has
         // ended: a foil pack must not be added to a terminal jackpot whose resolving word
-        // is becoming known (mirrors the ticket queue's guard), and a post-gameover buy
+        // is becoming known (mirrors the purchase body's guard), and a post-gameover buy
         // could never resolve a match.
         if (gameOver) revert GameOver();
         if (_livenessTriggered()) revert GameOver();
@@ -405,8 +405,8 @@ abstract contract DegenerusGameFoilCore is
         // case the primary leg is idempotent (completed = false, no double reward/streak) but
         // still credits level-quest progress. When the foil is the buy that completes the
         // primary, it credits the reward, advances the mint streak (the recorder is per-level
-        // idempotent), and unlocks the foil secondary. streakSnapshot is the reward streak
-        // captured post-primary, pre-floor — the foil-EV score basis frozen into the record.
+        // idempotent), and unlocks the foil secondary. streakSnapshot is the effective reward
+        // streak, which excludes today's completions, pre-floor — the foil-EV score basis.
         // levelQuestPrice keys the level quest at the routed-next level: the level quest a jackpot-
         // phase foil feeds is level + 1's, so its MINT_ETH target must price at level + 1 — pricing it
         // at the current level under-targets and over-grants the reward. Mirrors the mint path; in the
@@ -437,8 +437,8 @@ abstract contract DegenerusGameFoilCore is
 
         if (kickback != 0) coinflip.creditFlip_g317(buyerId, kickback);
 
-        // Boost freeze off the buyer's post-action activity score (units + the streak the
-        // primary just advanced are reflected via streakSnapshot). Mirror the mint path's
+        // Boost freeze off the buyer's activity score: post-action units, and streakSnapshot,
+        // which excludes today's quest completions. Mirror the mint path's
         // unified-streak swap: a live afking sub's reward streak lives on the Sub side (funded
         // days + in-run secondaries), not the decayed manual snapshot, so use the afking-live
         // value when a run is active — the same basis the mint path's cachedScore uses for the
@@ -448,6 +448,8 @@ abstract contract DegenerusGameFoilCore is
             (bool afkLive, uint32 afkStreak) = _liveAfkingStreak(buyerId);
             if (afkLive) streakSnapshot = afkStreak;
         }
+        // Cure: the pack costs ten ticket prices, so it clears the curse like a qualifying buy.
+        _clearCurse(buyerId);
         uint256 score = _playerActivityScoreCached(buyerId, streakSnapshot);
         uint16 multBps = uint16(ActivityCurveLib.foilBoostBps(score));
 
@@ -525,10 +527,7 @@ abstract contract DegenerusGameFoilCore is
     ///      caller, and the marker is set before the payout (CEI), so a pack pays at
     ///      most once regardless of who triggers it.
     ///
-    ///      Closed from the liveness trigger on, matching the match claim and the drain's
-    ///      own grand push: past that point the terminal path is drawing down the pools,
-    ///      and a claim held back to straddle it would settle against a pool the terminal
-    ///      jackpot has already committed.
+    ///      Closed from the liveness trigger on, like the match claim.
     /// @param accountId Pack owner the win credits to (0 = caller, which must hold an ID;
     ///        otherwise allocated).
     /// @param lvl The pack's cycle level.
@@ -975,9 +974,9 @@ abstract contract DegenerusGameFoilCore is
         }
 
         // Two or more all-gold tickets: push the grand now rather than wait to be
-        // claimed. Runs AFTER the pack's own entries are filed, so the sixteen it just
-        // bought are in the buckets the draw this drain gates will read — the pack wins
-        // the grand and still plays the board it paid for.
+        // claimed. Runs AFTER the pack's own entries are filed, so on a live level the
+        // sixteen it just bought are in the buckets the draw this drain gates will read.
+        // A pack whose level has retired files no entries and still takes the grand.
         if (!terminal) {
             (uint8 golds, uint8 allGold) = _packGold(c.lines);
             if (allGold >= 2) _pushFoilGrand(c.buyerId, c.lvl, golds, allGold);

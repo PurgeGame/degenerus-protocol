@@ -312,21 +312,50 @@ describe("GnrusRecovery", function () {
       await triggerFinalSweep(game, gnrus, deployer, mockVRF);
       expect(await gnrus.sweptAt()).to.not.equal(0n);
 
-      // Immediately post-sweep: block.timestamp == sweptAt << sweptAt + 3 years.
+      // Immediately post-sweep: no year sweep yet.
       await expect(
         ownerAction(gnrus.connect(deployer), "sweepResidualToVault", [])
       ).to.be.revertedWithCustomError(gnrus, "TooEarly");
     });
 
-    it("after sweep + 3 years, vault owner sweeps ALL GNRUS ETH+stETH to the VAULT", async function () {
+    it("reverts TooEarly three years after the final sweep while the year sweep has not run", async function () {
       const fixture = await loadFixture(deployFullProtocol);
-      const { game, gnrus, vault, deployer, mockVRF } = fixture;
+      const { game, gnrus, deployer, mockVRF } = fixture;
+
+      await triggerGameOver(game, deployer, mockVRF);
+      await triggerFinalSweep(game, gnrus, deployer, mockVRF);
+      await advanceTime(RESIDUAL_RECOVERY_DELAY + 3600);
+
+      // The delay counts from sDGNRS's year sweep, which pays GNRUS its last inflow.
+      await expect(
+        ownerAction(gnrus.connect(deployer), "sweepResidualToVault", [])
+      ).to.be.revertedWithCustomError(gnrus, "TooEarly");
+    });
+
+    it("reverts TooEarly after the year sweep but before the 3-year residual delay", async function () {
+      const fixture = await loadFixture(deployFullProtocol);
+      const { game, gnrus, sdgnrs, deployer, mockVRF } = fixture;
+
+      await triggerGameOver(game, deployer, mockVRF);
+      await triggerFinalSweep(game, gnrus, deployer, mockVRF);
+      await triggerYearSweep(game, sdgnrs);
+      await advanceTime(RESIDUAL_RECOVERY_DELAY - 3600);
+
+      await expect(
+        ownerAction(gnrus.connect(deployer), "sweepResidualToVault", [])
+      ).to.be.revertedWithCustomError(gnrus, "TooEarly");
+    });
+
+    it("three years after the year sweep, vault owner sweeps ALL GNRUS ETH+stETH to the VAULT", async function () {
+      const fixture = await loadFixture(deployFullProtocol);
+      const { game, gnrus, sdgnrs, vault, deployer, mockVRF } = fixture;
       const gnrusAddr = await gnrus.getAddress();
       const vaultAddr = await vault.getAddress();
 
       await triggerGameOver(game, deployer, mockVRF);
       await triggerFinalSweep(game, gnrus, deployer, mockVRF);
       expect(await gnrus.sweptAt()).to.not.equal(0n);
+      await triggerYearSweep(game, sdgnrs);
 
       // Seed a residual: ETH (receive()) + stETH held by GNRUS.
       await deployer.sendTransaction({ to: gnrusAddr, value: eth("5") });

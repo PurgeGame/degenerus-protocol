@@ -70,7 +70,8 @@ interface IDegenerusGameLensSource {
 ///      be called — they would read this contract's empty storage; the lens carries
 ///      explicit mirrors that source the same fields via extsload instead.
 contract DegenerusGameLens is DegenerusGameMintStreakUtils {
-    /// @notice Current price, RNG lock, claimables and prepaid funding for a batch of wallets.
+    /// @notice Current price, RNG lock, claimables and prepaid funding for a batch of wallets;
+    ///         both balances read 0 after the final sweep.
     function afkingSnapshot(address game, address[] calldata players) external view returns (
         uint256 mintPriceWei, bool rngLocked_, uint256[] memory claimables, uint256[] memory afkingFundings
     ) {
@@ -87,7 +88,7 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
         for (uint256 i; i < players.length; ++i) {
             uint256 packed = _sload(game, _mapSlot(_walletId(game, players[i]), root));
             claimables[i] = swept ? 0 : uint128(packed);
-            afkingFundings[i] = packed >> 128;
+            afkingFundings[i] = swept ? 0 : packed >> 128;
         }
     }
 
@@ -670,7 +671,9 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
         r.next = uint24(word >> 128);
     }
 
-    /// @notice Last sealed original average as an exact fraction, plus the next automatic cap.
+    /// @notice Last sealed original average as an exact fraction, plus the reference cap (four
+    ///         times that average; 8,000 with no sealed round). The automatic burn uses this cap,
+    ///         lowered only when the round's 64-bit aggregate has less room left.
     function decBurnReferenceOf(address game)
         external view returns (uint64 stack, uint40 count, uint256 automaticCap)
     {

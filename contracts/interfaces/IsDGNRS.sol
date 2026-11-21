@@ -73,6 +73,7 @@ interface IsDGNRS {
 
     /// @notice Burn sDGNRS. Post-gameOver: immediate proportional payout. During game: joins the
     ///         open redemption batch (returns 0,0,0); the miner settles it after the batch's word.
+    ///         Reverts `Swept` after the first year sweep.
     /// @param amount Amount of sDGNRS to burn
     /// @return ethOut ETH received (0 during active game)
     /// @return stethOut stETH received (0 during active game)
@@ -91,14 +92,17 @@ interface IsDGNRS {
     /// @param batchId Redemption batch to claim.
     /// @custom:reverts NotResolved If a closed batch has no roll.
     /// @custom:reverts NotGameOver If the game is not over.
+    /// @custom:reverts Swept After the first year sweep.
     /// @custom:reverts Unauthorized If the caller may not act for `id`.
     /// @custom:reverts E (Game) If `id` is unallocated.
     /// @custom:reverts NoClaim If the account has no entry in the batch.
     function claimRedemption(uint32 id, uint32 batchId) external;
 
-    /// @notice One year after game over and the Game's final sweep, send all sDGNRS ETH and stETH
-    ///         to GNRUS and the Vault, half each; repeatable. The first sweep ends holder claims.
-    /// @custom:reverts SweepNotReady Before game over + 365 days or before the final sweep.
+    /// @notice One year after terminal payout completion and the Game's final sweep, send all
+    ///         sDGNRS ETH and stETH to GNRUS and the Vault, half each; repeatable. The first
+    ///         sweep ends holder claims.
+    /// @custom:reverts SweepNotReady Before terminal payout completion + 365 days or before the
+    ///         final sweep.
     function yearSweep() external;
 
     /// @notice Timestamp of the first year sweep; 0 until then.
@@ -160,6 +164,7 @@ interface IsDGNRS {
     /// @notice Settle the closed batch on `word`, the published word of the current session.
     function runRedemptionWork(uint256 word, uint256 gasAllowance) external returns (MineFlipGas.Result memory);
 
-    /// @notice Burn the caller's wrapped DGNRS for backing through sDGNRS redemption.
+    /// @notice Burn the caller's wrapped DGNRS for backing through sDGNRS redemption. Reverts
+    ///         `Swept` after the first year sweep.
     function burnWrapped(uint256 amount) external returns (uint256 ethOut, uint256 stethOut, uint256 flipOut);
 }

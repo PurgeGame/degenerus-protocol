@@ -3,6 +3,9 @@ pragma solidity 0.8.38;
 
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {BoundedGasProbe} from "../helpers/BoundedGasProbe.sol";
+import {GlamsterdamReprice} from "../helpers/GlamsterdamReprice.sol";
+import {MinerloopGasProbe} from "../helpers/MinerloopGasProbe.sol";
+import {MineFlipGasBounds as Bounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
 import {WalletSeed} from "../helpers/WalletSeed.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {DegenerusGameFoilCore} from "../../contracts/modules/DegenerusGameFoilCore.sol";
@@ -27,7 +30,7 @@ contract FoilGrandNativeHost is DegenerusGame, DegenerusGameFoilCore, WalletSeed
     }
 }
 
-contract FoilGrandNativeGasTest is DeployProtocol, BoundedGasProbe {
+contract FoilGrandNativeGasTest is DeployProtocol, BoundedGasProbe, MinerloopGasProbe {
     FoilGrandNativeHost private host;
     address private constant PLAYER = address(0xF017CA1);
     function setUp() public {
@@ -43,6 +46,20 @@ contract FoilGrandNativeGasTest is DeployProtocol, BoundedGasProbe {
             abi.encodeCall(host.forceGrand, (PLAYER, uint8(16), uint8(4))), false);
         assertEq(host.credit(PLAYER) - before, 100 ether, "real grand pays a quarter of the future pool");
     }
+    /// @dev Glamsterdam: the forced grand push, one part of a pack admitted at canRun(FOIL_PACK, 100_000).
+    function _glamsterdamGrand(string memory label, uint8 golds, uint8 allGold) private {
+        uint256 before = host.credit(PLAYER);
+        (GlamsterdamReprice.Result memory r,) = _probe(address(host), address(this),
+            abi.encodeCall(host.forceGrand, (PLAYER, golds, allGold)), 10_000_000);
+        vm.stopMappingRecording();
+        assertEq(host.credit(PLAYER) - before, 100 ether, "real grand pays a quarter of the future pool");
+        _report(label, r, Bounds.FOIL_PACK);
+        emit log_named_uint("new_slots", r.newSlots);
+        assertLe(r.glamsterdamExec + r.stateGas, Bounds.FOIL_PACK, "FOIL_PACK");
+    }
+    function test_GlamsterdamGrandFourGoldLines() public { _glamsterdamGrand("foil_grand_four_gold_lines", 16, 4); }
+    function test_GlamsterdamGrandTwoGoldLines() public { _glamsterdamGrand("foil_grand_two_gold_lines", 8, 2); }
+
     function test_GrandTwoGoldLinesWithFreshPayoutLanes() public {
         uint256 before = host.credit(PLAYER);
         _measureBounded("foil-grand-two-gold-lines", address(host), address(this), 0,

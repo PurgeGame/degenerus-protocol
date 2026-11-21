@@ -56,9 +56,6 @@ abstract contract ForkGlamsterdamBudgetsBase is ForkDeployProtocol {
         uint256 newAccts;
     }
 
-    uint256 internal constant NEW_ACCOUNT_STATE_GAS = 183_600;
-    uint256 internal constant VALUE_CALL_DELTA = 2_300;
-    uint256 internal constant EXTCODE_DELTA = 100;
     uint256 private constant MAX_SEEN = 4096;
 
     address internal player;
@@ -237,14 +234,17 @@ abstract contract ForkGlamsterdamBudgetsBase is ForkDeployProtocol {
             ++r.valueCalls;
             if (!acc[i].initialized) ++r.newAccts;
         }
+        // The repricer counts value calls, new accounts and code reads from the access records.
+        assertEq(g.valueCalls, r.valueCalls, "value calls inside the frame");
+        assertEq(g.newAccounts, r.newAccts, "accounts created by value calls");
+        if (traced) assertEq(g.codeReads, r.extcode, "EXTCODESIZE/EXTCODECOPY census matches the access records");
         r.sstores = g.sstores;
         r.firstChanges = g.firstChanges;
         r.newSlots = g.newSlots;
         // Use the same sender/target warmth as the cold-frame cross-check.
         r.exec = uint256(int256(r.osaka) + g.execDelta - int256(g.coldAccounts * 400))
-            + r.cold * 400 + EXTCODE_DELTA * r.extcode + VALUE_CALL_DELTA * r.valueCalls
-            - firstWrites * 100 - r.newAccts * 25_000;
-        r.state = g.stateGas + NEW_ACCOUNT_STATE_GAS * r.newAccts;
+            + r.cold * 400 - firstWrites * 100;
+        r.state = g.stateGas;
         r.total = r.exec + r.state;
     }
 

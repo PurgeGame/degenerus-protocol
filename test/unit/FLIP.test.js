@@ -291,18 +291,15 @@ describe("FLIP", function () {
       );
     });
 
-    it("GAME contract can transferFrom without approval", async function () {
+    it("GAME contract needs an allowance like any other caller", async function () {
       const { coin, game, alice, bob } = await getFixture();
       const gameAddr = await game.getAddress();
       const gameSigner = await impersonate(gameAddr);
       await coin.connect(gameSigner).mintForGame_g152734(alice.address, flip(500));
-      // No approve() call needed
-      await coin
-        .connect(gameSigner)
-        .transferFrom(alice.address, bob.address, flip(100));
+      await expect(
+        coin.connect(gameSigner).transferFrom(alice.address, bob.address, flip(100))
+      ).to.be.revertedWithCustomError(coin, "InsufficientAllowance");
       await stopImpersonate(gameAddr);
-
-      expect(await coin.balanceOf(bob.address)).to.equal(flip(100));
     });
 
     it("emits Approval event when allowance is decremented", async function () {

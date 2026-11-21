@@ -8,6 +8,8 @@ import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {WalletSeed} from "../helpers/WalletSeed.sol";
+import {GlamsterdamReprice} from "../helpers/GlamsterdamReprice.sol";
+import {ColdFirstReprice} from "../helpers/ColdFirstReprice.sol";
 
 /// @dev A full production facade with controlled, committed native-worker inputs.
 ///      The measured calls delegate to the unmodified production AFKing module.
@@ -85,6 +87,15 @@ contract SubscriberNativeGasHost is DegenerusGame, WalletSeed {
     }
 
     function openFixture(address player, uint256 word) external {
+        _openFixture(player, word, false);
+    }
+
+    /// @dev `openFixture` behind an unbought Vault seat at box position zero, which the opener skips.
+    function openFixtureBehindVault(address player, uint256 word) external {
+        _openFixture(player, word, true);
+    }
+
+    function _openFixture(address player, uint256 word, bool behindVault) private {
         uint24 day = _wallDay();
         level = 299;
         dailyIdx = day;
@@ -99,6 +110,7 @@ contract SubscriberNativeGasHost is DegenerusGame, WalletSeed {
         subsFullyProcessed = true;
         uint32 id = _seedWallet(player);
         _clearSubscriberSet();
+        if (behindVault) _seedSubscriber(VAULT_WALLET_ID, false);
         _seedSubscriber(id, false);
         _subOpenCursor = 0;
         _pendingBoxCount = 1;
@@ -107,6 +119,7 @@ contract SubscriberNativeGasHost is DegenerusGame, WalletSeed {
         _afkingEndpointDay = day;
         _afkingCohortPriceMilli = uint16(_packEthToMilliEth(0.24 ether)); // the maximum unit price
         if (player == ContractAddresses.SDGNRS) _afkingProtocolFlags = AFK_SDGNRS_BOUGHT;
+        if (behindVault) _afkingProtocolFlags &= ~AFK_VAULT_BOUGHT;
         // The maximum quantity at the maximum price and the maximum useful activity-score code.
         uint256 position1 = _subPosition1(id);
         _setSubLaneAt(position1 - 1, _subLaneAt(position1 - 1) | (uint256(305) << SUB_SCORE_SHIFT));
@@ -176,7 +189,7 @@ contract SubscriberNativeGasHost is DegenerusGame, WalletSeed {
     }
 }
 
-contract SubscriberAfkingNativeGasTest is DeployProtocol {
+contract SubscriberAfkingNativeGasTest is DeployProtocol, ColdFirstReprice {
     // Benchmark guideline only; runtime admission uses the caller's remaining gas.
     uint256 private constant STEP_GAS_TARGET = 10_000_000;
     SubscriberNativeGasHost private host;
@@ -337,5 +350,144 @@ contract SubscriberAfkingNativeGasTest is DeployProtocol {
         assertLe(used, STEP_GAS_TARGET);
         (uint24 bought, uint24 opened) = host.delivered(player);
         assertEq(opened, bought);
+    }
+
+    /// @dev One cold Glamsterdam measurement of a facade worker call, in its own transaction
+    ///      and memory frame. Only for a test's single recorded measurement.
+    function glamsterdamWork(bytes calldata data)
+        external returns (GlamsterdamReprice.Result memory r, MineFlipGas.Result memory result)
+    {
+        require(msg.sender == address(this), "measurement self-call");
+        bytes memory returned;
+        (r, returned) = _probe(address(game), address(this), data, 12_000_000);
+        vm.stopMappingRecording();
+        result = abi.decode(returned, (MineFlipGas.Result));
+    }
+
+    function _total(GlamsterdamReprice.Result memory r) private pure returns (uint256) {
+        return r.glamsterdamExec + r.stateGas;
+    }
+
+    /// @dev Case 0 is the empty pass; case k > 0 adds one member in mode k - 1.
+    function _subscriberCase(uint256 k) private {
+        host.prepare(false);
+        if (k != 0) host.add(PLAYER, uint8(k - 1));
+    }
+
+    /// @dev Case i: the Osaka sweep's word i; case 256 + j: word j behind an unbought Vault seat.
+    function _openCase(uint256 i) private {
+        uint256 j = i & 255;
+        address player = i >= 256 ? PLAYER : j & 1 == 0 ? PLAYER : ContractAddresses.SDGNRS;
+        uint256 word = uint256(keccak256(abi.encode("afking grant", j)));
+        if (i >= 256) host.openFixtureBehindVault(player, word);
+        else host.openFixture(player, word);
+    }
+
+    /// @dev Cold Osaka frames of `cases` (all before any recording), then their recorded replays.
+    function _coldFirstCases(uint256[] memory cases, bool open)
+        private returns (GlamsterdamReprice.Result[] memory r, MineFlipGas.Result[] memory out)
+    {
+        bytes memory data = open ? abi.encodeCall(host.openWork, (12_000_000)) : abi.encodeCall(host.subWork, (12_000_000));
+        uint256 n = cases.length;
+        uint256[] memory cold = new uint256[](n);
+        bytes32[] memory results = new bytes32[](n);
+        out = new MineFlipGas.Result[](n);
+        uint256 base = vm.snapshotState();
+        for (uint256 k; k < n; ++k) {
+            if (open) _openCase(cases[k]);
+            else _subscriberCase(cases[k]);
+            bytes memory result;
+            (cold[k], result) = _coldFrame(address(game), address(this), data, 12_000_000);
+            results[k] = keccak256(result);
+            out[k] = abi.decode(result, (MineFlipGas.Result));
+            assertTrue(vm.revertToState(base));
+        }
+        r = new GlamsterdamReprice.Result[](n);
+        for (uint256 k; k < n; ++k) {
+            if (open) _openCase(cases[k]);
+            else _subscriberCase(cases[k]);
+            r[k] = this.coldFirstReplay(address(game), address(this), data, 12_000_000, cold[k], results[k]);
+            assertTrue(vm.revertToState(base));
+        }
+        vm.deleteStateSnapshot(base);
+    }
+
+    /// @dev Each subscriber branch is one item admitted at canRun(SUBSCRIBER_ITEM_GAS,
+    ///      SUBSCRIBER_TAIL_GAS); the empty pass is the sentinel steps' canRun(0, SUBSCRIBER_TAIL_GAS).
+    function test_GlamsterdamSubscriberBranchesAndEmptyPass() public {
+        uint256[] memory cases = new uint256[](7);
+        for (uint256 k; k < 7; ++k) cases[k] = k;
+        (GlamsterdamReprice.Result[] memory r, MineFlipGas.Result[] memory out) = _coldFirstCases(cases, false);
+        assertTrue(out[0].done);
+        assertEq(out[0].rewardBasis, 0);
+        _report("subscriber_empty_pass", r[0], GasBounds.SUBSCRIBER_TAIL_GAS);
+        assertLe(_total(r[0]), GasBounds.SUBSCRIBER_TAIL_GAS, "SUBSCRIBER_TAIL_GAS (whole empty pass)");
+        uint256 worst = 1;
+        for (uint256 k = 1; k < 7; ++k) {
+            assertTrue(out[k].progressed && out[k].done);
+            assertEq(out[k].rewardBasis, 1, "exactly one subscriber processed");
+            emit log_named_uint("subscriber_branch_mode", k - 1);
+            emit log_named_uint("osaka_exec", r[k].osakaExec);
+            emit log_named_uint("glamsterdam_total", _total(r[k]));
+            emit log_named_uint("new_slots", r[k].newSlots);
+            assertLe(_total(r[k]), GasBounds.SUBSCRIBER_ITEM_GAS + GasBounds.SUBSCRIBER_TAIL_GAS,
+                "SUBSCRIBER_ITEM_GAS + SUBSCRIBER_TAIL_GAS");
+            if (_total(r[k]) > _total(r[worst])) worst = k;
+        }
+        emit log_named_uint("worst_mode", worst - 1);
+        _report("subscriber_worst_branch_whole_call", r[worst], GasBounds.SUBSCRIBER_ITEM_GAS + GasBounds.SUBSCRIBER_TAIL_GAS);
+        emit log_named_uint("item_over_empty_pass", _total(r[worst]) - _total(r[0]));
+        assertLe(_total(r[worst]) - _total(r[0]), GasBounds.SUBSCRIBER_ITEM_GAS, "SUBSCRIBER_ITEM_GAS");
+    }
+
+    /// @dev The whale purchase and its pass, admitted at canRun(SUBSCRIBER_WHALE_GAS, SUBSCRIBER_TAIL_GAS).
+    function test_GlamsterdamHundredPaidPassWhale() public {
+        host.prepare(true);
+        (GlamsterdamReprice.Result memory r, MineFlipGas.Result memory result) =
+            this.glamsterdamWork(abi.encodeCall(host.subWork, (12_000_000)));
+        assertTrue(result.progressed && result.done);
+        assertEq(host.claimableOf(ContractAddresses.SDGNRS), 1_240 ether + 1, "all100 paid passes bought");
+        uint256 bound = GasBounds.SUBSCRIBER_WHALE_GAS + GasBounds.SUBSCRIBER_TAIL_GAS;
+        _report("subscriber_100_paid_pass_whale", r, bound);
+        emit log_named_uint("new_slots", r.newSlots);
+        assertLe(_total(r), bound, "SUBSCRIBER_WHALE_GAS + SUBSCRIBER_TAIL_GAS");
+    }
+
+    /// @dev The Osaka sweep's 256 committed words, each opening one box under
+    ///      canRun(AFKING_OPEN_GAS, AFKING_TAIL_GAS).
+    function test_GlamsterdamSaturatedAfkingGrantSweep() public {
+        uint256[] memory cases = new uint256[](256);
+        for (uint256 i; i < 256; ++i) cases[i] = i;
+        (GlamsterdamReprice.Result[] memory r, MineFlipGas.Result[] memory out) = _coldFirstCases(cases, true);
+        uint256 worst;
+        uint256 osakaPeak;
+        uint256 mostSlots;
+        for (uint256 i; i < 256; ++i) {
+            assertTrue(out[i].progressed && out[i].done);
+            assertEq(out[i].rewardBasis, 1);
+            if (_total(r[i]) > _total(r[worst])) worst = i;
+            if (r[i].osakaExec > osakaPeak) osakaPeak = r[i].osakaExec;
+            if (r[i].newSlots > mostSlots) mostSlots = r[i].newSlots;
+        }
+        uint256 bound = GasBounds.AFKING_OPEN_GAS + GasBounds.AFKING_TAIL_GAS;
+        emit log_named_uint("worst_word_index", worst);
+        emit log_named_uint("worst_new_slots", r[worst].newSlots);
+        emit log_named_uint("most_new_slots", mostSlots);
+        emit log_named_uint("osaka_peak", osakaPeak);
+        _report("afking_open_worst_of_256", r[worst], bound);
+        assertLe(_total(r[worst]), bound, "AFKING_OPEN_GAS + AFKING_TAIL_GAS");
+    }
+
+    /// @dev A skipped (unbought) Vault seat ahead of the box: its step is canRun(AFKING_SKIP_GAS, AFKING_TAIL_GAS).
+    function test_GlamsterdamAfkingSkippedProtocolSeat() public {
+        uint256[] memory cases = new uint256[](2);
+        cases[1] = 256;
+        (GlamsterdamReprice.Result[] memory r, MineFlipGas.Result[] memory out) = _coldFirstCases(cases, true);
+        assertTrue(out[1].done);
+        assertEq(out[1].rewardBasis, 1, "the Vault seat is skipped");
+        emit log_named_int("osaka_skip", int256(r[1].osakaExec) - int256(r[0].osakaExec));
+        emit log_named_int("glamsterdam_skip", int256(_total(r[1])) - int256(_total(r[0])));
+        emit log_named_uint("bound", GasBounds.AFKING_SKIP_GAS);
+        assertLe(_total(r[1]), _total(r[0]) + GasBounds.AFKING_SKIP_GAS, "AFKING_SKIP_GAS");
     }
 }
