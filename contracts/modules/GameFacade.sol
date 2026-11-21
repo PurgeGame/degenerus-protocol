@@ -1115,7 +1115,7 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
       |                                                                      |
       |  SECURITY:                                                           |
       |  • RNG lock prevents state manipulation during VRF window            |
-      |  • Single 20h timeout retry (vault owner via Admin) per request      |
+      |  • One 20h retry (vault owner via Admin) per request or re-issue     |
       |  • Governance-gated coordinator rotation via Admin                   |
       |  • Nudges flip the daily coinflip (blind); other draws use raw words |
       +======================================================================+*/
@@ -1140,7 +1140,8 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
         if (!ok) _revertGameDelegate(data);
     }
 
-    /// @notice Retry an unanswered request through the authorized Admin entry after 20 hours.
+    /// @notice Retry an unanswered request through the authorized Admin entry, 20 hours after the
+    ///         later of the request and its coordinator-swap re-issue.
     /// @dev The RNG module enforces ADMIN access, terminal precedence and the single retry limit.
     function retryRng() external {
         (bool ok, bytes memory data) = ContractAddresses.GAME_RNG_MODULE.delegatecall(msg.data);
@@ -1636,9 +1637,8 @@ abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRng
     ) external view returns (uint256 scorePoints, uint32 walletId) {
         // Unified effective quest streak: a live afking sub reads the Sub-side compute-on-read
         // (the run's funded days + in-run secondaries); everyone else reads the decay-aware manual
-        // streak, billed against the Game's logical day (also between the daily request and its
-        // quest roll), which zeroes a lapsed stale-high streak so it can't inflate
-        // lootbox EV or sDGNRS claims.
+        // streak, billed against the Game's logical day, which zeroes a lapsed stale-high streak
+        // so it can't inflate lootbox EV or sDGNRS claims.
         walletId = _walletIdOf(player);
         scorePoints = _playerActivityScore(walletId, _effectiveQuestStreak(walletId));
     }

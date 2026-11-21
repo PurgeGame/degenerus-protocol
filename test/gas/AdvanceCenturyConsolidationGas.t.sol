@@ -796,7 +796,7 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg, GlamsterdamFrameP
         assertEq(c.decimator, 1, "nonempty decimator must resolve");
         assertEq(c.yieldEvents, 1, "surplus must distribute");
         assertEq(c.growth, 1, "growth round must seal");
-        assertEq(c.quest, 1, "new level quest must roll");
+        assertEq(c.quest, 0, "the level quest rolled at the request");
         if (expectHousePass) assertGt(c.highPasses, 0, "house pass credit must execute");
         (uint8 kind, uint16 cursor, uint32 count, uint128 reserved) = host.bafWork();
         assertEq(kind, 7, "the BAF award stage is armed");

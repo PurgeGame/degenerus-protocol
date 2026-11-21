@@ -12,15 +12,14 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 ///
 /// @notice The DegenerusQuests constructor stamps the deploy day's daily quests with
 ///         fixed types (no VRF exists at deploy): slot 0 MINT_ETH — the roll's own
-///         always-slot — and slot 1 DEGENERETTE_ETH, placeable from genesis with
-///         progress credited at placement. The seed belongs to the opening logical
+///         always-slot — and slot 1 FOIL, a foil pack being buyable from deploy. The seed
+///         belongs to the opening logical
 ///         day, and rollDailyQuest's
 ///         same-day idempotency guard holds the pair for the whole deploy day; the
-///         first entropy roll lands on day two.
+///         next roll is day two's fixed pair, at day two's request.
 contract GenesisDailyQuestSeed is DeployProtocol {
     uint8 private constant QUEST_TYPE_MINT_ETH = 1;
-    uint8 private constant QUEST_TYPE_DEGENERETTE_ETH = 7;
-    uint8 private constant CURRENCY_ETH = 0;
+    uint8 private constant QUEST_TYPE_FOIL = 4;
     uint256 private constant LOOTBOX_RNG_PACKED_SLOT = GameSlots.LOOTBOX_RNG_PACKED;
 
     address private player;
@@ -57,8 +56,8 @@ contract GenesisDailyQuestSeed is DeployProtocol {
         assertEq(q[1].day, day0, "slot 1 must be stamped for the deploy day");
         assertEq(
             q[1].questType,
-            QUEST_TYPE_DEGENERETTE_ETH,
-            "slot 1 carries the seeded DEGENERETTE_ETH type"
+            QUEST_TYPE_FOIL,
+            "slot 1 carries the seeded FOIL type"
         );
 
     }
@@ -82,15 +81,11 @@ contract GenesisDailyQuestSeed is DeployProtocol {
             "a deploy-day ticket buy completes the seeded MINT_ETH primary"
         );
 
-        // Daily DEGENERETTE_ETH target = min(mintPrice * 2, 0.5 ether); one 0.5 ETH
-        // spin clears it at any price.
+        // One foil pack (FOIL_PACK_TICKETS = 10 tickets at the routed price) clears FOIL.
         vm.prank(player);
-        game.betDegenerette{value: 0.5 ether}(0, CURRENCY_ETH, 0.5 ether, 1, 3);
+        game.purchaseOrderFor{value: priceWei * 10}(0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true);
         (, bool slot1) = quests.questCompletionToday(game.walletIdOf_g3120(player));
-        assertTrue(
-            slot1,
-            "a deploy-day ETH degenerette bet then completes the seeded slot-1 quest"
-        );
+        assertTrue(slot1, "a deploy-day foil pack then completes the seeded slot-1 quest");
     }
 
     function testSameDayRollIsANoOpAndNextDayReplaces() public {
@@ -106,7 +101,7 @@ contract GenesisDailyQuestSeed is DeployProtocol {
         QuestInfo[2] memory q = quests.getActiveQuests();
         assertEq(
             q[1].questType,
-            QUEST_TYPE_DEGENERETTE_ETH,
+            QUEST_TYPE_FOIL,
             "the same-day roll must not replace the seeded pair"
         );
 

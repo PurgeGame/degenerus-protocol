@@ -6730,14 +6730,6 @@
   {
     "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
     "scope": "DegenerusGameAdvanceModule.applyDailyWord_g1652",
-    "kind": "external",
-    "expression": "quests.rollDailyQuest( day, currentWord, lastPurchaseDay && (jackpotFlags & JACKPOT_TURBO) == 0, finalJackpotRun, decDayOne )",
-    "count": 1,
-    "review": "LOGICAL_DAYS: existing pinned Coinflip quest-host call now rolls every committed logical day, including a late-delivered round; no calendar suppression and no recipient parameter."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
-    "scope": "DegenerusGameAdvanceModule.applyDailyWord_g1652",
     "kind": "opcode-or-value",
     "expression": "ContractAddresses.GAME_BOON_MODULE.delegatecall( abi.encodeWithSelector(IDegenerusGameBoonModule.resolveProtocolBoonDraws.selector, day) )",
     "count": 1,
@@ -6763,9 +6755,9 @@
     "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
     "scope": "DegenerusGameAdvanceModule.prepareRequestBoundary",
     "kind": "external",
-    "expression": "quests.rollDailyQuest(day, 0, false, true, _decDayOneActive())",
+    "expression": "quests.rollDailyQuest( day, _recordedDailyWord(dailyIdx), lastPurchaseDay && (jackpotFlags & JACKPOT_TURBO) == 0, finalJackpotRequest, _decDayOneActive() )",
     "count": 1,
-    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
+    "review": "QUEST_ROLL_AT_REQUEST: the pinned Quests host call moves from the word apply to every fresh daily request (one call, entropy = last applied daily word); onlyGame, idempotent per day, no recipient parameter."
   },
   {
     "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
@@ -6809,11 +6801,11 @@
   },
   {
     "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
-    "scope": "DegenerusGameAdvanceModule.runDailyPhase_g2582",
+    "scope": "DegenerusGameAdvanceModule.prepareRequestBoundary",
     "kind": "external",
-    "expression": "quests.rollLevelQuest(word)",
+    "expression": "quests.rollLevelQuest(_recordedDailyWord(dailyIdx))",
     "count": 1,
-    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review. OPTFIX4: symbol-only migration; body/authorization proof unchanged."
+    "review": "QUEST_ROLL_AT_REQUEST: the pinned level-quest call moves from pool consolidation to the request that promotes the level (entropy = last applied daily word); onlyGame, once per promotion, no recipient parameter."
   },
   {
     "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
@@ -7019,9 +7011,9 @@
     "path": "contracts/modules/DegenerusGameBoonModule.sol",
     "scope": "DegenerusGameBoonModule._rollBoxBoonLane",
     "kind": "recipient-helper",
-    "expression": "_deliverBoon( id, _boonFromRoll((roll * BOON_WEIGHT_TOTAL) / totalChance), currentDay, originalAmount )",
+    "expression": "_deliverBoon( id, _boonFromRoll(uint32(h >> 152) % BOON_WEIGHT_TOTAL), currentDay, originalAmount )",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; Q7-C1 changes only the boon-type draw (an independent slice of the same lane hash), not the recipient id, caller or multiplicity."
   },
   {
     "path": "contracts/modules/DegenerusGameBoonModule.sol",

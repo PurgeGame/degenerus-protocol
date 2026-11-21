@@ -62,6 +62,7 @@ abstract contract DegenerusGameRngModule is GameDailyInternals, DegenerusGameRng
     }
 
     /// @notice Admin transport-only retry: preserve kind, logical day, cohort and timeout origin.
+    /// @dev Due RNG_RETRY_TIMEOUT after the later of the request and its coordinator-swap re-issue.
     function retryRng() external {
         if (address(this) != ContractAddresses.GAME || msg.sender != ContractAddresses.ADMIN) revert OnlyAdmin();
         if (gameOver || _livenessTriggered() || !_rngRetryDue(uint48(block.timestamp))) revert RngNotReady();
@@ -225,9 +226,14 @@ abstract contract DegenerusGameRngModule is GameDailyInternals, DegenerusGameRng
         }
     }
 
+    /// @dev The clock runs from the later of the request stamp and the last swap re-issue. A fresh
+    ///      request is never stamped before an earlier re-issue, so an old stamp cannot delay it.
     function _rngRetryDue(uint48 ts) private view returns (bool) {
-        return _rngRequestActive() && rngWordCurrent == RNG_WORD_WAITING && !_rngRetrySpent()
-            && uint256(ts) >= uint256(rngRequestTime) + RNG_RETRY_TIMEOUT;
+        if (!_rngRequestActive() || rngWordCurrent != RNG_WORD_WAITING || _rngRetrySpent()) return false;
+        uint256 from = rngRequestTime;
+        uint256 reissued = vrfReissuedAt;
+        if (reissued > from) from = reissued;
+        return uint256(ts) >= from + RNG_RETRY_TIMEOUT;
     }
 
     function _requestVrfWord(uint16 confirmations, MineFlipGas.Meter memory meter) private returns (uint256 id) {

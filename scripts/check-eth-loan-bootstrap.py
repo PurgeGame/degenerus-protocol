@@ -39,7 +39,7 @@ SOURCES = (
 # Reviewed 2026-11-20: Storage, MintStreakUtils and WhaleModule comment and NatSpec text only (the
 # sources are token-identical once comments are stripped); the loan model is unaffected.
 SOURCE_SHA256 = {
-    "contracts/storage/DegenerusGameStorage.sol": "761be6b8de5e20d3affbbb419784326127a6b430dc2a796edebe186a348e88a1",
+    "contracts/storage/DegenerusGameStorage.sol": "f4c7f79f96d4ec8c22e95f89deb93e7ab117d80734f9905deefe64dfc07622cf",
     "contracts/modules/DegenerusGameMintStreakUtils.sol": "d16d213649e5aa1e2dbd89ddb96400114c4d70e7b8cf79c7326a986dbbff150f",
     "contracts/modules/DegenerusGameWhaleModule.sol": "591a1a33bfec8667ba7432e30118c94a5740867691a059ab2d2c4c3419232dba",
     "contracts/libraries/PriceLookupLib.sol": "cbec28472ed02519f3bce1e3ffc809eb9a4cab87311c37a016dc7390c92d9a46",

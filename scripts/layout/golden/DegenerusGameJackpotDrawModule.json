@@ -552,6 +552,14 @@
     "typeLabel": "uint24"
   },
   {
+    "bytes": "6",
+    "encoding": "inplace",
+    "label": "vrfReissuedAt",
+    "offset": 3,
+    "slot": 28,
+    "typeLabel": "uint48"
+  },
+  {
     "bytes": "32",
     "encoding": "mapping",
     "label": "lootboxEvCapPacked",

@@ -122,7 +122,6 @@ abstract contract DegenerusGameAdvanceModule is GameDailyInternals, DegenerusGam
         if (day == 0 || _recordedDailyWord(day) != 0) revert E();
         uint24 lvl = level;
         bool inJackpot = jackpotPhaseFlag;
-        bool isTicketJackpotDay = !inJackpot && lastPurchaseDay;
         bool bonusDay = (inJackpot && jackpotCounter == 1) || lvl == 0
             || (!inJackpot && (jackpotFlags & TURBO_BONUS_PENDING) != 0);
         uint24 bonusLvl = jackpotFlags == (JACKPOT_TURBO | TURBO_BONUS_PENDING) ? lvl - 1 : lvl;
@@ -132,22 +131,13 @@ abstract contract DegenerusGameAdvanceModule is GameDailyInternals, DegenerusGam
         coinflip.processCoinflipPayouts(coinflipBonus, _applyDailyRng(day, currentWord), day);
         // Settlement paid any owed bonus. Preserve a newly armed turbo.
         if ((jackpotFlags & TURBO_BONUS_PENDING) != 0) jackpotFlags &= JACKPOT_TURBO;
-        // Quests belong to this logical commitment even when delivery crosses resets.
-        bool finalJackpotRun =
-            (jackpotPhaseFlag || isTicketJackpotDay) && _isFinalJackpotDay(jackpotCounter, jackpotFlags);
         {
             bool decDayOne = _decDayOneActive();
-            quests.rollDailyQuest(
-                day,
-                currentWord,
-                lastPurchaseDay && (jackpotFlags & JACKPOT_TURBO) == 0,
-                finalJackpotRun,
-                decDayOne
-            );
 
             // Spend sDGNRS's settled backing on the opening-day decimator before the
-            // craps seat. Roll today's quests first so the entry's quest credit lands on today;
-            // the craps seat burns through the plain burn and reports no quest action.
+            // craps seat. Today's quests rolled at the request, so the entry's quest credit
+            // lands on today; the craps seat burns through the plain burn and reports no quest
+            // action.
             // The recorded-word revert above makes this once per day, and the next fresh
             // request clears _decDayOneActive(). FLIP only sizes and records the entry.
             // On this opening-day path, lvl is the request-promoted level.
@@ -290,7 +280,6 @@ abstract contract DegenerusGameAdvanceModule is GameDailyInternals, DegenerusGam
                 _consolidatePoolsAndRewardJackpots(lvl, purchaseLevel, day, word, purchaseStartDay);
                 jackpotPhaseFlag = true;
                 lastPurchaseDay = false;
-                quests.rollLevelQuest(word);
                 result.progressed = true;
                 MineFlipGas.markProgress(meter);
                 result.done = true;
@@ -552,6 +541,11 @@ abstract contract DegenerusGameAdvanceModule is GameDailyInternals, DegenerusGam
                 _setDecWindowOpen(false);
             }
 
+            // The entered level's quest is live from the request that moves `level`, so every
+            // handler's level + 1 price is its own. It rolls from the last applied daily word
+            // (public in advance by design) and reads the decimator window set above.
+            quests.rollLevelQuest(_recordedDailyWord(dailyIdx));
+
             // Resolve charity governance for the completed level.
             // lvl is the NEW level (old level + 1). CHARITY.currentLevel tracks
             // the CURRENT governance level (starts at 0, incremented by pickCharity).
@@ -560,21 +554,18 @@ abstract contract DegenerusGameAdvanceModule is GameDailyInternals, DegenerusGam
             charityResolve.pickCharity(lvl - 1);
         }
 
-        // Buy-a-foil-pack daily: rolled at the REQUEST, not at the word's fulfilment.
-        // This request is the boundary where _activeTicketLevel starts routing to level + 1,
-        // so from here a foil pack spends the one-per-cycle slot for the very cycle whose
-        // opening day carries this quest. The fulfilment roll rides the next daily word apply
-        // (rawFulfillRandomWords only records the word), so leaving it there strands that
-        // gap and hands the buyer a quest that can only revert FoilAlreadyBought.
-        //
-        // No entropy is read: a forced slot-1 type never reaches the weighted roll, and one
-        // of the two forces always wins here. _decDayOneActive() is read AFTER the arming block
-        // above so DECIMATOR-over-FOIL precedence matches the fulfilment roll on a turbo
-        // x4/x99 level, where the final run is also the arming day. rollDailyQuest is
-        // idempotent per day, so the fulfilment call no-ops on this day.
-        if (finalJackpotRequest) {
-            quests.rollDailyQuest(day, 0, false, true, _decDayOneActive());
-        }
+        // Today's quests roll here, from the last applied daily word (public in advance by
+        // design), so a quest day is live from the moment dailyIdx moves. Day 2 has no prior
+        // word and takes the fixed pair. The final jackpot request forces FOIL: from this request
+        // a foil pack spends the one-per-cycle slot of the cycle whose opening day carries it.
+        // _decDayOneActive() is read after the arming block, so DECIMATOR outranks FOIL.
+        quests.rollDailyQuest(
+            day,
+            _recordedDailyWord(dailyIdx),
+            lastPurchaseDay && (jackpotFlags & JACKPOT_TURBO) == 0,
+            finalJackpotRequest,
+            _decDayOneActive()
+        );
     }
 
     function _handleGameOverPath(uint24 day, uint24 lvl, uint256 allowance) private returns (uint8 stage, bool progressed) {

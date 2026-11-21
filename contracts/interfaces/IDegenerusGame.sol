@@ -352,7 +352,8 @@ interface IDegenerusGame {
     function latestDailyResultDay() external view returns (uint24);
     function dailyScheduleOpen_g214() external view returns (bool);
 
-    /// @notice Admin-only transport retry of an unanswered request after its 20-hour timeout.
+    /// @notice Admin-only transport retry of an unanswered request, 20 hours after the later of the
+    ///         request and its coordinator-swap re-issue.
     function retryRng() external;
 
     /// @notice Mint mid-day RNG credit to a native ETH donor.

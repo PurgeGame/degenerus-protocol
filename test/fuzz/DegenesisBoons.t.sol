@@ -66,19 +66,19 @@ contract DegenesisBoonsTest is Test {
     }
 
     function test_SharedLaunchNormalizationAndAmountGrid() public {
-        assertEq(host.avg(), 564_103_641_456_582_633);
+        assertEq(host.avg(), Ref.EXPECTED);
         uint256[15] memory amounts = [
             uint256(0),
             1,
             0.01 ether,
             0.1 ether,
             1 ether,
-            1.4102 ether,
-            1.4103 ether,
-            2.8205 ether,
-            2.8206 ether,
-            4.2307 ether,
-            4.2308 ether,
+            1.5757 ether,
+            1.5758 ether,
+            3.1514 ether,
+            3.1515 ether,
+            4.7272 ether,
+            4.7273 ether,
             5 ether - 1,
             5 ether,
             5 ether + 1,
@@ -87,12 +87,12 @@ contract DegenesisBoonsTest is Test {
         for (uint256 i; i < amounts.length; ++i) {
             _roll(amounts[i], 426);
         }
-        assertLt(Ref.chance(1.4102 ether), 1_000_000);
-        assertGe(Ref.chance(1.4103 ether), 1_000_000);
-        assertLt(Ref.chance(2.8205 ether), 2_000_000);
-        assertGe(Ref.chance(2.8206 ether), 2_000_000);
-        assertLt(Ref.chance(4.2307 ether), 3_000_000);
-        assertEq(Ref.chance(4.2308 ether), 3_000_000);
+        assertLt(Ref.chance(1.5757 ether), 1_000_000);
+        assertGe(Ref.chance(1.5758 ether), 1_000_000);
+        assertLt(Ref.chance(3.1514 ether), 2_000_000);
+        assertGe(Ref.chance(3.1515 ether), 2_000_000);
+        assertLt(Ref.chance(4.7272 ether), 3_000_000);
+        assertEq(Ref.chance(4.7273 ether), 3_000_000);
         _roll(type(uint256).max, 163);
     }
 

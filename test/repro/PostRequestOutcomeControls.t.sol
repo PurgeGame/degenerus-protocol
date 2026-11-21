@@ -50,7 +50,10 @@ contract PostRequestBoonControls is Test {
         }
     }
 
-    function testAuditSameSeedDifferentLiveLevelChangesBoonType() public {
+    /// @dev The type comes from the lane hash's own bits, so a fixed seed delivers the same boon
+    ///      type at any open level; only whether it hits depends on the level-keyed chance.
+    function testSameSeedSameBoonTypeAtEveryLiveLevel() public {
+        uint256 bothHit;
         for (uint256 seed = 1; seed < 1000; ++seed) {
             uint256 snapshot = vm.snapshotState();
             uint256 first = _reward(seed, 100);
@@ -58,13 +61,11 @@ contract PostRequestBoonControls is Test {
             snapshot = vm.snapshotState();
             uint256 second = _reward(seed, 101);
             assertTrue(vm.revertToState(snapshot));
-            if (first != 0 && second != 0 && first != second) {
-                emit log_named_uint("fixed seed", seed);
-                emit log_named_uint("boon at level 100", first);
-                emit log_named_uint("boon at level 101", second);
-                return;
+            if (first != 0 && second != 0) {
+                ++bothHit;
+                assertEq(first, second, "same seed, same boon type at both levels");
             }
         }
-        fail("no different delivered boon types found");
+        assertGt(bothHit, 10, "enough seeds hit at both levels to compare");
     }
 }

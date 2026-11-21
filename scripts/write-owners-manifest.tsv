@@ -200,6 +200,7 @@ OWNER	rngRequestDay	modules/DegenerusGameGameOverModule.sol	Rng stamps the pinne
 OWNER	rngRequestDay	modules/DegenerusGameRngModule.sol	Rng stamps the pinned preparation day on a fresh daily request and zero for midday; GameOver clears retired daily identity and pins its terminal request day. Callback/retry never changes it.
 OWNER	rngRequestTime	modules/DegenerusGameGameOverModule.sol	Terminal first attempt arms the refusal timer once; successful request preserves that origin. Coordinator rotation leaves the origin untouched.
 OWNER	rngRequestTime	modules/DegenerusGameRngModule.sol	Fresh daily/midday request sets the actual send timestamp; transport retry leaves it. Logical day lives separately in rngRequestDay.
+OWNER	vrfReissuedAt	modules/DegenerusGameGameOverModule.sol	updateVrfCoordinatorAndSub stamps the re-issue time with the re-issue it sends; sole writer; read only by _rngRetryDue (the owner retry's clock), never by a timeout or consumer
 OWNER	rngWordCurrent	modules/GameFacade.sol	rawFulfillRandomWords stores the accepted coordinator word inline in the facade (callback runs without a delegatecall)
 OWNER	rngWordCurrent	modules/DegenerusGameGameOverModule.sol	Successful terminal request invalidates buffered daily payload, as the previous Advance _tryRequestRng did.
 OWNER	rngWordCurrent	modules/DegenerusGameRngModule.sol	Fresh requests set WAIT sentinel1; retry preserves WAIT and published consumers retain the accepted word. The facade callback stores the final word.

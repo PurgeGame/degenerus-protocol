@@ -198,6 +198,7 @@ contract LoanAccountingHandler is Test, ChainCallJudge {
     uint256 public ghost_vaultLoans;
     uint256 public ghost_repays;
     uint256 public ghost_repaysFromClaimable;
+    uint256 public ghost_repaysFromAfking;
     uint256 public ghost_autoRepays;
     uint256 public ghost_seizures;
     uint256 public ghost_ordinarySweepRejects;
@@ -419,7 +420,11 @@ contract LoanAccountingHandler is Test, ChainCallJudge {
             ? owed + (b >> 8) % 1 ether : owed - 1;
         uint256 fresh = value < owed ? value : owed;
         uint256 shortfall = owed - fresh;
-        bool ok = _lenderOf(idx) == 0 && (shortfall == 0 || pre.claim > shortfall);
+        // The shortfall draws claimable above its 1-wei sentinel, then prepaid AFKing.
+        uint256 fromClaim = pre.claim > 1 ? pre.claim - 1 : 0;
+        if (fromClaim > shortfall) fromClaim = shortfall;
+        uint256 fromAfk = shortfall - fromClaim;
+        bool ok = _lenderOf(idx) == 0 && fromAfk <= pre.afk;
         address payer = actors[accts[idx].actor];
         uint256 lenderFunds = _funds(l.lender);
         vm.deal(payer, payer.balance + value);
@@ -431,7 +436,7 @@ contract LoanAccountingHandler is Test, ChainCallJudge {
             }
             if (_funds(l.lender) != lenderFunds + owed) _flag(1, "repay paid lender != P(100+T+4c)/100");
             Bal memory post = _bal(id);
-            if (post.claim != pre.claim - shortfall || post.afk != pre.afk + (value - fresh)) {
+            if (post.claim != pre.claim - fromClaim || post.afk != pre.afk - fromAfk + (value - fresh)) {
                 _flag(1, "repay drew/credited the account wrongly");
             }
             if (lens.loanOf(address(game), id).principal != 0) _flag(1, "repaid loan still open");
@@ -440,7 +445,8 @@ contract LoanAccountingHandler is Test, ChainCallJudge {
             loans[idx].open = false;
             ++ghost_repays;
             ++ghost_closed;
-            if (shortfall != 0) ++ghost_repaysFromClaimable;
+            if (fromClaim != 0) ++ghost_repaysFromClaimable;
+            if (fromAfk != 0) ++ghost_repaysFromAfking;
         } catch (bytes memory reason) {
             if (ok) _flag(1, string.concat("spec-valid repay reverted ", vm.toString(reason)));
             else ++ghost_gateRejects;

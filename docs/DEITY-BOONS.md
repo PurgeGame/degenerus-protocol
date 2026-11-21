@@ -122,8 +122,8 @@ deity account cannot gift itself.
 - Every qualifying bet appends a cumulative-weight interval. Winner lookup is a binary search with
   at most 32 reads because the entry count is `uint32`.
 - Days with both pools populated issue all six awards inside the daily word application
-  (`applyDailyWord_g1652`), after the word is recorded, flips settle, the daily quest rolls, and
-  Craps window opening is attempted. A word arriving after the next wall reset leaves that day
+  (`applyDailyWord_g1652`), after the word is recorded, flips settle and Craps window opening is
+  attempted. A word arriving after the next wall reset leaves that day
   unopened. There is no extra advance call. A day whose word is already recorded cannot be
   applied again, so the draw runs at most once per day.
 - Each pool's three-bit `awardedMask` seals its awards before delivery, making repeated processing

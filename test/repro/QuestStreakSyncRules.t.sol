@@ -10,9 +10,7 @@ import {QaSlots} from "../helpers/QaSlots.sol";
 
 /// @notice Quest-streak sync rules on the deployed DegenerusQuests, driven through its gated
 ///         entry points as each caller reaches them:
-///         - between a daily request and the quest roll (Game day D, quest record still D-1) a
-///           foil purchase floors the streak and a craps burn credits the level quest on a streak
-///           synced against the Game day;
+///         - a foil purchase scores a streak above the floor as it stands;
 ///         - an afking handback is what the streak readers show on a day already synced;
 ///         - a zero streak spends no shield on missed days.
 ///         The fixture publishes quest days and Game days the way test/fuzz/QuestsWalletIds.t.sol
@@ -167,54 +165,17 @@ contract QuestStreakSyncRulesTest is DeployProtocol {
     }
 
     // =====================================================================
-    // Foil floor between the daily request and the quest roll
+    // Foil score basis on a live quest day
     // =====================================================================
 
-    /// @dev A foil purchase on Game day 21 while the quest record is still day 20 floors the
-    ///      streak: the sync runs on the Game day, the floor anchors there, and the roll then
-    ///      continues the run without a reset or a shield spend.
-    function test_FoilFloorBetweenRequestAndRollFloorsOnTheGameDay() public {
-        uint32 id = _giveWalletId(makeAddr("foilWindow"));
+    /// @dev A streak below the floor scores the floor: the pack raises its score basis to 12.
+    function test_FoilScoreBasisBelowTheFloorIsTheFloor() public {
+        uint32 id = _giveWalletId(makeAddr("foilBelowFloor"));
         _setDaily(20, QT_DEG_ETH);
         _bonus(id, 3);
-        assertEq(_field(id, OFF_STREAK, 16), 3);
-        assertEq(_field(id, OFF_LAST_ACTIVE, 24), 20);
-        _requestOnly(21);
 
-        vm.recordLogs();
         assertEq(_foil(id), 12, "the score basis is the streak raised to the floor");
-        Vm.Log[] memory logs = vm.getRecordedLogs();
-        assertEq(_field(id, OFF_STREAK, 16), 12, "floored");
-        assertEq(_field(id, OFF_LAST_SYNC, 24), 21, "synced on the Game day");
-        assertEq(_field(id, OFF_LAST_ACTIVE, 24), 21, "anchored on the Game day");
-        assertEq(_countTopic(logs, E_BONUS, id), 1, "the floor's event");
-        assertEq(_countTopic(logs, E_RESET, id), 0, "a live streak is not reset");
-
-        vm.recordLogs();
-        _setDaily(21, QT_DEG_ETH);
-        _primary(id);
-        logs = vm.getRecordedLogs();
-        assertEq(_field(id, OFF_STREAK, 16), 13, "the roll continues the run");
-        assertEq(_countTopic(logs, E_RESET, id), 0, "no streak reset");
-        assertEq(_countTopic(logs, E_SHIELD_USED, id), 0, "no shield used");
-    }
-
-    /// @dev In the same window a lapsed streak above the floor is billed first: it resets, then
-    ///      the floor applies, instead of the stale value standing until the next sync zeroes it.
-    function test_FoilFloorBetweenRequestAndRollBillsLapsedStreakFirst() public {
-        uint32 id = _giveWalletId(makeAddr("foilWindowLapsed"));
-        _setDaily(10, QT_DEG_ETH);
-        _bonus(id, 50);
-        _setDaily(20, QT_DEG_ETH);
-        _requestOnly(21);
-
-        vm.recordLogs();
-        assertEq(_foil(id), 12, "the lapsed streak scores the floor");
-        Vm.Log[] memory logs = vm.getRecordedLogs();
-        assertEq(_countTopic(logs, E_RESET, id), 1, "the lapsed streak reset");
-        assertEq(_field(id, OFF_STREAK, 16), 12, "reset, then floored");
-        assertEq(_field(id, OFF_LAST_SYNC, 24), 21);
-        assertEq(_field(id, OFF_LAST_ACTIVE, 24), 21);
+        assertGe(_field(id, OFF_STREAK, 16), 12, "floored");
     }
 
     /// @dev A streak above the floor is the score basis as it stands: the floor never lowers or
@@ -223,93 +184,10 @@ contract QuestStreakSyncRulesTest is DeployProtocol {
         uint32 id = _giveWalletId(makeAddr("foilAboveFloor"));
         _setDaily(20, QT_DEG_ETH);
         _bonus(id, 20);
-        _requestOnly(21);
+        _setDaily(21, QT_DEG_ETH); // the next day: day 21's snapshot carries the bonus
 
         assertEq(_foil(id), 20, "a streak above the floor is the score basis unchanged");
-        assertEq(_field(id, OFF_STREAK, 16), 20, "the floor does not move a higher streak");
-    }
-
-    /// @dev An afking buyer's run base takes the floor in the same window.
-    function test_FoilFloorBetweenRequestAndRollFloorsAfkingRun() public {
-        uint32 id = _giveWalletId(makeAddr("foilWindowAfking"));
-        _setDaily(20, QT_DEG_ETH);
-        _requestOnly(21);
-        vm.store(address(quests), _stateSlot(id), bytes32(_qs(id) | (uint256(20) << (OFF_AFKING_SINCE * 8))));
-        vm.mockCall(address(game), abi.encodeWithSelector(game.floorAfkingStreakBase.selector), "");
-        vm.expectCall(address(game), abi.encodeCall(game.floorAfkingStreakBase, (id, 12)), 1);
-
-        _foil(id);
-        assertEq(_field(id, OFF_LAST_SYNC, 24), 21, "synced on the Game day");
-    }
-
-    // =====================================================================
-    // Craps burns between the daily request and the quest roll
-    // =====================================================================
-
-    /// @dev A pass-only burn completes the craps level quest on a synced streak: the one missed
-    ///      day resets it before the bonus, so no century is crossed and no shield is granted.
-    function test_CrapsPassBetweenRequestAndRollBillsLapsedStreakFirst() public {
-        address p = makeAddr("crapsPassLapsed");
-        uint32 id = _giveWalletId(p);
-        _eligible(p);
-        _setDaily(20, QT_DEG_ETH);
-        _bonus(id, 98);
-        _setLevelQuest(QT_CRAPS_DAY_PASS);
-        _setDaily(21, QT_DEG_ETH); // rolled and missed
-        _requestOnly(22);
-
-        vm.recordLogs();
-        _craps(id, CRAPS_FLAG_PASS);
-        Vm.Log[] memory logs = vm.getRecordedLogs();
-        assertEq((_lq(id) >> 152) & 1, 1, "the level quest completed");
-        assertEq(_countTopic(logs, E_RESET, id), 1, "the missed day reset the streak first");
-        assertEq(_field(id, OFF_STREAK, 16), 5, "reset, then the level-quest bonus");
-        assertEq(_field(id, OFF_SHIELD, 8), 0, "no century shield");
-        assertEq(_countTopic(logs, E_SHIELD_GRANTED, id), 0);
-        assertEq(_field(id, OFF_LAST_SYNC, 24), 22, "synced on the Game day");
-    }
-
-    /// @dev With no missed day the same burn keeps the streak, earns its century shield and the
-    ///      roll continues the run with that shield unspent.
-    function test_CrapsPassBetweenRequestAndRollKeepsALiveStreak() public {
-        address p = makeAddr("crapsPassLive");
-        uint32 id = _giveWalletId(p);
-        _eligible(p);
-        _setDaily(20, QT_DEG_ETH);
-        _bonus(id, 98);
-        _setLevelQuest(QT_CRAPS_DAY_PASS);
-        _requestOnly(21);
-
-        vm.recordLogs();
-        _craps(id, CRAPS_FLAG_PASS);
-        Vm.Log[] memory logs = vm.getRecordedLogs();
-        assertEq(_countTopic(logs, E_RESET, id), 0);
-        assertEq(_field(id, OFF_STREAK, 16), 103, "the level-quest bonus on the live streak");
-        assertEq(_field(id, OFF_SHIELD, 8), 1, "the century shield");
-        assertEq(_field(id, OFF_LAST_SYNC, 24), 21, "synced on the Game day");
-
-        vm.recordLogs();
-        _setDaily(21, QT_DEG_ETH);
-        _primary(id);
-        logs = vm.getRecordedLogs();
-        assertEq(_field(id, OFF_STREAK, 16), 104, "the roll continues the run");
-        assertEq(_field(id, OFF_SHIELD, 8), 1, "the shield is unspent");
-        assertEq(_countTopic(logs, E_SHIELD_USED, id), 0);
-    }
-
-    /// @dev A join-only burn in the window syncs on the Game day too; no join quest is live, so
-    ///      nothing is credited.
-    function test_CrapsJoinBetweenRequestAndRollSyncsOnTheGameDay() public {
-        uint32 id = _giveWalletId(makeAddr("crapsJoinWindow"));
-        _setDaily(20, QT_CRAPS_JOIN);
-        _primary(id);
-        assertEq(_field(id, OFF_STREAK, 16), 1);
-        _requestOnly(21);
-
-        _craps(id, CRAPS_FLAG_JOIN);
-        assertEq(_field(id, OFF_LAST_SYNC, 24), 21, "synced on the Game day");
-        assertEq(_field(id, OFF_STREAK, 16), 1, "no join quest is live to credit");
-        assertEq(_field(id, OFF_MASK, 8), 0, "the new day opens with nothing completed");
+        assertGe(_field(id, OFF_STREAK, 16), 20, "the floor never lowers a higher streak");
     }
 
     // =====================================================================

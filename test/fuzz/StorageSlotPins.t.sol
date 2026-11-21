@@ -88,6 +88,7 @@ contract GameSlotHarness is DegenerusGameStorage {
     function s_deityBoonPacked() external pure returns (uint256 s, uint256 o) { assembly { s := deityBoonPacked.slot o := deityBoonPacked.offset } }
     function s_degeneretteRecordBounty() external pure returns (uint256 s, uint256 o) { assembly { s := degeneretteRecordBounty.slot o := degeneretteRecordBounty.offset } }
     function s_earlyTicketLevel() external pure returns (uint256 s, uint256 o) { assembly { s := earlyTicketLevel.slot o := earlyTicketLevel.offset } }
+    function s_vrfReissuedAt() external pure returns (uint256 s, uint256 o) { assembly { s := vrfReissuedAt.slot o := vrfReissuedAt.offset } }
     function s_lootboxEvCapPacked() external pure returns (uint256 s, uint256 o) { assembly { s := lootboxEvCapPacked.slot o := lootboxEvCapPacked.offset } }
     function s_decBattleEntries() external pure returns (uint256 s, uint256 o) { assembly { s := decBattleEntries.slot o := decBattleEntries.offset } }
     function s_decBattleRounds() external pure returns (uint256 s, uint256 o) { assembly { s := decBattleRounds.slot o := decBattleRounds.offset } }
@@ -352,6 +353,7 @@ contract StorageSlotPinsTest is Test {
         (s, o) = h.s_deityBoonPacked(); assertEq(s, GameSlots.DEITY_BOON_PACKED, "deityBoonPacked.slot"); assertEq(o, 0, "deityBoonPacked.offset");
         (s, o) = h.s_degeneretteRecordBounty(); assertEq(s, GameSlots.DEGENERETTE_RECORD_BOUNTY, "degeneretteRecordBounty.slot"); assertEq(o, 0, "degeneretteRecordBounty.offset");
         (s, o) = h.s_earlyTicketLevel(); assertEq(s, GameSlots.EARLY_TICKET_LEVEL, "earlyTicketLevel.slot"); assertEq(o, 0, "earlyTicketLevel.offset");
+        (s, o) = h.s_vrfReissuedAt(); assertEq(s, GameSlots.VRF_REISSUED_AT, "vrfReissuedAt.slot"); assertEq(o, GameSlots.VRF_REISSUED_AT_OFFSET, "vrfReissuedAt.offset");
         (s, o) = h.s_lootboxEvCapPacked(); assertEq(s, GameSlots.LOOTBOX_EV_CAP_PACKED, "lootboxEvCapPacked.slot"); assertEq(o, 0, "lootboxEvCapPacked.offset");
         (s, o) = h.s_decBattleEntries(); assertEq(s, GameSlots.DEC_BATTLE_ENTRIES, "decBattleEntries.slot"); assertEq(o, 0, "decBattleEntries.offset");
         (s, o) = h.s_decBattleRounds(); assertEq(s, GameSlots.DEC_BATTLE_ROUNDS, "decBattleRounds.slot"); assertEq(o, 0, "decBattleRounds.offset");

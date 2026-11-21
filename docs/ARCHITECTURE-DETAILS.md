@@ -286,30 +286,32 @@ day at settlement. No day a run covers is billed as a missed quest day: while `a
 quest syncs bill no misses and consume no shields, and the streak view applies no decay. Outside a
 run, each logical day strictly between the anchor day (the last primary completion, streak bonus,
 foil floor or handback) and the current Game day is a miss; shields absorb misses one each, and a
-miss with no shield left resets the streak; a streak of zero spends no shield. Misses are settled
-at the account's next quest action against the shields it holds then, so a shield received after a
-missed day and before that action still absorbs it. The decay reference is the Game's logical day,
-also between a daily request and the quest roll its word performs. Whale, lazy and deity pass
-purchases, including their bundled boxes, add no daily or level quest progress. Quest progress
-comes from ticket, box, foil-pack and FLIP-ticket purchases, Degenerette bets, coinflip stakes,
-affiliate earnings, decimator burns, craps joins and day passes, and Parimutuel growth bets.
-Between a daily request and the quest roll its word performs (every day except a level's final
-jackpot day, whose quests roll at the request), purchases, Degenerette bets, coinflip stakes,
-affiliate earnings, decimator burns and craps joins add no daily or level quest progress. A foil
-pack bought then still raises the streak to its floor of 12, and Craps day passes, the whole-day
-Craps streak credit and growth bets still count in that interval. From the daily request that
-promotes the level until the pool consolidation that rolls the next level quest, the promoted
-level's quest prices its ETH targets at the ticket price of the level after it. A foil pack
-freezes its buyer's activity score at purchase; that score sets the pack's multiplier and is the
-score its reward spins use. The frozen score counts a quest streak of at least 12: an account in
-a live AFKing run uses the run's streak after the purchase, every other account uses its quest
-streak without that day's completions, and either is raised to 12 when lower. In a jackpot phase
-whose tickets route to the current level, the paired check a primary-completing purchase runs
-measures a Degenerette ETH secondary at the routed ticket price, while a bet and the quest views
-measure it at the next level's price; a bet below the displayed target that meets the target at
-the routed price can be completed by that purchase. A craps join or day pass first settles the
-account's missed days by syncing the streak on the Game's logical day, also between a daily
-request and the quest roll, where the join adds no quest progress.
+miss with no shield left resets the streak; a streak of zero spends no shield. Misses are settled at
+the account's next quest action against the shields it holds then, so a shield received after a
+missed day and before that action still absorbs it. The decay reference is the Game's logical day.
+Whale, lazy and deity pass purchases, including their bundled boxes, add no daily or level quest
+progress. Quest progress comes from ticket, box, foil-pack and FLIP-ticket purchases, Degenerette
+bets, coinflip stakes, affiliate earnings, decimator burns, craps joins and day passes, and
+Parimutuel growth bets. Each day's quests roll at its fresh daily request, from the last applied
+daily word, so they are live, and every action credits them, from the moment the logical day
+advances. Slot 0 is MINT_ETH. Slot 1 is forced on its forced days, else rolled under `QUEST_DAILY`.
+Days 1 and 2 have no prior word and are fixed: FOIL on day 1, LOOTBOX on day 2. The level quest
+rolls at the daily request that promotes the level, right after `level` moves, from the same word.
+From that request on, its version is `level + 1` and its ETH targets price at its own level, the
+price every handler passes. That word is public before the request, so the next quests are known in
+advance. Outside an early turbo the level change is latched a request before it takes effect, so the
+word that seeds the new level's quests is not public when the next pool crosses its target; in an
+early turbo it is, so the timing of that level's quest and of one daily quest type can be known in
+advance. A foil pack freezes its buyer's activity score at purchase; that score sets the pack's
+multiplier and is the score its reward spins use. The frozen score counts a quest streak of at least
+12: an account in a live AFKing run uses the run's streak after the purchase, every other account
+uses its quest streak without completions made after the day's snapshot (a run handed back that day
+has already written its streak into that snapshot), and either is raised to 12 when lower. In a
+jackpot phase whose tickets route to the current level, the paired check a primary-completing
+purchase runs measures a Degenerette ETH secondary at the routed ticket price, while a bet and the
+quest views measure it at the next level's price; a bet below the displayed target that meets the
+target at the routed price can be completed by that purchase. A craps join or day pass first settles
+the account's missed days by syncing the streak on the Game's logical day.
 
 The Vault (wallet ID 1) and sDGNRS (ID 2) subscribe in their constructors at quantity 1 in box mode,
 burn no seat and cannot use ticket mode. The Vault owner can pause and resume the Vault's run;
@@ -811,13 +813,21 @@ passes exist.
 | WWXRP | 200 / 200 / 200 | see [WWXRP boons](WWXRP-BOONS.md) | | 2 |
 | Craps | 200 / 40 / 8 | +5 / 10 / 15% bankroll return | 60,000 FLIP | 2 |
 
-A box's hit chance divides its boon budget by half the table's weight-averaged maximum value, which
-prices FLIP-denominated boons at `priceForLevel(level)` and lazy discounts at the ten-level lazy-pass
-value from `level + 2`. Each box sets aside 10% of its amount (after the activity multiplier and
-boost), up to 1 ETH, as that budget and rolls its reward on the rest. The divisor runs from about
-0.28 ETH at level 0 up to about 0.45 ETH at levels 100, 200 and so on; the chance is capped at
-100%, so budget above the divisor buys nothing and is not paid out. A box's hit chance and the
-boon type a hit draws are both read when the box opens, from the live level and the box's
-EV-scaled amount. A recirculated box from a foil match claim opens inside the claim, and a match
-stays claimable on its draw day and the next, so the day of the claim decides which level and
-amount that box uses.
+A box's hit chance divides its boon budget by one boon's full-use value: the table's
+weight-averaged value when every boon is used to its caps. Boosts and ETH Degenerette count their
+full 10 ETH, coinflip and FLIP Degenerette 100,000 FLIP, the decimator a 50,000 FLIP base, and
+craps a 60,000 FLIP base in each of the six windows of a whole-day ticket. Whale discounts use the
+level's whale price, deity discounts the 24 ETH first-pass price, lazy discounts the price the
+pass would cost, and the whale pass 4.5 ETH of tickets. FLIP is valued at
+`priceForLevel(level + 1)`, one ticket per 1,000 FLIP. Activity, quest-shield and WWXRP boons
+count zero. Each box sets aside 10% of its amount (after the activity multiplier and boost), up to
+0.315 ETH, as that budget and rolls its reward on the rest. One boon's value runs from about
+0.315 ETH at levels 0-2 to about 1.02 ETH at levels 99, 199 and so on, so the budget never buys
+more than one boon and a box's boon EV equals its budget up to the samplers' rounding: the 32-bit
+hit draw reduced to parts per million runs up to about 8 ppm over the budget, a budget under one
+ppm of a boon (about 3 x 10^11 wei at level 0) buys no chance, and the type draw departs from the
+table's weights by under one part in 1.5 million. The hit chance, the budget divided by the
+full-use value at the open level, is read when the box opens. The type comes from the seed's own
+bits and does not depend on the level or the box's amount. A recirculated box from a foil match
+claim opens inside the claim, and a match stays claimable on its draw day and the next, so the two
+days can differ only in whether that box's boon hits, never in its type.

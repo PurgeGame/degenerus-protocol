@@ -402,7 +402,7 @@ describe("DegenerusQuests", function () {
   describe("handlePurchase_g23478 - progress and completion", function () {
     it("returns (0, type, 0, false) when no active quest for player/type", async function () {
       const { quests, coin, game, alice } = await loadFixture(questFixture);
-      // The constructor seeds MINT_ETH + DEGENERETTE_ETH for the deploy day, so a
+      // The constructor seeds MINT_ETH + FOIL for the deploy day, so a
       // FLIP-type action has no matching active quest and takes the early return.
       const { result } = await callHandlerAsCoin(
         hre.ethers,
@@ -869,12 +869,12 @@ describe("DegenerusQuests", function () {
     it("getActiveQuests returns the seeded deploy-day pair before any roll", async function () {
       const { quests, game } = await loadFixture(questFixture);
       const active = await quests.getActiveQuests();
-      // The constructor stamps the deploy day: slot 0 MINT_ETH, slot 1 DEGENERETTE_ETH.
+      // The constructor stamps the deploy day: slot 0 MINT_ETH, slot 1 FOIL.
       const day0 = await game.currentDayView_g542950();
       expect(active[0].day).to.equal(day0);
       expect(Number(active[0].questType)).to.equal(QUEST_TYPE_MINT_ETH);
       expect(active[1].day).to.equal(day0);
-      expect(Number(active[1].questType)).to.equal(7);
+      expect(Number(active[1].questType)).to.equal(4);
     });
   });
 

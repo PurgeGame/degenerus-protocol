@@ -91,6 +91,7 @@ contract LoanAccountingInvariant is DeployProtocol {
         _bump("LA_VAULT_LOANS", handler.ghost_vaultLoans());
         _bump("LA_REPAYS", handler.ghost_repays());
         _bump("LA_REPAYS_CLAIMABLE", handler.ghost_repaysFromClaimable());
+        _bump("LA_REPAYS_AFKING", handler.ghost_repaysFromAfking());
         _bump("LA_AUTO_REPAYS", handler.ghost_autoRepays());
         _bump("LA_SEIZURES", handler.ghost_seizures());
         _bump("LA_ORDINARY_SWEEP_REJECTS", handler.ghost_ordinarySweepRejects());
@@ -103,8 +104,9 @@ contract LoanAccountingInvariant is DeployProtocol {
         _bump("LA_CLAIMS", handler.ghost_claims());
         _bump("LA_GATE_REJECTS", handler.ghost_gateRejects());
         _bump("LA_CLOSED", handler.ghost_closed());
-        string[20] memory keys = ["LA_RUNS", "LA_CALLS", "LA_BORROWS", "LA_TICKET_BORROWS", "LA_DAY20_BORROWS",
-            "LA_JACKPOT_BORROWS", "LA_VAULT_LOANS", "LA_REPAYS", "LA_REPAYS_CLAIMABLE", "LA_AUTO_REPAYS", "LA_SEIZURES",
+        string[21] memory keys = ["LA_RUNS", "LA_CALLS", "LA_BORROWS", "LA_TICKET_BORROWS", "LA_DAY20_BORROWS",
+            "LA_JACKPOT_BORROWS", "LA_VAULT_LOANS", "LA_REPAYS", "LA_REPAYS_CLAIMABLE", "LA_REPAYS_AFKING",
+            "LA_AUTO_REPAYS", "LA_SEIZURES",
             "LA_ORDINARY_SWEEP_REJECTS", "LA_CHUNKED", "LA_SWEEPS", "LA_CLAIMS", "LA_GATE_REJECTS",
             "LA_WORKER_ADEQUATE_GAS", "LA_WORKER_STARVED", "LA_FALLBACK_ADEQUATE_GAS", "LA_WORKER_CHUNK_CAP_HIT"];
         for (uint256 i; i < keys.length; ++i) {

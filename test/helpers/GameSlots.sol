@@ -126,6 +126,8 @@ library GameSlots {
     uint256 internal constant DEITY_BOON_PACKED = 26;
     uint256 internal constant DEGENERETTE_RECORD_BOUNTY = 27;
     uint256 internal constant EARLY_TICKET_LEVEL = 28;
+    uint256 internal constant VRF_REISSUED_AT = 28;
+    uint256 internal constant VRF_REISSUED_AT_OFFSET = 3;
     uint256 internal constant LOOTBOX_EV_CAP_PACKED = 29;
     uint256 internal constant DEC_BATTLE_ENTRIES = 30;
     uint256 internal constant DEC_BATTLE_ROUNDS = 31;

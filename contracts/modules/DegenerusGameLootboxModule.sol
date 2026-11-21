@@ -125,7 +125,7 @@ abstract contract DegenerusGameLootboxModule is GameBoxInternals, GamePurchaseBo
 
     // Lootbox roll constants
     /// @dev Base ticket budget in BPS of the roll's MAIN amount — the box amount after the
-    ///      boon budget (10%, capped at 1 ETH) is carved off in `_resolveLootboxCommon` — for
+    ///      boon budget (10%, capped at 0.315 ETH) is carved off in `_resolveLootboxCommon` — for
     ///      ONE ticket outcome (196.78%), before the variance tiers (~0.941x mean) and the
     ///      EV-neutral near/far distance weighting. After the variance mean that is ~185% of the
     ///      main amount per ticket outcome, so a neutral 1 ETH box (0.9 ETH main) carries
@@ -240,9 +240,11 @@ abstract contract DegenerusGameLootboxModule is GameBoxInternals, GamePurchaseBo
 
     /// @dev Portion of a box's EV reserved for the boon/pass draw (10%), capped. The haircut
     ///      is taken here because it comes off each box's reward amount; the DRAW itself lives
-    ///      in the boon module.
+    ///      in the boon module. The cap is at most one boon's full-use value at every level
+    ///      (lowest 0.3151 ETH, levels 0-2), so a box's boon EV equals its budget up to the
+    ///      samplers' rounding: about 8 ppm over, and a budget under one ppm of a boon buys none.
     uint16 private constant LOOTBOX_BOON_BUDGET_BPS = 1000;
-    uint256 private constant LOOTBOX_BOON_MAX_BUDGET = 1 ether;
+    uint256 private constant LOOTBOX_BOON_MAX_BUDGET = 0.315 ether;
 
     /// @notice Emitted when a box entry is appended. Same topic as the GamePurchase and Whale
     ///         declarations — one box-buy event across every path.
@@ -793,7 +795,8 @@ abstract contract DegenerusGameLootboxModule is GameBoxInternals, GamePurchaseBo
     ///        bits[224..255] fracRoundUp % 100      (_settleLootboxRoll ticket whole-collapse;
     ///        uint32 window, bias ~2e-8)
     ///      One box, one roll: no split and no second chunk. The boon draw is not sliced from
-    ///      this seed: the Boon module uses hash3(BOX_BOON_LANE, boonSeed, nonce) >> 120.
+    ///      this seed: the Boon module gates on hash3(BOX_BOON_LANE, boonSeed, nonce) >> 120 and
+    ///      takes the type from its bits 152..183.
     ///      Orders use hash2(BOX_BOON, orderRoot); single-box resolvers pass
     ///      their independently keyed box seed. Spin sub-actions use their named RngTags
     ///      constants and consume no primary bits.

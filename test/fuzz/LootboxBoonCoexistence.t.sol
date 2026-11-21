@@ -164,9 +164,8 @@ contract LootboxBoonCoexistence is DeployProtocol {
 
         // Try many lootbox opens with different VRF words.
         // Use large ETH amount (10 ETH) to maximize boon budget and roll probability.
-        // boonBudget = 10% of 10 ETH = 1 ETH (hits max cap).
-        // totalChance = (1e18 * 1e6) / expectedPerBoon. With typical avgMaxValue,
-        // this should give near-100% boon probability for most seeds.
+        // boonBudget = 10% of 10 ETH, capped at 0.315 ETH. At level 0 one boon's full-use value
+        // is 0.3151 ETH, so totalChance = 0.315e18 * 1e6 / expectedPerBoon is about 99.95%.
         uint256 boonEventsTotal = 0;
 
         for (uint256 seed = 1; seed <= 50; seed++) {

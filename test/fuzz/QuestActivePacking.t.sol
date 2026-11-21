@@ -29,7 +29,7 @@ contract QuestActivePackingTest is Test {
         assertEq(vm.load(address(quests), bytes32(QaSlots.LEVEL)), bytes32(0), "mapping base slot holds no data");
         QuestInfo[2] memory daily = quests.getActiveQuests();
         assertEq(daily[0].questType, 1);
-        assertEq(daily[1].questType, 7);
+        assertEq(daily[1].questType, 4, "genesis FOIL");
     }
 
     function testFuzz_DailyAndLevelRollsPreserveEachOther(uint256 entropy, uint24 version) public {

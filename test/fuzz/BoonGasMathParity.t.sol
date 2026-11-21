@@ -63,8 +63,10 @@ contract BoonGasMathParity is Test {
     }
 
     function _legacyAverage(uint24 currentLevel) private pure returns (uint256) {
-        uint256 priceWei = PriceLookupLib.priceForLevel(currentLevel - 1);
-        uint256 lazyPassValue = _legacyLazyValue(currentLevel + 1);
+        // FLIP buys one ticket of the open level per 1,000 FLIP; lazy discounts use the price
+        // purchaseLazyPass charges.
+        uint256 priceWei = PriceLookupLib.priceForLevel(currentLevel);
+        uint256 lazyPassValue = currentLevel <= 3 ? 0.24 ether : _legacyLazyValue(currentLevel);
         uint256 weighted;
 
         // Coinflip deposits: 5/10/25% of a 100k-FLIP cap, weights 200/40/8.
@@ -81,9 +83,11 @@ contract BoonGasMathParity is Test {
         weighted += 8 * _flipValue(12_500, priceWei);
         weighted += 2 * _flipValue(25_000, priceWei);
 
-        // Whale discounts at 4 ETH and deity discounts at the fixed 160-ETH nominal price.
-        weighted += 28 * 0.4 ether + 10 * 0.8 ether + 2 * 1.4 ether;
-        weighted += 28 * 16 ether + 10 * 32 ether + 2 * 56 ether;
+        // Whale discounts at the level's whale price (2.4 ETH through pass level 4, then 4 ETH)
+        // and deity discounts at the 24-ETH first-pass price.
+        if (currentLevel <= 4) weighted += 28 * 0.24 ether + 10 * 0.48 ether + 2 * 0.84 ether;
+        else weighted += 28 * 0.4 ether + 10 * 0.8 ether + 2 * 1.4 ether;
+        weighted += 28 * 2.4 ether + 10 * 4.8 ether + 2 * 8.4 ether;
 
         // Whale pass plus lazy-pass 10/25/50% discounts.
         weighted += 2 * 4.5 ether;
@@ -97,12 +101,11 @@ contract BoonGasMathParity is Test {
         weighted += 50 * _flipValue(8000, priceWei);
         weighted += 10 * _flipValue(12_000, priceWei);
 
-        // Craps bankroll-payout boons: 5/10/15% of a 60k-FLIP payout base, weights 200/40/8. The
-        // top tier is 15% rather than a quarter because the boon lifts EVERY window a ticket
-        // plays, and a whole-day ticket plays six.
-        weighted += 200 * _flipValue(3000, priceWei);
-        weighted += 40 * _flipValue(6000, priceWei);
-        weighted += 8 * _flipValue(9000, priceWei);
+        // Craps bankroll-payout boons: 5/10/15% of a 60k-FLIP payout base, weights 200/40/8, in
+        // each of the six windows a whole-day ticket plays.
+        weighted += 200 * _flipValue(6 * 3000, priceWei);
+        weighted += 40 * _flipValue(6 * 6000, priceWei);
+        weighted += 8 * _flipValue(6 * 9000, priceWei);
 
         return weighted / 2856;
     }

@@ -75,7 +75,7 @@ interface IDegenerusQuests {
     /// @notice Rolls the daily quest for a given day using provided entropy.
     /// @dev Called by AdvanceModule (via GAME delegatecall) to determine which quests are active.
     /// @param day The Game logical day to roll quests for
-    /// @param entropy Random entropy used to determine the slot 1 quest type
+    /// @param entropy The last applied daily word for the slot 1 roll; 0 on day 2 (LOOTBOX)
     /// @param forceMintFlip Force slot 1 to MINT_FLIP (the first jackpot day, when the FLIP
     ///        redeem window is live); otherwise MINT_FLIP is excluded from the slot 1 roll.
     /// @param forceFoil Force slot 1 to FOIL (the day the purchase phase opens); otherwise FOIL
@@ -213,7 +213,7 @@ interface IDegenerusQuests {
     ///      afking); a zero amount or day is a no-op.
     /// @param id Wallet ID of the player to award bonus to
     /// @param amount The number of bonus streak days to award
-    /// @param currentDay The caller's current logical game day; quest state pins to the newest rolled day
+    /// @param currentDay The caller's current logical game day, which is the live quest day
     function awardQuestStreakBonus(uint32 id, uint16 amount, uint24 currentDay) external;
 
     /// @notice Record a paid craps action: quest progress and the whole-day streak credit.
@@ -239,7 +239,7 @@ interface IDegenerusQuests {
     ///      credits from the next day, so a start-day completion credits as off a run); returns the
     ///      synced streak so the caller bases the run's snapshot on it.
     /// @param id Wallet ID of the subscriber starting an afking run
-    /// @param currentDay The caller's current logical game day; quest state pins to the newest rolled day
+    /// @param currentDay The caller's current logical game day, which is the live quest day
     /// @return streak The player's synced streak at the start of the run
     function beginAfking(uint32 id, uint24 currentDay) external returns (uint24 streak);
 
@@ -272,8 +272,8 @@ interface IDegenerusQuests {
         );
 
     /// @notice Roll the level quest using provided entropy.
-    /// @dev Called by AdvanceModule (via GAME delegatecall) during level transition.
-    /// @param entropy VRF-derived entropy for quest type selection.
+    /// @dev Called by AdvanceModule (via GAME delegatecall) at the request that moves `level`.
+    /// @param entropy The last applied daily word.
     function rollLevelQuest(uint256 entropy) external;
 
     /// @notice Credit the growth-bet participation quest for a player.

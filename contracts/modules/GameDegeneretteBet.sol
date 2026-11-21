@@ -190,7 +190,7 @@ abstract contract GameDegeneretteBet is DegenerusGamePayoutUtils, DegenerusGameM
 
         c.totalBet = uint256(c.amountPerSpin) * uint256(c.spinCount);
         // Decay-aware effective quest streak: a streak lapsed past its shields reads 0 against
-        // the Game's logical day (also between the daily request and its quest roll), so a
+        // the Game's logical day, so a
         // returning-inactive player can't snapshot a
         // stale-high streak into the bet's activityScore (which scales the ETH ROI and the
         // lootbox-share EV multiplier). This snapshot precedes the new bet's quest credit.

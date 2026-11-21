@@ -182,7 +182,7 @@ contract LootboxNestedDgnrsOrdering is DeployProtocol {
     function _thirdRoll(NestedOpen memory r) private view returns (uint256 fresh, uint256 stale) {
         uint256 seed3 = EntropyLib.hash3(19, _parentRoot(), 3);
         uint256 boonBudget = r.parentAmount / 10;
-        if (boonBudget > 1 ether) boonBudget = 1 ether;
+        if (boonBudget > 0.315 ether) boonBudget = 0.315 ether;
         uint256 rollAmount = r.parentAmount - boonBudget;
         fresh = _dgnrsReward(rollAmount, seed3, r.poolBefore - r.paid[0] - r.paid[1]);
         stale = _dgnrsReward(rollAmount, seed3, r.poolBefore);

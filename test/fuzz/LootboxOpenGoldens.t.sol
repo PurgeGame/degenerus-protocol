@@ -119,8 +119,10 @@ contract LootboxOpenGoldens is DeployProtocol {
     ///      Every
     ///      queued seed is H(19, H(20, word, position), n), so the
     ///      pinned figures use the final domains and position; the fixture also asserts the owner. The
-    ///      purchase freezes score 1: a 90.16% multiplier, below neutral, so no EV
-    ///      allowance is drawn and every box scales by exactly 9016 bps.
+    ///      purchase falls on the first day after bootstrap, which has no prior word, so slot 1 is
+    ///      the fixed LOOTBOX quest. The order completes both daily quests (streak 2, one point)
+    ///      beside its one-level mint streak and freezes score 2: a 90.33% multiplier, below
+    ///      neutral, so no EV allowance is drawn and every box scales by exactly 9033 bps.
     function _goldenFixture() internal returns (address whale) {
         _driveDailyCycleOnce();
         assertFalse(game.rngLocked(), "stage: mid-day path reachable");
@@ -135,7 +137,7 @@ contract LootboxOpenGoldens is DeployProtocol {
         game.purchaseOrderFor{value: 12 * 0.15 ether + priceWei + 1 ether}(0, 400, BoxOrderLib.boCustoms(12, 0.15 ether), bytes32(0), MintPaymentKind.DirectEth, false);
         assertEq(RecyclingState.boxCount(address(game), gi), 1, "golden fixture: one entry");
         assertEq(BoxOrderLib.boId(RecyclingState.boxEntry(address(game), gi, 0)), 5, "golden fixture: whale wallet ID 5 at position 0");
-        assertEq(BoxOrderLib.boScore(RecyclingState.boxEntry(address(game), gi, 0)), 1, "golden fixture: whale's frozen score");
+        assertEq(BoxOrderLib.boScore(RecyclingState.boxEntry(address(game), gi, 0)), 2, "golden fixture: whale's frozen score");
     }
 
     /// @dev Fixed word ("golden_word", 28): nine plain boxes of twelve (the same target levels the
@@ -185,10 +187,10 @@ contract LootboxOpenGoldens is DeployProtocol {
 
         assertEq(nOpened, 9, "nine boxes opened plainly on this word");
         uint24[9] memory levels = [uint24(4), 3, 2, 2, 6, 5, 49, 4, 2];
-        uint32[9] memory tickets = [uint32(1977), 0, 1103, 3245, 1249, 1251, 1205, 1960, 1222];
+        uint32[9] memory tickets = [uint32(1981), 0, 1105, 3251, 1252, 1253, 1207, 1963, 1224];
         uint256[9] memory flips = [uint256(0), 0, 0, 0, 0, 0, 0, 0, 0];
         for (uint256 k; k < 9; k++) {
-            assertEq(opened[k].amount, 135_240e12, "box amount: 0.15 ETH at 9016 bps");
+            assertEq(opened[k].amount, 135_495e12, "box amount: 0.15 ETH at 9033 bps");
             assertEq(opened[k].level, levels[k], "target level");
             assertEq(opened[k].tickets, tickets[k], "ticket variance roll");
             assertEq(opened[k].flip, flips[k], "FLIP branch");
@@ -212,9 +214,9 @@ contract LootboxOpenGoldens is DeployProtocol {
     ///      box, and four flushed levels.
     function _checkWord68Box(uint256 k, uint256 a, uint24 lvl, uint32 sc, uint256 fl, bool u) internal pure {
         uint24[8] memory level = [uint24(1), 2, 4, 5, 4, 5, 22, 2];
-        uint32[8] memory tickets = [uint32(3042), 1209, 0, 1349, 0, 627, 687, 0];
+        uint32[8] memory tickets = [uint32(3048), 1211, 0, 1351, 0, 629, 689, 0];
         uint256[8] memory flip = [uint256(0), 0, 6200, 0, 9700, 0, 0, 0];
-        assertEq(a, 135_240e12, "box amount");
+        assertEq(a, 135_495e12, "box amount");
         assertEq(lvl, level[k], "target level");
         assertEq(sc, tickets[k], "ticket variance roll");
         assertEq(fl, flip[k], "FLIP branch");

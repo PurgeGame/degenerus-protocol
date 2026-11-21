@@ -319,7 +319,7 @@ is idempotent. Reserve grants do not generate action, comps or another protocol 
 ### Advance stages
 
 1. The daily request locks the field.
-2. Stage 18 applies the fresh word (with its coinflip, quest, bonus-day and boon work) and runs no
+2. Stage 18 applies the fresh word (with its coinflip, bonus-day and boon work) and runs no
    battle step or jackpot payout.
 3. Daily-phase battle work uses stage 16 on jackpot days, 17 on purchase days. A step is a set of
    draw chunks (the last one may seal the field) or a settle batch. The miner can reach this worker

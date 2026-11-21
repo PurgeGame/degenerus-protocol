@@ -254,8 +254,8 @@ abstract contract DegenerusGameStorage {
 
     /// @dev How long an unanswered VRF request — daily, or a mid-day one blocking the next
     ///      day's advance — may hold the game before the deterministic ending. Measured from the
-    ///      original send: the vault owner's retry of a daily request and coordinator swaps do not
-    ///      re-stamp. This is also the window a daily
+    ///      original send: the vault owner's retry and a coordinator swap's re-issue do not
+    ///      re-stamp it. This is also the window a daily
     ///      stall straddling the purchase deadline has to recover in.
     uint48 internal constant _VRF_DEAD_TIMEOUT = 14 days;
 
@@ -484,9 +484,8 @@ abstract contract DegenerusGameStorage {
     function _setTicketRedemptionOpen(bool on) internal {
         rngFlagsAndNudges = (rngFlagsAndNudges & ~(uint16(1) << 9)) | (on ? uint16(1) << 9 : 0);
     }
-    /// @dev One retry per request: set by the retry and by a coordinator swap's re-issue under
-    ///      the daily lock (a mid-day re-issue leaves it as it was), cleared by every fresh
-    ///      request stamp.
+    /// @dev One retry per request: set by the retry, cleared by every fresh request stamp and by
+    ///      a coordinator swap's re-issue, which also restarts the retry's clock (vrfReissuedAt).
     function _rngRetrySpent() internal view returns (bool) { return rngFlagsAndNudges & (uint16(1) << 10) != 0; }
     function _spendRngRetry() internal { rngFlagsAndNudges |= uint16(1) << 10; }
     function _rearmRngRetry() internal { rngFlagsAndNudges &= ~(uint16(1) << 10); }
@@ -3617,6 +3616,11 @@ abstract contract DegenerusGameStorage {
     ///      drain so later entries cannot reopen that level's frozen far-future queue. The
     ///      ordinary mint ceiling catches up at the last-purchase level promotion.
     uint24 internal earlyTicketLevel;
+
+    /// @dev When a coordinator swap last re-issued an unanswered request (slot 28, after
+    ///      earlyTicketLevel). Read only by the owner's retry, which is due 20 hours after the
+    ///      later of this and rngRequestTime; the request's own timeouts never read it.
+    uint48 internal vrfReissuedAt;
 
     // =========================================================================
     // Lootbox EV Multiplier Cap Tracking

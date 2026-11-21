@@ -63,7 +63,7 @@ import {EntropyLib} from "./libraries/EntropyLib.sol";
  *
  * Quest Lifecycle
  * -----------------------------------------------------------------------------
- * 1. GAME (AdvanceModule) calls `rollDailyQuest()` with VRF entropy at day transition
+ * 1. GAME (AdvanceModule) calls `rollDailyQuest()` at each daily request with the last applied word
  * 2. Slot 0 is always the fixed MINT_ETH quest: ETH-denominated ticket/lootbox spend, fresh or recycled
  * 3. Slot 1 is a weighted-random quest from the remaining quest types
  * 4. Player actions trigger handle* functions (handlePurchase_g23478, handleFlip_g217, etc.)
@@ -281,9 +281,9 @@ contract DegenerusQuests is IDegenerusQuests {
     /// @dev Quest type: earn affiliate commissions.
     uint8 private constant QUEST_TYPE_AFFILIATE = 3;
 
-    /// @dev Quest type: buy a foil pack. Forced into slot 1 on the first purchase
-    ///      day of a level (rollDailyQuest forceFoil) and excluded from the random
-    ///      pool everywhere else, so it only ever lands on that day.
+    /// @dev Quest type: buy a foil pack. Seeded into slot 1 on day 1, forced into slot 1 on
+    ///      each level's final jackpot day (rollDailyQuest forceFoil) and excluded from the
+    ///      random pool, so it only ever lands on those days.
     uint8 private constant QUEST_TYPE_FOIL = 4;
 
     /// @dev Quest type: participate in decimator burns.
@@ -435,8 +435,8 @@ contract DegenerusQuests is IDegenerusQuests {
 
     constructor() {
         // Seed the level-1 quest at deploy so a level quest is always active: `rollLevelQuest`
-        // fires only at a purchase->jackpot transition and rolls for `level + 1`, so the first
-        // roll is for level 2.
+        // fires only at the daily request that moves `level` and rolls for `level + 1`, so the
+        // first roll is for level 2.
         //
         // The type is FIXED because no VRF word exists at deploy, and block data would put an
         // ambient value into quest selection. Genesis is the one point where every player has
@@ -459,19 +459,15 @@ contract DegenerusQuests is IDegenerusQuests {
         );
 
         // Seed logical day 1's daily quest pair for the same reason: the first rollDailyQuest
-        // fires when day 2's word is delivered; the seeded pair serves logical day 1 until
-        // that first entropy roll.
-        // Types are fixed (no VRF exists at deploy): slot 0 is the roll's own always-MINT_ETH
-        // slot; slot 1 is DEGENERETTE_ETH — the ETH degenerette bet has no level or phase gate
-        // and its quest progress credits at placement, so the quest is completable before any
-        // word settles.
+        // fires at day 2's request. Types are fixed (no word exists): slot 0 is MINT_ETH and
+        // slot 1 is FOIL, a foil pack being buyable from deploy.
         uint24 day0 = 1;
         DailyQuest[QUEST_SLOT_COUNT] memory seeded;
         _seedQuestType(seeded[0], day0, QUEST_TYPE_MINT_ETH);
-        _seedQuestType(seeded[1], day0, QUEST_TYPE_DEGENERETTE_ETH);
+        _seedQuestType(seeded[1], day0, QUEST_TYPE_FOIL);
         _storeActiveQuests(seeded);
         emit QuestSlotRolled(day0, 0, QUEST_TYPE_MINT_ETH, 0, day0);
-        emit QuestSlotRolled(day0, 1, QUEST_TYPE_DEGENERETTE_ETH, 0, day0);
+        emit QuestSlotRolled(day0, 1, QUEST_TYPE_FOIL, 0, day0);
 
         // Register this contract's ENS reverse name (best-effort; skipped when the
         // registrar is unset — local/test/testnet builds). The setName(string)
@@ -549,14 +545,16 @@ contract DegenerusQuests is IDegenerusQuests {
     // =========================================================================
 
     /// @notice Roll the daily quest set. Slot 0 is always MINT_ETH; slot 1 is random, except on a
-    ///         decimator window's opening day (forced DECIMATOR), the first purchase day (forced
-    ///         FOIL) and the first jackpot day (forced MINT_FLIP).
-    /// @dev Idempotent per day. Called by AdvanceModule when RNG word is available.
+    ///         decimator window's opening day (forced DECIMATOR), a level's final jackpot day
+    ///         (forced FOIL), the first jackpot day (forced MINT_FLIP) and day 2 (LOOTBOX).
+    /// @dev Idempotent per day. Called by AdvanceModule at each fresh daily request, so the day's
+    ///      quests are live from that request.
     /// @param day The quest day being rolled.
-    /// @param entropy VRF-derived entropy for the slot-1 roll.
+    /// @param entropy The last applied daily word for the slot-1 roll; 0 only on day 2, which has
+    ///        no prior word and takes LOOTBOX.
     /// @param forceMintFlip True on the first jackpot day (the FLIP-mint window opens): slot 1 is
     ///        MINT_FLIP. MINT_FLIP is never in the random pool.
-    /// @param forceFoil True on the first purchase day: slot 1 is the buy-a-foil-pack quest.
+    /// @param forceFoil True on a level's final jackpot day: slot 1 is the buy-a-foil-pack quest.
     ///        Takes precedence over forceMintFlip.
     /// @param forceDecimator True on the day a decimator burn window arms: slot 1 is the
     ///        decimator quest, outranking both other forces so the window's opening day always
@@ -578,9 +576,10 @@ contract DegenerusQuests is IDegenerusQuests {
 
         // Slot 1: DECIMATOR forced on the day a burn window arms, else FOIL on the day the
         // purchase phase opens, else MINT_FLIP on the first jackpot day (redeem window live),
-        // else a weighted random distinct from slot 0. Neither FOIL nor MINT_FLIP is in the
-        // random pool (see _bonusQuestType), so each only lands on its forced day; DECIMATOR is
-        // additionally rollable at random for the rest of a window.
+        // else LOOTBOX on day 2, else a weighted random distinct from slot 0. Neither FOIL nor
+        // MINT_FLIP is in the random pool (see _bonusQuestType), so FOIL lands only on its forced
+        // day or day 1 and MINT_FLIP only on its forced day; DECIMATOR is additionally rollable at
+        // random for the rest of a window.
         uint8 bonusType;
         if (forceDecimator) {
             bonusType = QUEST_TYPE_DECIMATOR;
@@ -588,6 +587,8 @@ contract DegenerusQuests is IDegenerusQuests {
             bonusType = QUEST_TYPE_FOIL;
         } else if (forceMintFlip) {
             bonusType = QUEST_TYPE_MINT_FLIP;
+        } else if (entropy == 0) {
+            bonusType = QUEST_TYPE_LOOTBOX;
         } else {
             uint256 bonusEntropy = EntropyLib.hash2(RngTags.QUEST_DAILY, entropy);
             bonusType = _bonusQuestType(
@@ -613,8 +614,7 @@ contract DegenerusQuests is IDegenerusQuests {
      *      Clamps at uint16 max on overflow.
      * @param id Wallet ID of the player to receive the streak bonus.
      * @param amount Number of streak days to add.
-     * @param currentDay The caller's current logical game day; the streak syncs on it, whether or
-     *        not that day's quests have rolled.
+     * @param currentDay The caller's current logical game day; the streak syncs on it.
      * @custom:reverts OnlyGame When caller is not the GAME contract.
      */
     function awardQuestStreakBonus(uint32 id, uint16 amount, uint24 currentDay) external questsContext {
@@ -632,9 +632,7 @@ contract DegenerusQuests is IDegenerusQuests {
         if (amount == 0 || currentDay == 0) return;
 
         PlayerQuestState storage state = _questsStorage().questPlayerState[id];
-        uint24 questDay = _currentQuestDayFast(currentDay);
-        uint24 syncDay = questDay == 0 ? currentDay : questDay;
-        _questSyncState(state, id, syncDay);
+        _questSyncState(state, id, currentDay);
 
         // While afking the manual streak is dormant and finalizeAfking overwrites it; writing it
         // here would discard the bonus at finalize and orphan a century shield granted off the
@@ -653,10 +651,10 @@ contract DegenerusQuests is IDegenerusQuests {
         state.streak = newStreak;
         _grantCenturyShield(id, state);
 
-        if (state.lastActiveDay < syncDay) {
-            state.lastActiveDay = syncDay;
+        if (state.lastActiveDay < currentDay) {
+            state.lastActiveDay = currentDay;
         }
-        emit QuestStreakBonusAwarded(id, amount, newStreak, syncDay);
+        emit QuestStreakBonusAwarded(id, amount, newStreak, currentDay);
     }
 
     /// @dev A foil purchase guarantees a quest streak of at least this floor, and the pack's
@@ -667,8 +665,8 @@ contract DegenerusQuests is IDegenerusQuests {
      * @notice Raise a player's quest streak to a floor of 12 as a foil-pack benefit.
      * @dev Called from handleFoilPurchase (GAME-gated) AFTER the buy's own primary + secondary
      *      quest completions, so it applies on top of them. Unconditional on quest state (a foil
-     *      purchase boosts the streak even if no daily quest completed, and between a daily
-     *      request and the quest roll); never lowers an already-higher streak. The caller syncs
+     *      purchase boosts the streak even if no daily quest completed); never lowers an
+     *      already-higher streak. The caller syncs
      *      the day-lapse state first, so a foil buy restores the streak floor even after a
      *      missed-day reset.
      *      For a mid-run afker, whose reward streak is the afking sub base plus funded delivered
@@ -676,8 +674,7 @@ contract DegenerusQuests is IDegenerusQuests {
      *      afking module — before the manual-streak early-return below, so it reaches the afker
      *      even when their manual streak is already at the floor.
      * @param id Wallet ID of the player who bought the foil pack.
-     * @param currentDay The day the caller synced: the live quest day, else the Game's logical
-     *        day.
+     * @param currentDay The live quest day, which the caller synced.
      */
     function _foilStreakFloor(uint32 id, PlayerQuestState storage state, uint24 currentDay) private {
         if (currentDay == 0) return;
@@ -757,7 +754,7 @@ contract DegenerusQuests is IDegenerusQuests {
      *      touch the slot-1 quest.
      * @param id Wallet ID of the subscriber starting an afking run.
      * @param currentDay The caller's current logical game day (1 or later); the streak syncs on
-     *        it, whether or not that day's quests have rolled.
+     *        it.
      * @return streak The player's synced streak at the start of the run.
      * @custom:reverts OnlyGame When caller is not GAME contract.
      */
@@ -767,9 +764,7 @@ contract DegenerusQuests is IDegenerusQuests {
         returns (uint24 streak)
     {
         PlayerQuestState storage state = _questsStorage().questPlayerState[id];
-        uint24 questDay = _currentQuestDayFast(currentDay);
-        uint24 syncDay = questDay == 0 ? currentDay : questDay;
-        if (syncDay != 0) _questSyncState(state, id, syncDay);
+        if (currentDay != 0) _questSyncState(state, id, currentDay);
         // One read and one write of the packed word: `streak` (bits 72..87) out, `afkingSince`
         // (bits 208..231) in.
         uint256 word;
@@ -985,8 +980,7 @@ contract DegenerusQuests is IDegenerusQuests {
         if (msg.sender != ContractAddresses.COIN) revert OnlyCoin();
         if (actionFlags == 0) return;
 
-        // Sync the day-lapse state ONCE, before either quest leg, on the Game's logical day:
-        // also between the daily request and the quest roll, as the streak bonus does.
+        // Sync the day-lapse state ONCE, before either quest leg, on the Game's logical day.
         // `_handleLevelQuestProgress` credits the streak on completion and never syncs; the
         // streak and join legs re-enter the same sync idempotently. Without this the pass-only
         // path — a `buyFutureCrapsDays` burn — would bump a streak that a missed day should
@@ -1275,13 +1269,6 @@ contract DegenerusQuests is IDegenerusQuests {
             id, state, quests, currentDay,
             ethMintSpendWei == 0 && flipMintQty == 0 && lootBoxAmount == 0
         );
-        // Between a daily request and its quest roll no quest day is live and the legs above
-        // did not sync: the floor syncs and anchors on the Game's logical day, as the streak
-        // bonus does.
-        if (currentDay == 0) {
-            currentDay = gameDay;
-            _questSyncState(state, id, currentDay);
-        }
         _foilStreakFloor(id, state, currentDay);
         afking = state.afkingSince != 0;
     }
@@ -1312,12 +1299,8 @@ contract DegenerusQuests is IDegenerusQuests {
         private returns (uint256 reward, uint8 questType, uint32 streak, bool completed) {
         uint24 currentDay = _currentQuestDay(quests, p.day);
         PlayerQuestState storage state = _questsStorage().questPlayerState[p.id];
-        if (currentDay == 0) {
-            // Between the daily request and its quest roll: no daily quest is live and the level
-            // quest is not credited; the streak reads decay-aware against the Game day.
-            return (0, quests[0].questType, _effectiveBaseStreak(state, p.day), false);
-        }
-        if (p.ethMintSpendWei == 0 && p.flipMintQty == 0 && p.lootBoxAmount == 0) {
+        if (currentDay == 0
+            || (p.ethMintSpendWei == 0 && p.flipMintQty == 0 && p.lootBoxAmount == 0)) {
             return (0, quests[0].questType, state.streak, false);
         }
 
@@ -1592,9 +1575,8 @@ contract DegenerusQuests is IDegenerusQuests {
     /// @notice The player's decay-aware effective reward streak — the value getPlayerQuestView
     ///         exposes as baseStreak, computed WITHOUT materializing the per-quest view structs
     ///         (a cheap read for reward scaling). A streak lapsed past its shields reads 0 against
-    ///         the Game's logical day, including between the daily request and the quest roll, so
-    ///         a stale-high raw streak (built then abandoned with no quest sync) can't inflate
-    ///         downstream reward scaling — lootbox EV or sDGNRS claims.
+    ///         the Game's logical day, so a stale-high raw streak (built then abandoned with no
+    ///         quest sync) can't inflate downstream reward scaling — lootbox EV or sDGNRS claims.
     /// @param id Wallet ID of the player to query.
     /// @return The effective (decay-applied) reward streak.
     function effectiveBaseStreak(uint32 id) external questsContext view returns (uint32) {
@@ -1643,10 +1625,10 @@ contract DegenerusQuests is IDegenerusQuests {
 
     /// @dev Single source of truth for the effective reward streak (getPlayerQuestView.baseStreak,
     ///      effectiveBaseStreak and the purchase streak). `currentDay` is the Game's logical day,
-    ///      also between its daily request and the quest roll: every earlier day has rolled, so
-    ///      the day count is the same one the next sync bills. A streak lapsed past its shields
-    ///      reads 0; once synced today the day's baseStreak snapshot is used: the start-of-day
-    ///      streak, or the streak an afking handback wrote since. While an afking run is open
+    ///      which is also the live quest day: every earlier day has rolled, so the day count is
+    ///      the same one the next sync bills. A streak lapsed past its shields reads 0; once
+    ///      synced today the day's baseStreak snapshot is used: the start-of-day streak, or the
+    ///      streak an afking handback wrote since. While an afking run is open
     ///      nothing is billed, as in `_questSyncState`.
     function _effectiveBaseStreak(
         PlayerQuestState memory state,
@@ -1781,7 +1763,8 @@ contract DegenerusQuests is IDegenerusQuests {
      */
     function _canRollDecimatorQuest() private view returns (bool) {
         if (!questGame.decimatorActive()) return false;
-        uint24 lvl = questGame.currentLvl() + 1;
+        uint24 lvl;
+        unchecked { lvl = questGame.currentLvl() + 1; }
         // Always available at 100-level milestones
         if ((lvl % DECIMATOR_SPECIAL_LEVEL) == 0) return true;
         // Available at X5 levels (5, 15, 25, 35...) except X95
@@ -1975,8 +1958,7 @@ contract DegenerusQuests is IDegenerusQuests {
      *      - Captures streak at start of day for consistent view rendering
      * @param state Storage reference to player's quest state.
      * @param id Wallet ID for event emission.
-     * @param currentDay The live quest day, or the Game's logical day between a daily request
-     *        and the quest roll.
+     * @param currentDay The live quest day, which is the Game's logical day.
      */
     function _questSyncState(PlayerQuestState storage state, uint32 id, uint24 currentDay) private {
         if (state.lastSyncDay >= currentDay) return; // already synced this quest day
@@ -2512,26 +2494,18 @@ contract DegenerusQuests is IDegenerusQuests {
         return GameTimeLib.gameDayIndex();
     }
 
-    /// @dev Current quest day without materializing the DailyQuest[2] array: quest-0's day (low 24
-    ///      bits of activeQuestsPacked), or quest-1's day (low 24 bits of the second 64-bit record)
-    ///      when quest 0 is empty. Equal to _currentQuestDay(_loadActiveQuests(), gameDay).
-    function _currentQuestDayFast(uint24 gameDay) private view returns (uint24) {
-        uint256 packed = _questsStorage().activeQuestsPacked;
-        uint24 day0 = uint24(packed);
-        uint24 day = day0 != 0 ? day0 : uint24(packed >> 64);
-        return day == gameDay ? day : 0;
-    }
-
     // =========================================================================
     //                         LEVEL QUESTS
     // =========================================================================
 
     /// @notice Roll the level quest for the current level.
     /// @dev Selects a quest type, bumps version to invalidate stale player progress.
-    ///      The quest belongs to the level being entered, so both the reported level and
-    ///      the ETH-scaled target read `level + 1` — the same price every progress handler
+    ///      Called at the daily request that moves `level`, after that write, so the version is
+    ///      always `level + 1` and the quest is live for the whole level. Both the reported level
+    ///      and the ETH-scaled target read `level + 1` — the same price every progress handler
     ///      scales its target with, so the announced target is the one enforced.
-    /// @param entropy VRF-derived entropy for quest type selection.
+    /// @param entropy The last applied daily word (public before the roll; the type is a
+    ///        selection, not a payout).
     function rollLevelQuest(uint256 entropy) external questsContext override onlyGame {
         bool decAllowed = _canRollDecimatorQuest();
         uint8 rolled = _bonusQuestType(
@@ -2705,8 +2679,9 @@ contract DegenerusQuests is IDegenerusQuests {
     /// @dev Bit position in levelQuestPlayerState marking the growth-bet quest complete.
     ///      The word's low bits are version (0-23), progress (24-151) and the level quest's
     ///      completed flag (152); the growth flag occupies bit 153. rollLevelQuest bumps the
-    ///      shared version at the same level transition that opens the growth round, so the
-    ///      two quests share one lifecycle and the stale-version reset clears both flags.
+    ///      shared version at the request that moves `level`, before that level's growth round
+    ///      opens, so the two quests share one lifecycle and the stale-version reset clears both
+    ///      flags.
     uint16 private constant LQ_GROWTH_BET_BIT = 153;
 
     /// @dev The growth-bet quest is a participation quest, so it moves the streak by a
@@ -2792,8 +2767,7 @@ contract DegenerusQuests is IDegenerusQuests {
         // stays keyed to the daily primary and a bet never stands in for a daily quest.
         // Sync first so the bump lands on a post-lapse streak rather than resurrecting one
         // already missed; while afking it feeds the Sub streak base so finalize reconciles it.
-        // The sync bills against the Game's logical day, as the streak view does, so a bet
-        // between the daily request and the quest roll is credited like any other.
+        // The sync bills against the Game's logical day, as the streak view does.
         uint24 questDay = _questGameDay();
         if (questDay != 0) {
             PlayerQuestState storage qs = _questsStorage().questPlayerState[id];

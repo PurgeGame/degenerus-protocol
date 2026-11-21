@@ -1148,15 +1148,16 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
         // was first issued for and the VRF-dead window keeps running from the original send.
         // One re-issue site. Mid-day: only an active unanswered request; delivery does not clear
         // its ID, and a delivered word awaiting miner publication must remain unchanged.
-        // Daily in flight (rngLockedFlag stays true): only a word not yet delivered. The swap
-        // spends the vault owner's single retry (the stamp itself does not move): the retry is
-        // the last resort before a swap, and re-armed here it could discard the new
-        // coordinator's first answer. A replacement that stalls too is recovered by another
-        // swap or reaches the VRF-dead ending. A delivered daily word is preserved: its
-        // request was fulfilled once and the new coordinator never issued it.
+        // Daily in flight (rngLockedFlag stays true): only a word not yet delivered. A delivered
+        // daily word is preserved: its request was fulfilled once and the new coordinator never
+        // issued it. Either kind's re-issue gives the vault owner one retry, due 20 hours after
+        // the swap rather than after the original send, so it cannot replace a request the new
+        // coordinator answers in time. A replacement that stalls past that is recovered by the
+        // retry, another swap or the VRF-dead ending.
         bool locked = rngLockedFlag;
         if (rngWordCurrent == RNG_WORD_WAITING && (locked || _rngRequestActive())) {
-            if (locked) _spendRngRetry();
+            _rearmRngRetry();
+            vrfReissuedAt = uint48(block.timestamp);
             vrfRequestId = _requestVrfWord(locked ? VRF_REQUEST_CONFIRMATIONS : VRF_MIDDAY_CONFIRMATIONS);
         }
 

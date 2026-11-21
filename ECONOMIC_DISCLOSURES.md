@@ -73,7 +73,8 @@ tables and reward curves.
     consolation before that scale applies.
   - **Additional boons.** Every primary outcome, including consolation, also draws from the ordinary
     boon table with a probability budget of **20% of the raw ETH order, capped at 1 ETH**,
-    normalized at launch level 1 with the ordinary 50% utilization assumption: each full 100%
+    normalized at one boon's full-use value at launch level 1 (about 0.315 ETH), up to the
+    sampler's whole-ppm rounding of each chance: each full 100%
     guarantees a draw and the remainder rolls once more, up to **three draws per order**. Activity,
     boosts, early bonuses and cohort volume do not multiply it; it creates no ETH reserve and does
     not reduce the primary reward. Types may repeat and ordinary upgrade/discard rules apply, so

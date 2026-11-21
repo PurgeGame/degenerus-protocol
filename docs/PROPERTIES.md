@@ -114,12 +114,13 @@ daily words.
 ### Retry and re-issue keep the cohort
 
 - **Implementation.** `DegenerusGameRngModule.retryRng` (Admin only; `_rngRetryDue`: active,
-  waiting, unspent, `RNG_RETRY_TIMEOUT = 20 hours`): `_spendRngRetry` and `_setRngRequest` only; no
-  swap or seal; `rngRequestTime` unchanged.
+  waiting, unspent, `RNG_RETRY_TIMEOUT = 20 hours` from the later of `rngRequestTime` and
+  `vrfReissuedAt`): `_spendRngRetry` and `_setRngRequest` only; no swap or seal; `rngRequestTime`
+  unchanged.
   `DegenerusGameGameOverModule.updateVrfCoordinatorAndSub`: re-issues only an undelivered request
-  (`rngWordCurrent == RNG_WORD_WAITING`), spends the retry when it re-issues a daily request (a
-  mid-day re-issue leaves the retry as it was), leaves `rngRequestTime` and nudges; after game over
-  or the dead latch it only repoints the configuration.
+  (`rngWordCurrent == RNG_WORD_WAITING`); a re-issue of either kind re-arms the retry and stamps
+  `vrfReissuedAt`; it leaves `rngRequestTime` and nudges; after game over or the dead latch it only
+  repoints the configuration.
 - **Tests.**
   - `test/fuzz/RngTransportCommitmentModel.t.sol::testFuzz_RetryPreservesCommitmentAndRejectsStaleResponse`
     ("same original timeout origin", "same day/kind/nudges/cohort"; the module's `retryRng` on
@@ -134,7 +135,13 @@ daily words.
   - `test/repro/DailyRngStallRecovery.t.sol::testAdminRetryOwnsAuthorityAndPreservesTheFrozenSession`
     (`OnlyAdmin` for any other caller), `::testAdminRetryRejectsDeliveredUnpublishedEntropy`
     ("delivered entropy cannot be replaced"), `::testDailyRetryIsSingleShot`
-  - `test/fuzz/VRFCore.t.sol::test_coordinatorSwapSpendsTheRetry` ("Swap spends the retry");
+  - `test/fuzz/VRFCore.t.sol::test_coordinatorSwapRestartsTheDailyRetryClock` ("Swap leaves the
+    retry unspent"); `::test_coordinatorSwapRetryKeepsTheVrfDeadDeadline` ("VRF dead 14 days
+    after the first request, not the swap");
+    `test/fuzz/VrfRotationLiveness.t.sol::test_midDaySwapRestartsTheRetryClock`,
+    `::test_midDayReissueAnsweredInTimeNeedsNoRetry` ("no replacement for a delivered word");
+    `test/fuzz/LootboxRngLifecycle.t.sol`
+    `::test_reservedWordAfterCoordinatorSwapIsRetriedAfterTheSwapClock`;
     `test/fuzz/VrfRotationLiveness.t.sol::test_dailyAlreadyDelivered_shortCircuit` ("no re-issue when
     rngWordCurrent!=0 (short-circuit)");
     `test/repro/VrfRotationMidDayReRoll.t.sol::test_C1_rotationAfterMidDayWordLands_doesNotReRoll`
@@ -403,9 +410,8 @@ settle the remaining loans later.
     `test/fuzz/V56QuestNonPerturb.t.sol::testStreakNeutralDuringAfkingSlot0`,
     `::testStreakNeutralIsGatedByAfkingActiveOnly`
   - Complement (outside a run, misses consume shields once and beyond shields decay against the Game
-    day): `test/repro/QuestStreakStallForgiveness.t.sol::test_MissedLogicalDaysConsumeShieldsExactlyOnce`;
-    `test/repro/QuestStreakRequestWindow.t.sol::test_LapsedStreakStaysDecayedInRequestWindow`
-    ("window: decayed against the Game day")
+    day):
+    `test/repro/QuestStreakStallForgiveness.t.sol::test_MissedLogicalDaysConsumeShieldsExactlyOnce`
 
 ### WWXRP claim window
 

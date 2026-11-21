@@ -507,25 +507,31 @@ contract LootboxRngLifecycle is DeployProtocol {
         assertEq(_readLootboxWord(buffer), 2, "retry uses the same read buffer");
     }
 
-    /// @notice A reserved response after rotation cannot re-arm the retry already spent by that rotation.
-    function test_reservedWordAfterCoordinatorSwapDoesNotRearmRetry() public {
+    /// @notice A reserved response to a swap's re-issue waits for the retry, which is due 20 hours
+    ///         after the swap and publishes its word into the same sealed buffer.
+    function test_reservedWordAfterCoordinatorSwapIsRetriedAfterTheSwapClock() public {
         _completeDay(0xDEAD0001);
         vm.warp(block.timestamp + 1 days);
         game.mineRun(0);
         uint48 buffer = _readLootboxRngIndex() ^ 1;
         MockVRFCoordinator newVRF = _doCoordinatorSwap();
+        uint256 swapAt = vm.getBlockTimestamp();
         mockVRF = newVRF;
         newVRF.fundSubscription(1, 100e18);
         newVRF.fulfillRandomWords(newVRF.lastRequestId(), 0);
         assertEq(_readRngWordCurrent(), 0);
         assertEq(_readLootboxWord(buffer), 0);
         uint256 request = newVRF.lastRequestId();
-        vm.warp(block.timestamp + 20 hours + 2);
+        vm.warp(swapAt + 20 hours - 1);
         vm.expectRevert(bytes4(keccak256("RngNotReady()")));
         OwnerTargetCall.call(address(admin), abi.encodeCall(admin.retryGameRng, ()), 0);
-        assertEq(newVRF.lastRequestId(), request, "rotation already consumed the retry allowance");
+        assertEq(newVRF.lastRequestId(), request, "the retry waits 20 hours from the swap");
         assertEq(_readRngWordCurrent(), 0, "reserved response remains unanswered");
-        assertEq(_readLootboxWord(buffer), 0, "reserved entropy cannot publish a word");
+        vm.warp(swapAt + 20 hours);
+        OwnerTargetCall.call(address(admin), abi.encodeCall(admin.retryGameRng, ()), 0);
+        assertGt(newVRF.lastRequestId(), request, "the retry replaces the refused re-issue");
+        // The completing call issues the next request, which recycles the buffer: read the event.
+        assertEq(_fulfillAndDrain(newVRF, 2, buffer), 2, "the retried word publishes into the sealed buffer");
     }
 
     /// @dev Answer the live request and drain its session until its day completes. A late answer

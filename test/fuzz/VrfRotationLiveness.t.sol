@@ -406,18 +406,25 @@ contract VrfRotationLiveness is DeployProtocol {
         // Rotate while in flight -- the mid-day re-issue fires on the new coordinator but the
         // NEW coordinator does NOT fulfil (simulating the new coordinator also stalling).
         MockVRFCoordinator newVRF = _rotateTo();
+        uint256 swapAt = vm.getBlockTimestamp();
         uint256 reissueReqId = newVRF.lastRequestId();
         assertTrue(reissueReqId != 0, "rotation re-issued the request on the new coordinator");
         assertFalse(game.rngLocked(), "re-issued mid-day request leaves the daily lock clear");
 
+        // The retry's clock runs from the swap's re-issue.
+        vm.warp(swapAt + 20 hours - 1);
+        vm.expectRevert(bytes4(keccak256("RngNotReady()")));
+        OwnerTargetCall.call(address(admin), abi.encodeCall(admin.retryGameRng, ()), 0);
+        assertEq(newVRF.lastRequestId(), reissueReqId, "no retry before 20h after the swap");
+
         // The re-issue stalls across the next-day boundary: the daily advance waits on it.
-        vm.warp(block.timestamp + 1 days + MIDDAY_RNG_STALL_TIMEOUT + 1);
+        vm.warp(swapAt + 1 days + MIDDAY_RNG_STALL_TIMEOUT + 1);
         vm.expectRevert(bytes4(keccak256("RngNotReady()")));
         game.mineRun(0);
         assertEq(newVRF.lastRequestId(), reissueReqId, "no daily request while the mid-day word is outstanding");
         assertFalse(game.rngLocked(), "the daily lock is not taken over the stalled re-issue");
 
-        // The vault owner's single Admin retry (20h after the original stamp) re-sends it.
+        // The vault owner's single Admin retry (20h after the swap's re-issue) re-sends it.
         vm.prank(ContractAddresses.CREATOR);
         OwnerTargetCall.call(address(admin), abi.encodeCall(admin.retryGameRng, ()), 0);
         uint256 retryReqId = newVRF.lastRequestId();
@@ -449,6 +456,69 @@ contract VrfRotationLiveness is DeployProtocol {
         assertTrue(landed, "retried word finalized the reserved mid-day bucket");
         _completeDay(vrfWord);
         assertFalse(game.rngLocked(), "drain reaches rngLocked()==false after the retry");
+    }
+
+    /// @notice A governed swap needs a 44-hour stall since the last daily word, so a mid-day
+    ///         request it re-issues is always past its own 20-hour retry mark. The swap restarts
+    ///         the retry's clock: no replacement in the swap's block or before 20 hours after the
+    ///         swap, and one replacement at that point, with the stamp unchanged.
+    function test_midDaySwapRestartsTheRetryClock(uint256 vrfWord) public {
+        vm.assume(vrfWord > 1);
+        _setupForMidDayRng();
+        _mineMiddayRequest(mockVRF);
+        uint48 requestTime = _readRngRequestTime();
+
+        vm.warp(uint256(requestTime) + 20 hours + 1);
+        MockVRFCoordinator newVRF = _rotateTo();
+        uint256 swapAt = vm.getBlockTimestamp();
+        uint256 reissueReqId = newVRF.lastRequestId();
+        assertTrue(reissueReqId != 0, "rotation re-issued the mid-day request");
+        assertEq(_readRngRequestTime(), requestTime, "the swap keeps the stamp");
+
+        vm.expectRevert(bytes4(keccak256("RngNotReady()")));
+        OwnerTargetCall.call(address(admin), abi.encodeCall(admin.retryGameRng, ()), 0);
+        vm.warp(swapAt + 20 hours - 1);
+        vm.expectRevert(bytes4(keccak256("RngNotReady()")));
+        OwnerTargetCall.call(address(admin), abi.encodeCall(admin.retryGameRng, ()), 0);
+        assertEq(newVRF.lastRequestId(), reissueReqId, "the re-issued request stands");
+
+        vm.warp(swapAt + 20 hours);
+        OwnerTargetCall.call(address(admin), abi.encodeCall(admin.retryGameRng, ()), 0);
+        uint256 retryReqId = newVRF.lastRequestId();
+        assertTrue(retryReqId != reissueReqId, "the retry replaced the re-issue on the new coordinator");
+        assertFalse(game.rngLocked(), "the retry keeps the mid-day mode");
+        assertEq(_readRngRequestTime(), requestTime, "the retry keeps the stamp");
+
+        newVRF.fulfillRandomWords(reissueReqId, 0x1111);
+        assertEq(_readRngWordCurrent(), 0, "the replaced re-issue's word is ignored");
+        newVRF.fulfillRandomWords(retryReqId, vrfWord);
+        assertEq(_readRngWordCurrent(), vrfWord, "the retried word is delivered");
+    }
+
+    /// @notice A word the new coordinator delivers before the restarted clock runs out needs no
+    ///         retry, and the retry stays refused once the clock has run out.
+    function test_midDayReissueAnsweredInTimeNeedsNoRetry(uint256 vrfWord) public {
+        vm.assume(vrfWord > 1);
+        _setupForMidDayRng();
+        _mineMiddayRequest(mockVRF);
+        uint48 requestTime = _readRngRequestTime();
+
+        vm.warp(uint256(requestTime) + 20 hours + 1);
+        MockVRFCoordinator newVRF = _rotateTo();
+        uint256 swapAt = vm.getBlockTimestamp();
+        uint256 reissueReqId = newVRF.lastRequestId();
+        vm.expectRevert(bytes4(keccak256("RngNotReady()")));
+        OwnerTargetCall.call(address(admin), abi.encodeCall(admin.retryGameRng, ()), 0);
+
+        vm.warp(swapAt + 1 hours);
+        newVRF.fulfillRandomWords(reissueReqId, vrfWord);
+        assertEq(_readRngWordCurrent(), vrfWord, "the re-issue's word is delivered");
+
+        vm.warp(swapAt + 20 hours);
+        vm.expectRevert(bytes4(keccak256("RngNotReady()")));
+        OwnerTargetCall.call(address(admin), abi.encodeCall(admin.retryGameRng, ()), 0);
+        assertEq(newVRF.lastRequestId(), reissueReqId, "no replacement for a delivered word");
+        assertEq(_readRngWordCurrent(), vrfWord, "the delivered word stands");
     }
 
     /// @notice The mid-day request stays reachable after a completed rotation: after a

@@ -15,6 +15,8 @@ import {activityScoreOf} from "../helpers/ActivityScoreOf.sol";
 contract AutoDecimatorAdvanceHarness is DegenerusGameDailyModule {
     function applyOpeningWord(uint24 day) external {
         if (_recordedDailyWord(day) != 0) return;
+        // Today's quests roll at the request, before the word applies.
+        quests.rollDailyQuest(day, _recordedDailyWord(day - 1), false, false, _decDayOneActive());
         (bool ok, bytes memory err) = ContractAddresses.GAME_ADVANCE_MODULE.delegatecall(
             abi.encodeWithSelector(DegenerusGameAdvanceModule.applyDailyWord_g1652.selector)
         );
@@ -231,8 +233,9 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
             if (logs[i].emitter == address(coin) && logs[i].topics[0] == BURN_EVENT) burnIndex = i;
             if (logs[i].emitter == address(crapsBattle) && crapsIndex == type(uint256).max) crapsIndex = i;
         }
-        assertLt(settleIndex, questIndex, "coinflip settles before daily quests");
+        assertLt(questIndex, settleIndex, "daily quests roll at the request, before the word applies");
         assertLt(questIndex, burnIndex, "daily quests are rolled before the entry");
+        assertLt(settleIndex, burnIndex, "coinflip settles before the entry");
         assertLt(burnIndex, crapsIndex, "decimator gets first use of backing before craps");
         assertGt(crapsBattle.daySeatNumberOf(22, HOUSE), 0);
     }

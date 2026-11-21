@@ -8,8 +8,10 @@ import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
 
 /// @notice The level mint streak records whenever the primary MINT_ETH quest completes, including
 ///         when a secondary quest completes in the same purchase. No storage writes: only
-///         vm.deal, vm.prank, vm.warp and mock-VRF answers. A rolled LOOTBOX day is reached by
-///         answering the daily VRF request with ordinary words until slot 1 rolls LOOTBOX.
+///         vm.deal, vm.prank, vm.warp and mock-VRF answers. The deploy day's slot 1 is the seeded
+///         FOIL and the second day's is the fixed LOOTBOX (no prior word); a rolled
+///         DEGENERETTE_ETH day is reached by answering a day's word with ordinary values until the
+///         next day's request, which rolls from it, picks DEGENERETTE_ETH.
 contract MintStreakPairCompletion is DeployProtocol {
     uint8 private constant QT_MINT_ETH = 1;
     uint8 private constant QT_LOOTBOX = 6;
@@ -58,7 +60,7 @@ contract MintStreakPairCompletion is DeployProtocol {
     }
 
     function _advanceDay(uint256 salt) private {
-        vm.warp(block.timestamp + 1 days);
+        vm.warp(vm.getBlockTimestamp() + 1 days);
         for (uint256 i; i < 50; ++i) {
             _mineAll(200);
             uint256 req = mockVRF.lastRequestId();
@@ -80,14 +82,15 @@ contract MintStreakPairCompletion is DeployProtocol {
 
     // ------------------------------------------------------------------ foil-only route
 
-    /// Control: a foil-only buy on the deploy day completes the primary alone and records 1/1.
+    /// Control: a foil-only buy on the deploy day completes the primary and the seeded FOIL
+    /// secondary in one purchase and records 1/1.
     function test_foilOnly_control_records() public {
         address p = makeAddr("foilCtl");
         _foilOnly(p);
         uint32 id = game.walletIdOf_g3120(p);
         (bool d0, bool d1) = quests.questCompletionToday(id);
-        assertTrue(d0);
-        assertFalse(d1);
+        assertTrue(d0, "primary done");
+        assertTrue(d1, "seeded FOIL secondary done in the same purchase");
         (uint256 lc, uint256 s) = _streak(id);
         emit log_named_uint("foil control lastCompleted", lc);
         emit log_named_uint("foil control levelStreak", s);
@@ -95,7 +98,7 @@ contract MintStreakPairCompletion is DeployProtocol {
         assertEq(s, 1);
     }
 
-    /// Bet first (secondary progress), then a foil-only buy pair-completes both quests: recorded.
+    /// A bet first (no slot-1 progress on the FOIL day), then a foil-only buy completes both: recorded.
     function test_foilOnly_afterBet_records() public {
         address p = makeAddr("foilPair");
         _bet(p);
@@ -109,8 +112,25 @@ contract MintStreakPairCompletion is DeployProtocol {
         assertEq(s, 1);
     }
 
-    /// Bet first, then a ticket buy completes the primary and pair-completes the secondary: recorded.
+    /// On a rolled DEGENERETTE_ETH day: bet first (secondary progress), then a ticket buy completes
+    /// the primary and pair-completes the secondary: recorded.
     function test_ticket_afterBet_records() public {
+        bool found;
+        uint256 salt;
+        for (salt = 200; salt < 260; ++salt) {
+            uint256 snap = vm.snapshotState();
+            _advanceDay(salt);
+            _advanceDay(salt + 1000);
+            (uint8 t1, bool today) = _slot1Today();
+            if (today && t1 == QT_DEG_ETH) {
+                found = true;
+                break;
+            }
+            vm.revertToState(snap);
+        }
+        assertTrue(found, "a DEGENERETTE_ETH secondary rolled for some ordinary VRF word");
+        emit log_named_uint("salt producing DEGENERETTE_ETH day", salt);
+        (,,,, price) = game.purchaseInfo_g1027();
         address p = makeAddr("ticketPair");
         _bet(p);
         _ticket(p);
@@ -123,9 +143,9 @@ contract MintStreakPairCompletion is DeployProtocol {
         assertEq(s, 1);
     }
 
-    // ------------------------------------------------------------------ naturally rolled LOOTBOX day
+    // ------------------------------------------------------------------ the fixed LOOTBOX day
 
-    /// Answer the day-2 VRF request with ordinary words until the slot-1 roll is LOOTBOX; a
+    /// The second day's slot 1 is the fixed LOOTBOX (its request has no prior word); a
     /// two-small-box buy (no tickets) then completes MINT_ETH and the LOOTBOX secondary in one
     /// call, and the level streak records like the ticket-only control on the same day.
     function test_rolledLootboxDay_boxesOnly_records() public {

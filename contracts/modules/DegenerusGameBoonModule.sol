@@ -390,29 +390,29 @@ abstract contract DegenerusGameBoonModule is GameBoxInternals, GamePurchaseBoon,
     // The draw table, its weights and every delivery branch execute in Game storage.
     // The Box resolver draws each entry's boons internally from position-derived seeds.
 
-    /// @dev Assumed utilization of max boon value (50%)
-    uint16 private constant LOOTBOX_BOON_UTILIZATION_BPS = 5000;
-
     /// @dev Threshold used by deity-pass discount boon availability logic.
     uint32 private constant DEITY_PASS_MAX_TOTAL = 32;
 
     /// @dev Probability scale for granular boon rolls (ppm = 1e6).
     uint256 private constant BOON_PPM_SCALE = 1_000_000;
 
-    /// @dev Exact closed form of the weighted max-value table used to normalize boon frequency.
-    ///      The fixed-price families (lootbox, purchase, whale and deity-pass discounts, whale pass,
-    ///      ETH Degenerette) together contribute 1568 ETH of weight*value; the FLIP-priced
-    ///      families collapse to BOON_PRICE_WEIGHT = 4182 times the live ticket price (3270
-    ///      coinflip/decimator/FLIP-degenerette + 912 craps); lazy discounts collapse to
-    ///      6 times the ten-level lazy-pass value. Activity, quest-shield and WWXRP boons
-    ///      carry weight but contribute zero nominal value to this box-budget model.
+    /// @dev Closed form of the weight x full-use value table that normalizes boon frequency. Each
+    ///      boon is valued at its holder's most effective use: every cap, every window, at face.
+    ///      Fixed-price families sum to 820 ETH of weight x value: lootbox and purchase boosts on
+    ///      10 ETH (165 + 360), ETH Degenerette on a 10 ETH bet (132), deity-pass discounts at the
+    ///      24 ETH first-pass price (132), whale discounts at the 4 ETH whale price (22) and the
+    ///      whale-pass award at 4.5 ETH of tickets (9). Through pass level 4 the whale price is
+    ///      2.4 ETH, which BOON_EARLY_WHALE_CREDIT removes.
     ///
-    ///      The craps bankroll-payout family contributes the 912 of it: `200 x 3,000 + 40 x 6,000
-    ///      + 8 x 9,000 = 912,000`, over the 1,000-FLIP ticket unit. Its top tier pays 15% of a
-    ///      60,000-FLIP base — 9,000, not the 15,000 a 25% tier would — because the boon lifts
-    ///      EVERY window a ticket plays, and a whole-day ticket plays six.
-    uint256 private constant BOON_FIXED_WEIGHTED_MAX = 1568 ether;
-    uint256 private constant BOON_PRICE_WEIGHT = 4182;
+    ///      FLIP-priced families sum to BOON_PRICE_WEIGHT = 8742 per 1,000 FLIP, valued at one
+    ///      ticket of the open level: coinflip deposits on 100,000 FLIP (1600), decimator on a
+    ///      50,000 FLIP base (350), FLIP Degenerette on a 100,000 FLIP bet (1320) and craps on a
+    ///      60,000 FLIP base in each of the six windows a whole-day ticket plays (`(200 x 3,000 +
+    ///      40 x 6,000 + 8 x 9,000) x 6 = 5,472,000`). Lazy discounts are 6 times the lazy-pass
+    ///      price charged. Activity, quest-shield and WWXRP boons carry weight and zero value.
+    uint256 private constant BOON_FIXED_WEIGHTED_MAX = 820 ether;
+    uint256 private constant BOON_EARLY_WHALE_CREDIT = 8.8 ether;
+    uint256 private constant BOON_PRICE_WEIGHT = 8742;
     uint256 private constant BOON_LAZY_WEIGHT = 6;
 
     /// @dev Ten-level lazy-pass sums in 0.01-ETH units, packed one byte per start offset.
@@ -479,7 +479,8 @@ abstract contract DegenerusGameBoonModule is GameBoxInternals, GamePurchaseBoon,
 
     /// @notice Draw up to three additional boons for a committed Degenesis order.
     /// @dev Game-context module dispatch only. The raw order funds a 20% probability budget,
-    ///      capped at 1 ETH and normalized at launch level 1. Whole chances guarantee draws;
+    ///      capped at 1 ETH and divided by one boon's full-use value at launch level 1
+    ///      (`_boonAvgMaxValue(1)`, about 0.315 ETH). Whole chances guarantee draws;
     ///      the remainder gets one independent roll. Selected types include ignored/discarded
     ///      deliveries, packed in slot order into the low three bytes. Expiry starts today.
     function rollDegenesisBoons(uint32 id, uint256 amount, uint256 seed)
@@ -516,10 +517,7 @@ abstract contract DegenerusGameBoonModule is GameBoxInternals, GamePurchaseBoon,
 
         // Pool stats are constant across the entry — same player, same level — so the exact
         // closed form is evaluated once rather than walking the static value table per box.
-        uint256 avgMaxValue = _boonAvgMaxValue(currentLevel);
-        if (avgMaxValue == 0) return (0, 0);
-
-        expectedPerBoon = (avgMaxValue * LOOTBOX_BOON_UTILIZATION_BPS) / 10_000;
+        expectedPerBoon = _boonAvgMaxValue(currentLevel);
         if (expectedPerBoon == 0) return (0, 0);
         currentDay = _gameDay();
     }
@@ -540,12 +538,13 @@ abstract contract DegenerusGameBoonModule is GameBoxInternals, GamePurchaseBoon,
         if (totalChance == 0) return;
 
         for (uint256 i; i < boxCount; ) {
-            uint256 roll = uint32(EntropyLib.hash3(RngTags.BOX_BOON_LANE, seed, nonceBase + i) >> 120) %
-                BOON_PPM_SCALE;
-            if (roll < totalChance) {
+            // Bits 120..151 gate the hit at the box's chance; bits 152..183 pick the type, so the
+            // type never depends on the chance (open level, EV-scaled amount).
+            uint256 h = EntropyLib.hash3(RngTags.BOX_BOON_LANE, seed, nonceBase + i);
+            if (uint32(h >> 120) % BOON_PPM_SCALE < totalChance) {
                 _deliverBoon(
                     id,
-                    _boonFromRoll((roll * BOON_WEIGHT_TOTAL) / totalChance),
+                    _boonFromRoll(uint32(h >> 152) % BOON_WEIGHT_TOTAL),
                     currentDay,
                     originalAmount
                 );
@@ -557,9 +556,9 @@ abstract contract DegenerusGameBoonModule is GameBoxInternals, GamePurchaseBoon,
     }
 
     /// @dev Keep-or-discard delivery filter for a lootbox-drawn boon. The TYPE is already
-    ///      drawn (static table, the hit roll scaled by the box's chance, which reads the open
-    ///      level and the EV-scaled amount); live state here only decides whether it is
-    ///      delivered. A discard writes nothing — occupying the category slot with a dead
+    ///      drawn (static table, from the lane hash's own bits, independent of the box's
+    ///      chance); live state here only decides whether it is delivered. A discard writes
+    ///      nothing — occupying the category slot with a dead
     ///      boon would block a later useful one under upgrade-only semantics — and emits
     ///      `BoonDiscarded` so indexers keep the full draw history.
     ///
@@ -590,15 +589,18 @@ abstract contract DegenerusGameBoonModule is GameBoxInternals, GamePurchaseBoon,
         _applyBoon(id, boonType, 0, currentDay, originalAmount, false);
     }
 
-    /// @dev Exact weighted-average max value of the static boon table. This is algebraically
-    ///      identical to summing every family independently, but avoids dozens of repeated
-    ///      multiplications/divisions on every box entry.
+    /// @dev Weighted-average full-use value of one box boon, the box budget's divisor. Algebraically
+    ///      identical to summing every family independently. FLIP is valued at the open level's
+    ///      ticket price (1,000 FLIP buys one ticket); lazy discounts at the price
+    ///      `purchaseLazyPass` charges, a flat 0.24 ETH through level 2 and the ten-level sum from
+    ///      the open level after.
     function _boonAvgMaxValue(uint24 currentLevel) internal pure returns (uint256 avgMaxValue) {
-        uint256 priceWei = PriceLookupLib.priceForLevel(currentLevel - 1);
-        uint256 lazyPassValue = _lazyPassPriceForLevel(currentLevel + 1);
+        uint256 priceWei = PriceLookupLib.priceForLevel(currentLevel);
+        uint256 lazyPassValue = currentLevel <= 3 ? 0.24 ether : _lazyPassPriceForLevel(currentLevel);
         uint256 weightedMax = BOON_FIXED_WEIGHTED_MAX +
             BOON_PRICE_WEIGHT * priceWei +
             BOON_LAZY_WEIGHT * lazyPassValue;
+        if (currentLevel <= 4) weightedMax -= BOON_EARLY_WHALE_CREDIT;
         avgMaxValue = weightedMax / BOON_WEIGHT_TOTAL;
     }
 

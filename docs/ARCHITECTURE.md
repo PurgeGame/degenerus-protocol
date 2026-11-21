@@ -116,7 +116,8 @@ in [details](ARCHITECTURE-DETAILS.md#miner-bounty-admission-bounds-and-stage-eve
 A fresh daily request (`requestDailyRng_g8190`) runs only after the read session completed and the
 day's subscriber pass is done. Before calling the coordinator it prepares the request boundary
 (`prepareRequestBoundary`: Degenesis split and pricing, the turbo latch, early next-level ticket
-activation, and the daily RNG lock `rngLockedFlag`), swaps the ticket and foil write slots, seals
+activation, the daily RNG lock `rngLockedFlag`, and the day's quest roll and any level quest roll
+from the last applied word), swaps the ticket and foil write slots, seals
 hero wagers, freezes the prize pools into the pending buffer and seals the box/bet write buffer,
 then sets `dailyIdx` to the requested day. A mid-day request seals the box/bet write buffer the same
 way. For tickets it either activates the next level's future pool or swaps a nonempty, fully
@@ -156,12 +157,14 @@ requests apply no nudge.
 
 ### Retry and re-issue
 
-`retryRng` (Admin, once, after 20 hours unanswered) is transport-only: it spends the single retry
-and replaces the request ID. It runs no seal or buffer swap and does not move `rngRequestTime`, so
-the logical day, request kind, committed cohort and 14-day timeout origin are unchanged. A
-coordinator swap (`updateVrfCoordinatorAndSub`) re-issues an undelivered request the same way,
-spending the retry when under the daily lock, and leaves a delivered word in place. Neither path
-recommits a cohort; purchases made after the original seal stay in the next cohort.
+`retryRng` (Admin, once, 20 hours after the later of the request and its coordinator-swap
+re-issue) is transport-only: it spends the single retry and replaces the request ID. It runs no
+seal or buffer swap and does not move `rngRequestTime`, so the logical day, request kind,
+committed cohort and 14-day timeout origin are unchanged. A coordinator swap
+(`updateVrfCoordinatorAndSub`) re-issues an undelivered request the same way and leaves a
+delivered word in place. The re-issue re-arms the retry and stamps `vrfReissuedAt`, which only
+the retry reads, so the retry is due 20 hours after the swap. Neither path recommits a cohort;
+purchases made after the original seal stay in the next cohort.
 
 ### Settlement boundaries
 

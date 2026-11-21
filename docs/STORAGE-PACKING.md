@@ -320,6 +320,7 @@ harness declaring the production struct types, without changing production sourc
 | 26 | 0–255 | `deityBoonPacked` | `mapping(uint32 => uint64)` |
 | 27 | 0–255 | `degeneretteRecordBounty` | `mapping(uint256 => uint256)` |
 | 28 | 0–23 | `earlyTicketLevel` | `uint24` |
+| 28 | 24–71 | `vrfReissuedAt` | `uint48` |
 | 29 | 0–255 | `lootboxEvCapPacked` | `mapping(uint32 => uint256)` |
 | 30 | 0–255 | `decBattleEntries` | `mapping(uint256 => uint256)` |
 | 31 | 0–255 | `decBattleRounds` | `mapping(uint24 => struct DegenerusGameStorage.DecBattleRound)` |

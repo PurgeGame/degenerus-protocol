@@ -426,7 +426,7 @@ contract DeadVrfEndingTest is DeployProtocol {
         DeadlineSeeder(payable(address(game))).seed(5);
         _restore();
         // The synthetic 200-day setup also owes expired scheduled-day maintenance (one engine
-        // checkpoint per call) before the daily commitment, as in test_swapSpendsTheDailyRetry.
+        // checkpoint per call) before the daily commitment, as in test_swapDefersTheDailyRetry.
         for (uint256 i; i < 256 && !game.rngLocked(); ++i) game.mineRun(0);
         uint24 r = game.currentDayView_g542950();
         uint256 req = mockVRF.lastRequestId();
@@ -626,7 +626,7 @@ contract DeadVrfEndingTest is DeployProtocol {
             for (uint256 i; i < 200; ++i) {
                 if (game.currentLvl() == 2 && !game.jackpotPhase() && !game.rngLocked()) return;
                 assertFalse(game.gameOver(), "rescued level must not end");
-                _answer(fresh); // the swap re-sent the request and spent the retry: answer it first
+                _answer(fresh); // the swap re-sent the request: answer it first
                 game.mineRun(0);
                 uint256 id = fresh.lastRequestId();
                 if (id != 0) {
@@ -644,7 +644,7 @@ contract DeadVrfEndingTest is DeployProtocol {
     /// @dev Advance (answering every request on `vrf`) until the day seals or the game ends.
     function _runDay(MockVRFCoordinator vrf) private {
         // 1024, not 200: the synthetic 200-day setup owes one expired scheduled-day maintenance
-        // checkpoint per call before the day's request (as in test_swapSpendsTheDailyRetry).
+        // checkpoint per call before the day's request (as in test_swapDefersTheDailyRetry).
         for (uint256 i; i < 1024; ++i) {
             if (game.gameOver()) return;
             _answer(vrf); // a request already in flight must land before the advance can use it
@@ -730,10 +730,10 @@ contract DeadVrfEndingTest is DeployProtocol {
         assertEq(game.rngWordForDay(completed + 2), 0);
     }
 
-    /// @dev A coordinator swap re-sends a stalled daily request and spends the vault owner's
-    ///      retry: the owner cannot follow the swap with a retry that discards the new
+    /// @dev A coordinator swap re-sends a stalled daily request and restarts the vault owner's
+    ///      retry clock: the owner cannot follow the swap with a retry that discards the new
     ///      coordinator's first answer.
-    function test_swapSpendsTheDailyRetry() public {
+    function test_swapDefersTheDailyRetry() public {
         vm.etch(address(game), type(DeadlineSeeder).runtimeCode);
         DeadlineSeeder(payable(address(game))).seed(5);
         _restore();
@@ -748,8 +748,8 @@ contract DeadVrfEndingTest is DeployProtocol {
 
         vm.prank(ContractAddresses.CREATOR);
         vm.expectRevert(bytes4(keccak256("RngNotReady()")));
-        OwnerTargetCall.call(address(admin), abi.encodeCall(admin.retryGameRng, ()), 0); // the coordinator swap already spent the single retry
-        assertEq(fresh.lastRequestId(), 1, "no retry after the swap");
+        OwnerTargetCall.call(address(admin), abi.encodeCall(admin.retryGameRng, ()), 0); // not due until 20 hours after the swap
+        assertEq(fresh.lastRequestId(), 1, "no retry right after the swap");
 
         _runDay(fresh);
         assertFalse(game.rngLocked(), "the re-sent request's word completes the day");

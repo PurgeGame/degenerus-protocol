@@ -41,29 +41,32 @@ blocks. Proposals expire after seven days. See [DGVE owner approval](docs/OWNER_
 - Stake surplus Game ETH into stETH, keeping the player-claim ETH reserve and the VRF funding target
   in ETH; exchange supplied ETH for an equal amount of Game stETH through Admin, paying the
   explicitly approved recipient.
-- Retry an unanswered live RNG request once after 20 hours through Admin. This replaces the
-  transport request ID while preserving its logical day, kind, committed cohort and original
-  timeout. It cannot replace a word already accepted by the Game. This recovery power does not prove
-  that a privileged actor with advance knowledge of an undelivered VRF result cannot prefer a
-  replacement request. A coordinator swap that re-issues a daily request spends this retry; a swap
-  that re-issues a mid-day request does not, so an owner who has not yet used the retry can replace
-  the re-issued mid-day request once on the new coordinator.
+- Retry an unanswered live RNG request once through Admin, 20 hours after the later of the
+  request and its coordinator-swap re-issue. This replaces the transport request ID while
+  preserving its logical day, kind, committed cohort and original timeout. It cannot replace a
+  word already accepted by the Game. This recovery power does not prove that a privileged actor
+  with advance knowledge of an undelivered VRF result cannot prefer a replacement request. A
+  coordinator swap that re-issues a request gives it one fresh retry, usable 20 hours after the
+  swap, so a request the new coordinator answers within that time cannot be replaced; the swap
+  does not move the 14-day VRF-dead deadline.
 - Propose a VRF coordinator swap after 44 hours of stall. The community proposal path opens only
   after a seven-day stall and requires the proposer to hold at least 0.5% of sDGNRS voting supply;
   there is no post-proposal delay. Execution still needs the decaying vote threshold; recovery
   cancels applicable proposals. A vote counts the sDGNRS weight its voter held when it was cast and
-  keeps that weight if the voter burns afterwards. A proposal's denominator is the voting supply
-  at its creation plus all sDGNRS paid out of the reward pools or unwrapped by the Vault since,
+  keeps that weight if the voter burns afterwards. A proposal's denominator is the voting supply at
+  its creation plus all sDGNRS paid out of the reward pools or unwrapped by the Vault since,
   whoever received it and whether or not it was burned afterwards, so sDGNRS that reaches a holder
   after creation (pool rewards such as whale-pass purchases) votes against a denominator that
-  includes it; a burn never lowers the denominator. The Vault's DGNRS unwrap is refused while the
-  daily RNG lock is held or any VRF request, daily or mid-day, is unanswered or still being
-  consumed. It stays refused after a game over that issued a terminal request or left a request
-  unanswered. The
-  threshold is 50% of the denominator for the first 48 hours, then 40%, 30%, 20%, 10% and 5% after
-  each further 24 hours; approvals execute once they reach it and exceed rejections, and rejections
-  kill the proposal once they reach the same threshold and exceed approvals. Retry
-  retired-subscription cancellation with prescribed recovery destinations.
+  includes it; a burn never lowers the denominator. Pool sDGNRS paid to an address that does not
+  vote, the Vault included, raises it too, so such payouts after creation can leave a proposal
+  unable to reach either threshold until it expires or a recovery cancels it. The Vault's DGNRS
+  unwrap is refused while the daily RNG lock is held or any VRF request, daily or mid-day, is
+  unanswered or still being consumed. It stays refused after a game over that issued a terminal
+  request or left a request unanswered. The threshold is 50% of the denominator for the first 48
+  hours, then 40%, 30%, 20%, 10% and 5% after each further 24 hours; approvals execute once they
+  reach it and exceed rejections, and rejections kill the proposal once they reach the same
+  threshold and exceed approvals. Retry retired-subscription cancellation with prescribed recovery
+  destinations.
 - Manage permitted charity slots; after the final sweep and the sDGNRS year sweep, redeem any GNRUS
   holder's full balance to that holder at what its own burn would pay (`vaultRedeemFor`); burn or
   unwrap the Vault's DGNRS under its restrictions (the level-vested release is permissionless and

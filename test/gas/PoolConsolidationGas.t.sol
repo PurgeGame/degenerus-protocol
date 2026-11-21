@@ -267,7 +267,7 @@ abstract contract PoolConsolidationFixture is FreshWordLeg, GlamsterdamFrameProb
         );
         assertEq(_countTopic(logs, keccak256("YieldSurplusDistributed(uint256)")), 1, "surplus distributes");
         assertEq(_countTopic(logs, keccak256("GrowthRoundSealed(uint24,bool)")), 1, "growth round seals");
-        assertEq(_countTopic(logs, keccak256("LevelQuestRolled(uint24,uint24,uint8,uint256)")), 1, "level quest rolls");
+        assertEq(_countTopic(logs, keccak256("LevelQuestRolled(uint24,uint24,uint8,uint256)")), 0, "level quest rolled at the request");
         assertEq(_dailyLegLogs(logs), 0, "consolidation pays no award");
         assertLt(used, GasBounds.POOL_CONSOLIDATION, "consolidation exceeds its declared bound");
 
@@ -364,7 +364,9 @@ abstract contract PoolConsolidationFixture is FreshWordLeg, GlamsterdamFrameProb
         assertGe(whole.osakaExec, plainOsaka, "the reference run meters the whole consolidation");
         assertLe(whole.osakaExec, plainOsaka + 20_000, "the reference run meters the whole consolidation");
         assertGt(prefixOsaka, 50_000, "the paused run meters the work before the funding call");
-        assertLt(prefixOsaka + 100_000, whole.osakaExec, "the paused run stops metering at the funding call");
+        // A run that never paused differs from the whole frame by at most the stand-in's frames
+        // (20k, above); the post-funding work (yield split, consolidation rest, phase tail) is about 80k.
+        assertLt(prefixOsaka + 50_000, whole.osakaExec, "the paused run stops metering at the funding call");
 
         uint256 cut = _afterFundingCall(acc);
         assembly ("memory-safe") { mstore(acc, cut) }

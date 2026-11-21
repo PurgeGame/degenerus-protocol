@@ -4,7 +4,7 @@ pragma solidity 0.8.38;
 /// @dev Independent specification oracle: explicit launch table value and cumulative weights.
 ///      Production derives its normalization from the shared table instead.
 library DegenesisBoonReference {
-    uint256 internal constant EXPECTED = 282_051_820_728_291_316;
+    uint256 internal constant EXPECTED = 315_147_058_823_529_411;
     uint256 internal constant SCALE = 1_000_000;
 
     function chance(uint256 amount) internal pure returns (uint256 result) {

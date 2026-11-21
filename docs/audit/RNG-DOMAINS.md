@@ -304,7 +304,7 @@ word.
 | --- | --- | --- |
 | Queued box entry root | `H(BOX_ORDER, sessionWord, position)` | One 85-bit entry per purchase, three per storage word; `sessionWord` is the published word of the entry's buffer; `position` is the logical entry position (never the word index or lane), fixed by the append before the buffer's word is requested. The event tag is `1 << 46 \| position << 1 \| buffer`. The frozen activity score is a 12-bit code and is a payout input, never a seed input |
 | Ordinary box roll | `H(BOX_OPEN, entryRoot, nonce)` | Nonce is the box's 1-based position in its order; size excluded; the wallet ID is read from the entry and is not a hash input |
-| Ordinary box boon | `H(BOX_BOON, entryRoot)`, then `H(BOX_BOON_LANE, boonSeed, nonceBase + i)` | Box `n` draws at boon nonce `n - 1`; separate from reward rolls and craps scatter. Direct reward and AFKing boxes skip the `BOX_BOON` hop and draw at `H(BOX_BOON_LANE, boxSeed, 0)` |
+| Ordinary box boon | `H(BOX_BOON, entryRoot)`, then `H(BOX_BOON_LANE, boonSeed, nonceBase + i)` | Box `n` draws at boon nonce `n - 1`; separate from reward rolls and craps scatter. Direct reward and AFKing boxes skip the `BOX_BOON` hop and draw at `H(BOX_BOON_LANE, boxSeed, 0)`. Bits 120..151 gate the hit at the box's chance; bits 152..183 pick the type |
 | Box secondary draws | `BOX_WWXRP_SPIN`, `BOX_FLIP_SPIN`, `BOX_ETH_SPIN`, `BOX_PASS_SPIN`, `BOX_PASS_ROUND`, `BOX_ROUND` | Each `H(tag, boxSeed)`; stake only sizes the payout |
 | Direct reward box | `H(BOX_DIRECT, word)` | The caller supplies a bound word: `H(BET_BOX, betWord, betId)` for a Degenerette bet, `H(SPIN_RECIRC, spinSeed)` for an ETH-spin recirculation |
 | AFKing box | `H(BOX_AFKING, sessionWord, subscriberWalletId)` | Published session word at open; the stamp is recorded before fulfillment; amount excluded |
@@ -337,7 +337,8 @@ word.
 | BAF head awards | slot 1 `H(BAF_HEAD, word)` over the armed day's weighted depositors (Coinflip); slot 2 `H(BAF_HEAD_SIDE, word) & 1` picks third or fourth place | Frozen board and armed day; slot 0 is the top bettor |
 | BAF scatter rounds | near `H(BAF_NEAR_ROUND, word, round)`; far `H(BAF_FAR_PAIR, word, pair)`, then `H(BAF_FUTURE_ATTEMPT, entropy, attempt)` per sampled queue | Fixed bracket and round count |
 | BAF ticket award | `H(BAF_TICKET, word, winnerOrdinal)` | Previous awards cannot move this root |
-| Daily / level quests | `H(QUEST_DAILY, word)` / `H(QUEST_LEVEL, word)` | Global quests; forced types bypass the roll |
+| Daily quests | `H(QUEST_DAILY, word)` | Prior applied day word; [timing](#quest-roll-timing) |
+| Level quest | `H(QUEST_LEVEL, word)` | Prior applied day word; [timing](#quest-roll-timing) |
 | Pool skim / variance / keep / BAF gate | `H(POOL_SKIM, word)`; `H(POOL_VARIANCE_A, word)`, `H(POOL_VARIANCE_B, word)`; x00 keep `H(POOL_FUTURE_KEEP, word)`; `H(BAF_GATE, word) & 1` | Independent tags on the level-transition word |
 | sDGNRS century refill | `25 + H(CENTURY_REFILL, word) % 51` | No caller, amount, timestamp or pool balance |
 | Coinflip day | win `coinWord & 1`; reward `H(FLIP_REWARD, coinWord)` | The only consumers of the coin word ([Coin word and nudges](#coin-word-and-nudges)) |
@@ -347,6 +348,22 @@ word.
 | AFKing subscriber draw | `1 + H(SUBSCRIBER_DRAW, word) % (length - 1)` | The day's recorded word; position 0 (the Vault) is never drawn; a pick on a paused protocol seat or a run awaiting removal pays nobody |
 | WWXRP daily draw | `H(WWXRP_BIG \| WWXRP_SMALL \| WWXRP_BUCKET \| WWXRP_WINNER, word)` | `word = rngWordForDay(day + 1)`; independent tags for the gates, bucket and winner roll |
 | WWXRP century incinerator | `H(WWXRP_INCINERATOR, word) % total` | Weighted stake intervals |
+
+### Quest roll timing
+
+Each day's daily quests roll at its fresh daily request, and the level quest at the request that
+promotes the level. Both use the last applied daily word (`_recordedDailyWord(dailyIdx)`, the day
+before the request), not the request's own word. Forced slot-1 types skip the roll. Days 1 and 2
+have no prior word: the constructor seeds day 1 (slot 1 FOIL), and day 2's request gets entropy 0,
+which selects LOOTBOX. That word is already public, so anyone can compute the next quests before
+they go live. Outside an early turbo the level change is latched a request before it takes effect,
+so the word that seeds the new level's quests is not public when the next pool crosses its target;
+in an early turbo it is, so the timing of that level's quest and of one daily quest type can be
+known in advance. Quest types are selections, not payouts: rewards are fixed, and progress made
+before a roll is reset by its day or version. The other inputs (level, Decimator window, phase
+flags) are fixed by the request: written by it, or by the previous day's seal from the pool frozen
+at that day's request. A retry or coordinator re-issue does not rerun the request boundary, so it
+never rerolls a quest.
 
 ### Hashes outside the tag registry
 

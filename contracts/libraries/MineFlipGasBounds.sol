@@ -25,25 +25,28 @@ library MineFlipGasBounds {
     // Return and one caller credit; native fresh/spill credit transactions: 138.2k/153.6k
     // Glamsterdam, 49.8k/57.9k Osaka.
     uint256 internal constant ENGINE_RETURN = 200_000;
-    // Cold century word apply: 3.345M Glamsterdam with 23 new slots; 1.231M Osaka.
+    // Cold century word apply: 3.339M Glamsterdam with 23 new slots; 1.226M Osaka.
     uint256 internal constant DAILY_APPLY = 7_200_000;
     // Cold request/credit witness: 609.0k Glamsterdam. Selection reads the subscription balance
     // (a pending craps window waives it), so on every mineRun path the request reads nothing and
     // admits at its own 1M floor and reserve; retain forwarding and frame headroom.
     uint256 internal constant RNG_MIDDAY_REQUEST = 2_200_000;
-    // Native daily witnesses: 1.55M normal, 1.60M refill (EIP-170 profile, Amsterdam; Osaka
-    // 0.55M/0.59M). Refill admission: VRF_DAILY_REFILL_TAIL + 250k funding minimum + 45k value
-    // frame, 3.35M. Coordinator calls and the stETH read forward all gas above the tails; both
-    // reads admit at a 50k minimum.
+    // Native daily witnesses: 1.485M normal, 1.542M refill (EIP-170 profile, Glamsterdam; Osaka
+    // 0.515M/0.554M); a request ending the purchase phase, with both quest rolls and no GNRUS buy,
+    // 2.511M/2.566M (Osaka 0.934M/0.971M). Refill admission: VRF_DAILY_REFILL_TAIL + 250k funding
+    // minimum + 45k value frame, 3.35M. Coordinator calls and the stETH read forward all gas above
+    // the tails; both reads admit at a 50k minimum.
     // Redemption close is additional; post-fulfillment work has separate checkpoints.
     // GNRUS's purchase-phase-end step (one flip settlement walk and an ordinary FLIP ticket
     // purchase burning wallet FLIP, then claimable, then carry) rides only a request that can end
     // the purchase phase; the miner admission and the refill tail add it for exactly those requests.
-    // Worst measured (x99 with WWXRP entry, 35 days): 0.502M Osaka, 1.626M Glamsterdam total.
+    // Worst measured (x99 with WWXRP entry, 35 days): 0.512M Osaka, 1.636M Glamsterdam total.
     uint256 internal constant GNRUS_TICKET_PURCHASE = 2_125_000;
     uint256 internal constant RNG_DAILY_REQUEST = 4_400_000;
-    // Rest of a fresh daily request after its refill. Measured 1.546M (refill day, funding call
+    // Rest of a fresh daily request after its refill. Measured 1.542M (refill day, funding call
     // and request included); plus the Degenesis-pricing and redemption-close extras admitted on top.
+    // A phase-ending refill request with GNRUS's buy, Degenesis pricing and close: at most 4.073M
+    // of this plus GNRUS_TICKET_PURCHASE.
     uint256 internal constant VRF_DAILY_REFILL_TAIL = 1_800_000 + DEGENESIS_REQUEST_GAS + RNG_REDEMPTION_CLOSE;
     // Nonempty redemption close: 129.9k Glamsterdam. The close moves no ETH or stETH. No
     // historical coinflip walk here.
@@ -58,12 +61,12 @@ library MineFlipGasBounds {
     // unit is 1.753M Osaka.
     uint256 internal constant LEVEL_ONE_DRAW = 7_700_000;
     // Cold x00 consolidation (flip, incinerator search, seals and yield/keep roll): at most
-    // 1.215M Glamsterdam (x00 win with VRF funding, 8 new slots), 0.45M Osaka. Funding admission
+    // 1.187M Glamsterdam (x00 win with VRF funding, 8 new slots), 0.43M Osaka. Funding admission
     // at the call (work spent + VRF_LEVEL_FUND_TAIL + 250k minimum + 45k frame): at most 1.781M,
     // within this plus DAILY_PHASE_TAIL.
     uint256 internal constant POOL_CONSOLIDATION = 1_650_000;
     // Level entry after its VRF top-up: the yield split, the rest of the consolidation and the
-    // phase tail. At most 751.6k Glamsterdam (x00 win), with margin.
+    // phase tail. At most 723.7k Glamsterdam (x00 win), with margin.
     uint256 internal constant VRF_LEVEL_FUND_TAIL = 1_000_000;
     // 150k phase tail + bounded balance 60,794 and allocation/frame margin.
     uint256 internal constant DAILY_PHASE_TAIL = 250_000;

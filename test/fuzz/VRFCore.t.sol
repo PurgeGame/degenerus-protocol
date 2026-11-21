@@ -860,10 +860,10 @@ contract VRFCore is DeployProtocol {
         assertFalse(_readRetrySpent(), "Fresh daily request re-arms the retry");
     }
 
-    /// @notice A coordinator swap re-issues the stalled request and SPENDS the retry, so the
-    ///         vault owner cannot follow the swap with a retry that discards the new
-    ///         coordinator's first answer; the re-issued request's word completes the day.
-    function test_coordinatorSwapSpendsTheRetry() public {
+    /// @notice A coordinator swap that re-issues a stalled daily request leaves the retry unspent
+    ///         and restarts its clock: the retry is refused until 20 hours after the swap, then
+    ///         replaces the re-issued request without moving the request stamp.
+    function test_coordinatorSwapRestartsTheDailyRetryClock() public {
         // Day 1: complete normally
         _completeDay(0xDEAD0001);
 
@@ -873,23 +873,74 @@ contract VRFCore is DeployProtocol {
         uint48 requestTime = _readRngRequestTime();
         vm.warp(uint256(requestTime) + 1 hours);
         MockVRFCoordinator newVRF = _doCoordinatorSwap();
-        assertEq(_readRngRequestTime(), requestTime, "Swap keeps the stamp");
-        assertTrue(_readRetrySpent(), "Swap spends the retry");
+        uint256 swapAt = vm.getBlockTimestamp();
         uint256 swapReqId = _readVrfRequestId();
+        assertEq(_readRngRequestTime(), requestTime, "Swap keeps the stamp");
+        assertFalse(_readRetrySpent(), "Swap leaves the retry unspent");
 
-        // No retry after the swap, even 20h on
+        // Refused in the swap's block, at the request's own 20h mark and just before swap + 20h
+        vm.expectRevert(bytes4(keccak256("RngNotReady()")));
+        OwnerTargetCall.call(address(admin), abi.encodeCall(admin.retryGameRng, ()), 0);
         vm.warp(uint256(requestTime) + 20 hours + 1);
+        vm.expectRevert(bytes4(keccak256("RngNotReady()")));
+        OwnerTargetCall.call(address(admin), abi.encodeCall(admin.retryGameRng, ()), 0);
+        vm.warp(swapAt + 20 hours - 1);
         vm.expectRevert(bytes4(keccak256("RngNotReady()")));
         OwnerTargetCall.call(address(admin), abi.encodeCall(admin.retryGameRng, ()), 0);
         assertEq(_readVrfRequestId(), swapReqId, "the swap's request stands");
 
-        // Fulfill on the new coordinator and complete the day
-        newVRF.fulfillRandomWords(swapReqId, 0xC0FFEE02);
+        // Due 20h after the swap
+        vm.warp(swapAt + 20 hours);
+        OwnerTargetCall.call(address(admin), abi.encodeCall(admin.retryGameRng, ()), 0);
+        uint256 retryReqId = _readVrfRequestId();
+        assertTrue(retryReqId != swapReqId, "the retry replaces the re-issued request");
+        assertEq(retryReqId, uint64(newVRF.lastRequestId()), "the retry asks the new coordinator");
+        assertTrue(_readRetrySpent(), "the retry spends its allowance");
+        assertEq(_readRngRequestTime(), requestTime, "the retry keeps the stamp");
+        assertTrue(game.rngLocked(), "the retry keeps the daily mode");
+
+        // The replaced re-issue is ignored; the retried word completes the day
+        newVRF.fulfillRandomWords(swapReqId, 0xC0FFEE01);
+        assertEq(_readRngWordCurrent(), 0, "the replaced re-issue's word is ignored");
+        newVRF.fulfillRandomWords(retryReqId, 0xC0FFEE02);
         for (uint256 i = 0; i < 50; i++) {
             if (!game.rngLocked()) break;
             game.mineRun(0);
         }
-        assertFalse(game.rngLocked(), "Day completes on the swap's request");
+        assertFalse(game.rngLocked(), "Day completes on the retried request");
+    }
+
+    /// @notice The swap and the retry it allows leave the request's 14-day VRF-dead deadline at
+    ///         the original send: a word delivered on the new coordinator but never published
+    ///         still expires 14 days after the first request, not after the swap.
+    function test_coordinatorSwapRetryKeepsTheVrfDeadDeadline() public {
+        _completeDay(0xDEAD0001);
+        vm.warp(vm.getBlockTimestamp() + 1 days);
+        game.mineRun(0);
+        uint48 requestTime = _readRngRequestTime();
+        vm.warp(uint256(requestTime) + 1 hours);
+        MockVRFCoordinator newVRF = _doCoordinatorSwap();
+        uint256 swapAt = vm.getBlockTimestamp();
+
+        vm.warp(swapAt + 20 hours);
+        OwnerTargetCall.call(address(admin), abi.encodeCall(admin.retryGameRng, ()), 0);
+        assertEq(_readRngRequestTime(), requestTime, "the retry keeps the stamp");
+        // Delivered, then left unpublished: no mining call runs from here on.
+        newVRF.fulfillRandomWords(_readVrfRequestId(), 0xC0FFEE03);
+        assertEq(_readRngWordCurrent(), 0xC0FFEE03, "the retried word is delivered");
+
+        // Hold the no-completed-day deadman past the request's own deadline, so only `_vrfDead`
+        // (request stamp + 14 days) can end the game in this window.
+        bytes32 slot = bytes32(GameSlots.LAST_DAILY_COMPLETED_AT);
+        uint256 shift = 8 * GameSlots.LAST_DAILY_COMPLETED_AT_OFFSET;
+        uint256 word = uint256(vm.load(address(game), slot));
+        word = (word & ~(uint256(type(uint48).max) << shift)) | (swapAt << shift);
+        vm.store(address(game), slot, bytes32(word));
+
+        vm.warp(uint256(requestTime) + 14 days - 1);
+        assertFalse(game.livenessTriggered(), "the window still runs from the first request");
+        vm.warp(uint256(requestTime) + 14 days);
+        assertTrue(game.livenessTriggered(), "VRF dead 14 days after the first request, not the swap");
     }
 
     /// @notice After retry overwrites vrfRequestId, old fulfillment is silently discarded.
