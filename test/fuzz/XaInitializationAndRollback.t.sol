@@ -61,7 +61,7 @@ contract XaInitializationAndRollbackTest is DeployProtocol {
         assertGt(address(affiliate).code.length, 0);
         uint256 active=uint256(vm.load(address(quests),bytes32(QaTrace.QUESTS)));
         assertEq(uint8(active>>128),1);assertEq(uint8(active>>136),1);
-        assertEq(uint8(active>>24),1);assertEq(uint8(active>>88),7);
+        assertEq(uint8(active>>24),1);assertEq(uint8(active>>88),4); // genesis slot 1: FOIL
         (,uint32 vaultId,)=affiliate.affiliateCode(bytes32("VAULT"));
         (,uint32 sdgnrsId,)=affiliate.affiliateCode(bytes32("DGNRS"));
         assertEq(vaultId,1);assertEq(sdgnrsId,2);

@@ -107,6 +107,7 @@ contract FSMEmptyDependencies {
         ++charityPicks;
     }
     function rollDailyQuest(uint24, uint256, bool, bool, bool) external pure {}
+    function rollLevelQuest(uint256) external pure {}
 
     function processCoinflipPayouts(uint8, uint256, uint24 day) external {
         ++settlements;
