@@ -54,9 +54,10 @@ blocks. Proposals expire after seven days. See [DGVE owner approval](docs/OWNER_
   there is no post-proposal delay. Execution still needs the decaying vote threshold; recovery
   cancels applicable proposals. A vote counts the sDGNRS weight its voter held when it was cast and
   keeps that weight if the voter burns afterwards. A proposal's denominator is the voting supply at
-  its creation plus all sDGNRS paid out of the reward pools or unwrapped by the Vault since,
-  whoever received it and whether or not it was burned afterwards, so sDGNRS that reaches a holder
-  after creation (pool rewards such as whale-pass purchases) votes against a denominator that
+  its creation plus all sDGNRS that has left the reward pools since (paid out, or burned from them
+  by a self-win, the last Degenesis leftover or the game-over burn) or been unwrapped by the Vault
+  since, whoever received it and whether or not it was burned afterwards, so sDGNRS that reaches a
+  holder after creation (pool rewards such as whale-pass purchases) votes against a denominator that
   includes it; a burn never lowers the denominator. Pool sDGNRS paid to an address that does not
   vote, the Vault included, raises it too, so such payouts after creation can leave a proposal
   unable to reach either threshold until it expires or a recovery cancels it. The Vault's DGNRS

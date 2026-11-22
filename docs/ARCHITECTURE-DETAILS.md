@@ -549,11 +549,13 @@ held tokens would overflow uint256, only claimable prizes enter and held tokens 
 century. This runs before the header day and level advance. Draw prizes credit wallet ID 3 through
 Coinflip.
 
-At the final sweep, GNRUS receives its sink payout and then attempts to redeem all held sDGNRS
-and DGNRS. The hook stamps the final-sweep time, which both recovery paths require, and catches
-refused burns; `vaultRedeemFor` opens after sDGNRS's first year sweep, and `sweepResidualToVault`
-three years after it. GNRUS's sDGNRS is excluded from the community-vote supply denominator. Holder
-exits redeem the ETH/stETH backing available when they execute.
+At the final sweep, GNRUS receives its sink payout and then attempts to redeem all held sDGNRS and
+DGNRS. The hook stamps the final-sweep time, which both recovery paths require, and catches refused
+burns; `vaultRedeemFor` opens after sDGNRS's first year sweep, and `sweepResidualToVault` three
+years after it. GNRUS's sDGNRS is excluded from a proposal's creation snapshot and from the
+proposer's 0.5% stake check; sDGNRS paid or unwrapped to GNRUS after a proposal's creation enters
+that proposal's denominator, as any later issuance does. Holder exits redeem the ETH/stETH backing
+available when they execute.
 
 GNRUS's 2.125M is reserved only on a daily request that can end the purchase phase: the phase end
 is latched, or the early turbo can latch it (one of the phase's first two requests at a non-x9

@@ -272,21 +272,20 @@ Jackpot prize shapes (mechanics in [jackpot legs](docs/ARCHITECTURE-DETAILS.md#j
   under the pass rules, depend on continued play and are not a segregated ETH reserve or cash claim.
 - **Foil packs.** A pack costs ten ticket prices of the active ticket level, times 2^s on a Thanos
   level with shift s; each wallet may buy one per level, and 75% of the price goes to nextPrizePool
-  and 25% to futurePrizePool. A pack raises the buyer's quest streak to at least 12 and freezes
-  the buyer's activity score at purchase; the frozen score counts a quest streak of at least 12,
-  sets the pack's multiplier (2.06x at the lowest score, 6, rising to 6x), which widens its four
-  rarest colors, gold included, and is the score its reward spins use. Each day's board grades
-  each of the pack's four lines from 0 to 8;
-  grades 4 to 8 stake 16, 48, 280, 3,200 or 80,000 faces on reward spins, in ETH (40%, one face is
-  one ticket price at the pack's level, without the Thanos factor), FLIP (40%, 1,000 FLIP a face) or
-  WWXRP (20%, no value), and grade 8 adds a half whale pass. Three or more gold quadrants among the
-  sixteen pay 20,000, 80,000, 250,000, 750,000, 2,500,000 or 7,500,000 FLIP for 3, 4, 5, 6, 7 and 8
-  or more, plus 25,000 FLIP when exactly one line is all gold. A pack with two or more all-gold lines
-  instead takes the golden-ticket grand when it generates outside an ending: 25% of
-  futurePrizePool as claimable ETH, then the current, next and future pools plus the yield
-  accumulator less that ETH, 75% of it as half whale passes at 2.25 ETH and 25% as FLIP at the next
-  level's ticket price, in whole 100-FLIP units. Match and gold awards pay only when claimed
-  (`claimFoilMatch`, `claimGoldenTicket`) inside their two-day windows ([RNG
+  and 25% to futurePrizePool. A pack raises the buyer's quest streak to at least 12 and freezes the
+  buyer's activity score at purchase; the frozen score counts a quest streak of at least 12, sets
+  the pack's multiplier (2.07x at the lowest score, 7, rising to 6x), which widens its four rarest
+  colors, gold included, and is the score its reward spins use. Each day's board grades each of the
+  pack's four lines from 0 to 8; grades 4 to 8 stake 16, 48, 280, 3,200 or 80,000 faces on reward
+  spins, in ETH (40%, one face is one ticket price at the pack's level, without the Thanos factor),
+  FLIP (40%, 1,000 FLIP a face) or WWXRP (20%, no value), and grade 8 adds a half whale pass. Three
+  or more gold quadrants among the sixteen pay 20,000, 80,000, 250,000, 750,000, 2,500,000 or
+  7,500,000 FLIP for 3, 4, 5, 6, 7 and 8 or more, plus 25,000 FLIP when exactly one line is all
+  gold. A pack with two or more all-gold lines instead takes the golden-ticket grand when it
+  generates outside an ending: 25% of futurePrizePool as claimable ETH, then the current, next and
+  future pools plus the yield accumulator less that ETH, 75% of it as half whale passes at 2.25 ETH
+  and 25% as FLIP at the next level's ticket price, in whole 100-FLIP units. Match and gold awards
+  pay only when claimed (`claimFoilMatch`, `claimGoldenTicket`) inside their two-day windows ([RNG
   domains](docs/audit/RNG-DOMAINS.md#foil-packs)) and never once liveness triggers; the grand needs
   no claim.
 
