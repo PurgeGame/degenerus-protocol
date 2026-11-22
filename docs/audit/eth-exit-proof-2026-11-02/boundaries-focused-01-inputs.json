@@ -927,7 +927,7 @@
   "test/fuzz/handlers/CrapsFlowHandler.sol": "daedb97ed73ad8cb69ccc083397578c08d7f67317bc6173ae3277ea2c4fa3cbf",
   "test/fuzz/handlers/CrapsRngSealHandler.sol": "010ece7d6c14b39747899018af135f79d4fc889de538554aa462d8a7c3e5a63f",
   "test/fuzz/handlers/DegeneretteHandler.sol": "7d3ea01f835216a68b66fbfbeabb2a584ad86b5f2ea7b2717539dac46eba6f13",
-  "test/fuzz/handlers/DegenesisLivenessHandler.sol": "b89dcc07546a8796b377063fde3e01b2c8e6c85cc458b6b8a253e88fb4655622",
+  "test/fuzz/handlers/DegenesisLivenessHandler.sol": "e3cac6fbe2dbf489ec8e62e405a28dc7d87cb9c43b313032c6d7b560058bd074",
   "test/fuzz/handlers/DegenesisRngFreezeHandler.sol": "8df0ed9949c89abfcd2a546ce7739ada725bc52c831e85bc0cfab52b01e3b477",
   "test/fuzz/handlers/DegenesisSaleFlowHandler.sol": "3f2b618e73b48f80cca5824f1ac19769f80f7db00aa342b269c8652e332e91b5",
   "test/fuzz/handlers/DegenesisSolvencyHandler.sol": "b47067b011e5b649b7652e911f534c9a4cab35bf13cb01955a3cfe12832c6ac7",
