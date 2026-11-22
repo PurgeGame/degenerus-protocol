@@ -443,10 +443,17 @@ jobs:
           version: ${{ env.AUDIT_FOUNDRY_VERSION }}
       - run: npm ci
       - name: Install Aderyn
-        # crates.io still serves 0.1.9, which rejects the pinned Osaka EVM.
-        # Use the same supported release as the local audit campaign.
+        # Aderyn is retired upstream: its npm package and release binaries were withdrawn, and
+        # crates.io serves only 0.1.9, which rejects the pinned Osaka EVM. Build the last release
+        # (0.6.8, as in the local audit campaign) from its published source, pinned by checksum,
+        # outside the checkout so the scan below never sees it.
         run: |
-          npm install --global @cyfrin/aderyn@0.6.8
+          cd "$RUNNER_TEMP"
+          curl -fsSL -o aderyn-src.tar.gz https://github.com/Cyfrin/aderyn/releases/download/aderyn-v0.6.8/source.tar.gz
+          echo "2d4afdb52bae30f8488e5d9470a281d284c0b286455b61b474e6c2e7dafe343a  aderyn-src.tar.gz" | sha256sum -c -
+          tar -xzf aderyn-src.tar.gz
+          # From the source root, so rustup uses its pinned toolchain (rust-toolchain.toml).
+          cd aderyn-0.6.8 && cargo install --locked --path aderyn
           aderyn --version
       - name: Run Aderyn
         run: aderyn . -o aderyn-report.md
