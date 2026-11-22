@@ -29,6 +29,16 @@ import {
   wireIcons32,
 } from "./lib/deployHelpers.js";
 
+// Genesis initialization gas: the estimate plus 20%, kept at or below the EIP-7825 per-transaction cap
+// (2^24) when the estimate fits under it (today's rules), above it only where the network allows that
+// (Glamsterdam's state-gas reservoir).
+async function genesisGasLimit(game) {
+  const CAP = 16_777_216n;
+  const estimate = await game.initProtocolDeity.estimateGas();
+  const limit = (estimate * 12n) / 10n;
+  return estimate <= CAP && limit > CAP ? CAP : limit;
+}
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 async function main() {
@@ -154,7 +164,7 @@ async function main() {
 
     // Keep this transaction after all CREATEs so predicted addresses do not shift.
     const game = await hre.ethers.getContractAt("DegenerusGame", deployed.get("GAME"), deployer);
-    const genesisReceipt = await (await game.initProtocolDeity({ gasLimit: 16_777_216 })).wait();
+    const genesisReceipt = await (await game.initProtocolDeity({ gasLimit: await genesisGasLimit(game) })).wait();
     console.log(`Protocol deities initialized together (${genesisReceipt.gasUsed} gas).\n`);
 
     // 7b. Record the vault's constructor-deployed share tokens (DGVF/DGVE) so

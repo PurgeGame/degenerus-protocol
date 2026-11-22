@@ -69,6 +69,17 @@ contract DegenesisLivenessHandler is Test {
     uint256 internal constant COMPLETION_DEADLINE = 14 days;
     uint256 internal constant FORCE_FULFILL_AFTER = 9 days;
     uint256 internal constant LEVEL_ONE_SEED = 60 ether;
+    /// @dev Completion runs in chunks of 300 judged calls; 40 chunks is the 12,000-call bound.
+    uint256 internal constant FINISH_CHUNKS = 40;
+    uint256 internal constant FINISH_CHUNK_CALLS = 300;
+    /// @dev Extra chunks, granted only while the ticket drain is next and moved during the chunk.
+    ///      One ETH box spin can recirculate a box worth more than a hundred times the box that
+    ///      rolled it, queuing tens of millions of entries for one wallet: a 463.69 ETH box's spin
+    ///      recirculated 69,264 ETH into 29.8M level-1 entries, about 18,000 calls at this gas
+    ///      mix. Each extra chunk also needs gas for 300 calls at MAX_GAS, so the walk stays
+    ///      inside the profile's gas limit.
+    uint256 internal constant FINISH_TICKET_CHUNKS = 80;
+    uint256 internal constant FINISH_CHUNK_GAS = FINISH_CHUNK_CALLS * MAX_GAS + 1_000_000_000;
 
     bytes4 internal constant E_NO_WORK = bytes4(keccak256("NoWork()"));
     bytes4 internal constant E_RNG_NOT_READY = bytes4(keccak256("RngNotReady()"));
@@ -133,6 +144,7 @@ contract DegenesisLivenessHandler is Test {
     uint24 public finishLevel;
     uint256 public finishDays;
     uint256 public finishDrainCapHits;
+    uint256 public finishTicketChunks; // extra chunks a moving ticket drain earned
     /// @dev Diagnostics: the slot-0 word and wall day when liveness first fired during finish.
     uint256 public finishLivenessSlot0;
     uint24 public finishLivenessDay;
@@ -437,12 +449,15 @@ contract DegenesisLivenessHandler is Test {
     ///         every cohort is closed and the game stands at level 1 or beyond. Every call is
     ///         judged as in actMine. The 40 chunks retain the 12,000-call completion bound;
     ///         exhausting one chunk is not permission to advance the clock over ready work.
+    ///         A chunk that ends with the ticket drain still next, after moving it, spends one
+    ///         of FINISH_TICKET_CHUNKS instead; a drain that stops moving spends the bound.
     function finish(uint256 seed) external {
         finishRan = true;
         _where = "finish";
         _observeDeadline();
         finishStartedHealthy = deadlineObservedAt == 0;
-        for (uint256 d; d < 40; ++d) {
+        uint256 ticketChunks;
+        for (uint256 d; d < FINISH_CHUNKS + ticketChunks; ++d) {
             _observeDeadline();
             if (ghost_unjustifiedTerminal) return;
             if (deadlineObservedAt != 0) {
@@ -457,7 +472,8 @@ contract DegenesisLivenessHandler is Test {
             }
             if (game.gameOver()) break;
             _fulfillPending();
-            bool drained = _runToIdle(uint256(keccak256(abi.encode(seed, d))), 300);
+            bytes32 mark = _ticketDrainMark();
+            bool drained = _runToIdle(uint256(keccak256(abi.encode(seed, d))), FINISH_CHUNK_CALLS);
             _observe();
             if (ghost_unjustifiedTerminal) return;
             if (deadlineObservedAt != 0) {
@@ -474,6 +490,11 @@ contract DegenesisLivenessHandler is Test {
             }
             if (!drained) {
                 ++finishDrainCapHits;
+                if (ticketChunks < FINISH_TICKET_CHUNKS && game.nextMinerAction() == A_TICKETS
+                    && _ticketDrainMark() != mark && gasleft() > FINISH_CHUNK_GAS) {
+                    ++ticketChunks;
+                    ++finishTicketChunks;
+                }
                 continue;
             }
             if (game.currentLvl() == 0) _seedNextPool(LEVEL_ONE_SEED);
@@ -767,6 +788,14 @@ contract DegenesisLivenessHandler is Test {
     function _nextDayStart() internal view returns (uint256) {
         uint256 ts = block.timestamp;
         return ts - ((ts - DAY_OFFSET) % 1 days) + 1 days;
+    }
+
+    /// @dev The ticket drain position: cursor, level, round and solo offset, the seat list and
+    ///      the foil cursor.
+    function _ticketDrainMark() internal view returns (bytes32) {
+        return keccak256(abi.encode(vm.load(address(game), bytes32(GameSlots.TICKET_CURSOR)),
+            vm.load(address(game), bytes32(GameSlots.TICKET_SEATS)),
+            vm.load(address(game), bytes32(GameSlots.FOIL_CURSOR))));
     }
 
     function _degenesisClosed() internal view returns (uint8) {
