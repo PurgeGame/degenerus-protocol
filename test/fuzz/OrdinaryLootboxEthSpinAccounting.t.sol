@@ -19,7 +19,7 @@ import {DegeneretteReference as Ref} from "../helpers/DegeneretteReference.sol";
 /// (the box resolver's currentLevel and denomination are level + 1 == 1).
 ///
 /// The second purchase changes the live future pool before settlement. Frozen score
-/// one is below the bonus-EV threshold, so competition for the shared bonus-EV
+/// two (the purchase completes the fixed day-2 LOOTBOX quest) is below the bonus-EV threshold, so competition for the shared bonus-EV
 /// allowance, other child reward branches, boon formulas and frozen pools are NOT
 /// established here. This is an accounting carrier, not a distribution/gas proof.
 contract OrdinaryLootboxEthSpinAccountingTest is DeployProtocol {
@@ -193,8 +193,8 @@ contract OrdinaryLootboxEthSpinAccountingTest is DeployProtocol {
         uint256 root = uint256(keccak256(abi.encode(QUEUED_ORDER_DOMAIN, word_, pos)));
         uint256 seed = uint256(keccak256(abi.encode(uint256(19), root, uint256(1))));
         if (uint16(seed >> 40) % 20 != 19) return (e, false);
-        // Frozen score 1 gives 90.16% box EV; 10% is reserved for the boon draw.
-        uint256 budget = 0.811_44 ether * 19_678 / 10_000;
+        // Frozen score 2 gives 90.33% box EV; 10% is reserved for the boon draw.
+        uint256 budget = 0.812_97 ether * 19_678 / 10_000;
         budget = budget * (_target(seed) >= 6 ? 15_000 : 8750) / 10_000;
         e.stake = budget * _variance(seed) / 10_000;
         e.spinSeed = _hash(17, seed);
@@ -206,10 +206,10 @@ contract OrdinaryLootboxEthSpinAccountingTest is DeployProtocol {
         (uint256 score, uint256 wilds) = Ref.score(playerTraits, resultTraits);
         if (score < 6) return (e, false);
         e.packedSpin = uint256(playerTraits) | (uint256(resultTraits) << 32) | (score << 64) | (uint256(1) << 216);
-        // Ordinary score-one ROI is 9002 bps; ETH surplus is added per score.
+        // Ordinary score-two ROI is 9005 bps; ETH surplus is added per score.
         uint256 base = [uint256(10_000), 62_500, 1_817_328, 23_000_000][score - 6];
         uint256 add = [uint256(240), 4600, 105_000, 22_408_400][score - 6];
-        e.gross = e.stake * (base * 9002 + add * 10_000) * (4 + wilds) / 4_000_000;
+        e.gross = e.stake * (base * 9005 + add * 10_000) * (4 + wilds) / 4_000_000;
         if (e.gross <= e.stake * 10 || e.gross / 4 <= future / 10) return (e, false);
         e.cash = future / 10;
         e.recirculated = e.gross - e.cash;
@@ -217,9 +217,9 @@ contract OrdinaryLootboxEthSpinAccountingTest is DeployProtocol {
         uint256 path = uint16(childSeed >> 40) % 20;
         if (path < 8 || path >= 11) return (e, false);
         e.childTarget = _target(childSeed);
-        e.childAmount = e.recirculated * 9016 / 10_000;
-        uint256 haircut = e.childAmount / 10;
-        if (haircut > 1 ether) haircut = 1 ether;
+        e.childAmount = e.recirculated * 9033 / 10_000;
+        uint256 haircut = e.childAmount / 10; // the child's boon budget, capped at 0.315 ETH
+        if (haircut > 0.315 ether) haircut = 0.315 ether;
         uint256 tier = uint24(childSeed >> 56) % 1000;
         uint256 ppm = tier < 497 ? 10 : tier < 864 ? 390 : tier < 995 ? 800 : 8000;
         e.childDgnrs = inventory * ppm * (e.childAmount - haircut) / (1_000_000 * 1 ether);
@@ -360,8 +360,8 @@ contract OrdinaryLootboxEthSpinAccountingTest is DeployProtocol {
         position = RecyclingState.boxCount(address(game), index);
         _buy(1 ether);
         uint32 id = game.walletIdOf_g3120(PLAYER);
-        uint256 committed = uint256(id) | (uint256(1000) << 32) | (uint256(1) << 53) | (uint256(1) << 77);
-        assertEq(_entry(index, position), committed, "real purchase committed score one, one unboosted 1 ETH box");
+        uint256 committed = uint256(id) | (uint256(1000) << 32) | (uint256(2) << 53) | (uint256(1) << 77);
+        assertEq(_entry(index, position), committed, "real purchase committed score two, one unboosted 1 ETH box");
         // The purchase's pending ETH clears the threshold: the engine's mid-day request.
         game.mineRun(0);
         uint256 request = mockVRF.lastRequestId();

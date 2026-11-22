@@ -7,6 +7,8 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {BafViews} from "../helpers/BafViews.sol";
 import {GameSlots} from "../helpers/GameSlots.sol";
+import {EntropyLib} from "../../contracts/libraries/EntropyLib.sol";
+import {RngTags} from "../../contracts/libraries/RngTags.sol";
 
 /// @title BafConsolationClaimTest -- Skipped-BAF WWXRP consolation claims.
 ///
@@ -237,9 +239,9 @@ contract BafConsolationClaimTest is DeployProtocol {
         assertEq(wwxrp.claimable(game.walletIdOf_g3120(alice)), 10, "bracket 20 minted on top");
     }
 
-    // ==================== Driven e2e (forced-even VRF words) ====================
+    // ==================== Driven e2e (VRF words whose BAF gate loses) ====================
 
-    /// @notice Drive the real game past level 10 with every VRF word forced even,
+    /// @notice Drive the real game past level 10 with every VRF word chosen so its BAF gate loses,
     ///         so the level-10 BAF skips via mineFlip, then claim consolation.
     function testDrivenSkipThenClaim() public {
         address[5] memory players;
@@ -285,7 +287,7 @@ contract BafConsolationClaimTest is DeployProtocol {
         assertTrue(injected, "BAF scores were injected");
         assertGt(game.currentLvl(), 10, "game advanced past level 10");
 
-        // Every word was even => the level-10 BAF skipped through mineFlip.
+        // Every word's BAF gate lost => the level-10 BAF skipped through mineFlip.
         for (uint256 i = 0; i < players.length; i++) {
             uint256 score = (1000 + i * 500) * 1;
             assertEq(
@@ -348,7 +350,11 @@ contract BafConsolationClaimTest is DeployProtocol {
         uint256 randomWord = uint256(
             keccak256(abi.encode("baf_skip_word", block.timestamp, game.currentLvl(), reqId))
         ) & ~uint256(1);
-        if (randomWord == 0) randomWord = 2;
+        // The BAF gate is H(BAF_GATE, word) & 1, not the raw parity: re-draw until it loses, so
+        // every level-transition word skips its BAF. Raw words stay even, as before.
+        while (randomWord == 0 || (EntropyLib.hash2(RngTags.BAF_GATE, randomWord) & 1) == 1) {
+            randomWord = uint256(keccak256(abi.encode(randomWord))) & ~uint256(1);
+        }
         try mockVRF.fulfillRandomWords(reqId, randomWord) {} catch {}
     }
 }

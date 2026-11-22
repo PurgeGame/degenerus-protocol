@@ -70,9 +70,9 @@ contract JackpotCheckpointsTest is Test {
     uint24 private constant LVL = 110;
     uint256 private constant WORD = 0xAC4DE45EDBEEF;
     uint256 private constant POOL = 1000 ether + 997;
-    // One eight-winner ticket group: 8 * (4,200 draw + 350,000 award) plus the 180,000 jackpot tail
+    // One eight-winner ticket group: 8 * (4,200 draw + 425,000 award) plus the 180,000 jackpot tail
     // and the 2,000 engine margin. Independent assertion of the protocol limit.
-    uint256 private constant EXPECTED_TICKET_GROUP_ADMISSION = 8 * (4_200 + 350_000) + 180_000 + 2_000;
+    uint256 private constant EXPECTED_TICKET_GROUP_ADMISSION = 8 * (4_200 + 425_000) + 180_000 + 2_000;
     // Admits setup, plan and one group (the child call reserves another 180,000 tail and the call
     // spends its setup first), never a second group after the first group's actual spend.
     uint256 private constant ONE_GROUP_ALLOWANCE = EXPECTED_TICKET_GROUP_ADMISSION + 400_000;

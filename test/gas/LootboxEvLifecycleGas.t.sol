@@ -141,7 +141,9 @@ contract LootboxEvLifecycleGasTest is DeployProtocol {
         if (label == keccak256("manual_with_afk")) return (516573, 1634213, 12);
         if (label == keccak256("100_boxes")) return (1662707, 3651507, 20);
         if (label == keccak256("nested_eth_spin")) return (552460, 1758520, 13);
-        if (label == keccak256("pass_grant")) return (353926, 1022866, 7);
+        // pass_grant: the box boon type is drawn from its own hash slice; this seed now draws a boon
+        // stored in an existing slot (type 5, was 13), so the lifecycle writes 6 new slots, not 7.
+        if (label == keccak256("pass_grant")) return (353926, 1022866, 6);
         if (label == keccak256("same_wallet")) return (1043863, 2612763, 15);
         if (label == keccak256("taper")) return (450650, 1385050, 10);
         revert("missing lifecycle baseline");
