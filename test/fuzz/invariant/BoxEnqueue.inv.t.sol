@@ -5,6 +5,7 @@ import {ChainCallTally, ChainStallProbe} from "../helpers/ChainCallJudge.sol";
 import {StdInvariant} from "forge-std/StdInvariant.sol";
 import {DeployProtocol} from "../helpers/DeployProtocol.sol";
 import {BoxCreationHandler} from "../handlers/BoxCreationHandler.sol";
+import {RunFloors} from "../helpers/RunFloors.sol";
 
 /// @title BoxEnqueue — canonical always-on box-queue invariant.
 ///
@@ -86,16 +87,17 @@ contract BoxEnqueue is DeployProtocol {
     function afterInvariant() public {
         ChainCallTally.tally("BoxEnqueue", handler);
         ChainStallProbe.check("BoxEnqueue", address(game), mockVRF);
-        assertGe(
-            handler.pathsExercised(),
-            2,
+        // Progress floors are judged over the campaign (`RunFloors`).
+        RunFloors.check(
+            "paths",
+            handler.pathsExercised() >= 2,
             "NON-VACUITY: boxes must be created across >= 2 distinct paths (else the queue invariants are vacuous)"
         );
-        assertGt(handler.totalBoxesCreated(), 0, "NON-VACUITY: the campaign must create > 0 boxes");
+        RunFloors.check("anyBox", handler.totalBoxesCreated() > 0, "NON-VACUITY: the campaign must create > 0 boxes");
         // The FIFO property only bites when the engine settles queued entries under observation. Measured
         // minima over 771 default-profile runs: 50 observed resolutions and 52 boxes per run.
-        assertGe(handler.resolutionsObserved(), 10, "NON-VACUITY: the engine settled (almost) no queued entry");
-        assertGe(handler.totalBoxesCreated(), 10, "NON-VACUITY: the campaign created (almost) no boxes");
+        RunFloors.check("resolutions", handler.resolutionsObserved() >= 10, "NON-VACUITY: the engine settled (almost) no queued entry");
+        RunFloors.check("boxes", handler.totalBoxesCreated() >= 10, "NON-VACUITY: the campaign created (almost) no boxes");
         // Every creation path must append at least once over the process (unique BE_ prefix); lazy passes
         // can be absent from a single run (108 of 771 runs had none).
         uint256 runs = _acc("BE_RUNS", 1);

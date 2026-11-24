@@ -10,6 +10,7 @@ import {ContractAddresses} from "../../../contracts/ContractAddresses.sol";
 import {MintPaymentKind} from "../../../contracts/interfaces/IDegenerusGame.sol";
 import {PriceLookupLib} from "../../../contracts/libraries/PriceLookupLib.sol";
 import {GameSlots} from "../../helpers/GameSlots.sol";
+import {RunFloors} from "../helpers/RunFloors.sol";
 
 /// @title V61SolvencyAfpay — solvency proof: the claimablePool identity holds across the afking spend paths.
 ///
@@ -190,20 +191,20 @@ contract V61SolvencyAfpay is DeployProtocol {
         uint256 widenedSuccesses = solvencyHandler.ghost_passBuys() +
             solvencyHandler.ghost_boxBuys() +
             solvencyHandler.ghost_claims();
-        assertGt(
-            widenedSuccesses,
-            0,
+        RunFloors.check(
+            "widened",
+            widenedSuccesses > 0,
             "NON-VACUITY: SolvencyActionHandler pass/box/claim surfaces must succeed > 0 times (else the widened identity is vacuous)"
         );
-        // Each leg separately. Measured over 1,028 default-profile runs: at least 5 pass buys, 4 box
-        // buys and a non-zero afking deposit per run; afking draws, smites and foil buys can be absent from
-        // one run (334, 49, 31 runs had none); AFKing stETH pulls need a day change, so only the day-warping
-        // variant requires them; a paying claimWinnings is rare (22 runs:
+        // Each leg separately, judged over the campaign (`RunFloors`). Measured over 1,028 default-profile
+        // runs: at least 5 pass buys, 4 box buys and a non-zero afking deposit per run; afking draws, smites
+        // and foil buys can be absent from one run (334, 49, 31 runs had none); AFKing stETH pulls need a day
+        // change, so only the day-warping variant requires them; a paying claimWinnings is rare (22 runs:
         // actors almost never hold claimable winnings at level 0), so it is required only once 512 runs have
         // accumulated (unique V61_ prefix).
-        assertGe(solvencyHandler.ghost_passBuys(), 2, "NON-VACUITY: pass buys (almost) never succeeded");
-        assertGe(solvencyHandler.ghost_boxBuys(), 2, "NON-VACUITY: box buys (almost) never succeeded");
-        assertGt(solvencyHandler.ghost_afkingDeposited(), 0, "NON-VACUITY: no afking deposit (solvency handler)");
+        RunFloors.check("passBuys", solvencyHandler.ghost_passBuys() >= 2, "NON-VACUITY: pass buys (almost) never succeeded");
+        RunFloors.check("boxBuys", solvencyHandler.ghost_boxBuys() >= 2, "NON-VACUITY: box buys (almost) never succeeded");
+        RunFloors.check("afking", solvencyHandler.ghost_afkingDeposited() > 0, "NON-VACUITY: no afking deposit (solvency handler)");
         uint256 runs = _acc("V61_RUNS", 1);
         _degenesisNonVacuity();
         uint256 deposited = _acc("V61_afkingDeposited", handler.ghost_afkingDeposited());

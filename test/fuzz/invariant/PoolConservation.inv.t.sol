@@ -5,6 +5,7 @@ import {ChainCallTally, ChainStallProbe} from "../helpers/ChainCallJudge.sol";
 import {DeployProtocol} from "../helpers/DeployProtocol.sol";
 import {PoolFlowHandler} from "../handlers/PoolFlowHandler.sol";
 import {GameSlots} from "../../helpers/GameSlots.sol";
+import {RunFloors} from "../helpers/RunFloors.sol";
 
 /// @title PoolConservation — canonical always-on conservation invariant.
 ///
@@ -150,15 +151,15 @@ contract PoolConservation is DeployProtocol {
     function afterInvariant() public {
         ChainCallTally.tally("PoolConservation", handler);
         ChainStallProbe.check("PoolConservation", address(game), mockVRF);
-        assertGt(
-            handler.ghost_advances(),
-            0,
+        // Progress floors are judged over the campaign (`RunFloors`). Measured minima over 771 default-profile
+        // runs: 91 successful mineFlips and 32 successful buys per run; a paying claim in 49% of runs.
+        RunFloors.check(
+            "anyAdvance",
+            handler.ghost_advances() > 0,
             "NON-VACUITY: mineFlip must succeed > 0 times (else no pool-to-pool transfer ran and conservation is vacuous)"
         );
-        // Measured minima over 771 default-profile runs: 91 successful mineFlips and 32 successful buys per
-        // run; a paying claim in 49% of runs.
-        assertGe(handler.ghost_advances(), 4, "NON-VACUITY: mineFlip made (almost) no progress");
-        assertGe(handler.success_buy(), 10, "NON-VACUITY: buys (almost) never succeeded");
+        RunFloors.check("advances", handler.ghost_advances() >= 4, "NON-VACUITY: mineFlip made (almost) no progress");
+        RunFloors.check("buys", handler.success_buy() >= 10, "NON-VACUITY: buys (almost) never succeeded");
         // driveLevelUp makes level transitions (next->current consolidation, level jackpots) part of the
         // campaign; transitions and paying claims are accumulated over the process (unique PC_ prefix).
         uint256 runs = _acc("PC_RUNS", 1);

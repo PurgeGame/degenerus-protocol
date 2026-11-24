@@ -5,6 +5,7 @@ import {ChainCallTally, ChainStallProbe} from "../helpers/ChainCallJudge.sol";
 import {DeployProtocol} from "../helpers/DeployProtocol.sol";
 import {VRFHandler} from "../helpers/VRFHandler.sol";
 import {TicketTrackingHandler} from "../handlers/TicketTrackingHandler.sol";
+import {RunFloors} from "../helpers/RunFloors.sol";
 
 /// @title TicketQueueInvariant -- Proves ticket queue ordering holds
 /// @notice The _queueEntries function only pushes a player to ticketQueue[_ticketQueueStorageKey(level)]
@@ -84,8 +85,8 @@ contract TicketQueueInvariant is DeployProtocol {
     function afterInvariant() public {
         ChainCallTally.tally("TicketQueue", ticketHandler);
         ChainStallProbe.check("TicketQueue", address(game), mockVRF);
-        assertGe(ticketHandler.ghost_advances(), 1, "vacuous: mineFlip never succeeded in this run");
-        assertGe(vrfHandler.ghost_vrfFulfillments(), 1, "vacuous: no VRF word was fulfilled in this run");
+        RunFloors.check("advances", ticketHandler.ghost_advances() >= 1, "vacuous: mineFlip never succeeded");
+        RunFloors.check("vrf", vrfHandler.ghost_vrfFulfillments() >= 1, "vacuous: no VRF word was fulfilled");
         uint256 runs = _acc("TQ_RUNS", 1);
         uint256 purchases = _acc("TQ_purchases", ticketHandler.ghost_purchases());
         uint256 entries = _acc("TQ_entries", ticketHandler.ghost_totalEntries());

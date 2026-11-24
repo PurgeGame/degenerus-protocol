@@ -4,6 +4,7 @@ pragma solidity 0.8.38;
 import {ChainCallTally, ChainStallProbe} from "../helpers/ChainCallJudge.sol";
 import {DeployProtocol} from "../helpers/DeployProtocol.sol";
 import {CompositionHandler} from "../handlers/CompositionHandler.sol";
+import {RunFloors} from "../helpers/RunFloors.sol";
 
 /// @title CompositionInvariant -- Proves cross-module composition safety
 /// @notice Tests that no module interaction sequence corrupts shared state.
@@ -68,16 +69,16 @@ contract CompositionInvariant is DeployProtocol {
         );
     }
 
-    /// @notice Non-vacuity: every run must have actually driven the protocol, not just reverted through it.
+    /// @notice Non-vacuity: the campaign must have actually driven the protocol, not just reverted through it.
     /// @dev Measured minima over 4 x 256 default-depth runs (seed 0xdeadbeef): 88 successful purchases,
     ///      3 whale-pass purchases, 26 successful mineFlips, 6 VRF fulfillments (max level reached was 0 in
     ///      every run: the 8 x 100 ETH actors never fill the level-0 target, so no level floor is asserted).
     ///      Thresholds sit well below those minima: purchases >= 20, mineFlips >= 5, VRF >= 1, whale >= 1.
     ///      A run that ends in game over (at depth 256 a sequence can warp past the VRF deadman or the
     ///      completion stall) latches early: every later purchase, whale buy and mineFlip correctly fails,
-    ///      so the floors apply to runs still live at the end. Runs meeting every floor are counted over
-    ///      the process (vm.setEnv, suite-unique prefix), and once MIN_RUNS runs have finished at least
-    ///      one must have.
+    ///      so the floors apply to runs still live at the end, and each is judged over the campaign
+    ///      (`RunFloors`). Runs meeting every floor are counted over the process (vm.setEnv, suite-unique
+    ///      prefix), and once MIN_RUNS runs have finished at least one must have.
     uint256 private constant MIN_RUNS = 16;
 
     function _vacuityPrefix() internal pure virtual returns (string memory) {
@@ -97,12 +98,11 @@ contract CompositionInvariant is DeployProtocol {
         uint256 whales = compositionHandler.ghost_whalePurchases();
         uint256 words = compositionHandler.ghost_vrfFulfillments();
         uint256 flips = compositionHandler.ghost_mineFlips();
-        if (!game.gameOver()) {
-            assertGe(purchases, 20, "vacuous: purchases did not succeed");
-            assertGe(whales, 1, "vacuous: no whale pass purchase succeeded");
-            assertGe(words, 1, "vacuous: no VRF word was fulfilled");
-            assertGe(flips, 5, "vacuous: mineFlip did not make progress");
-        }
+        bool live = !game.gameOver();
+        RunFloors.checkIf("purchases", live, purchases >= 20, "vacuous: purchases did not succeed");
+        RunFloors.checkIf("whales", live, whales >= 1, "vacuous: no whale pass purchase succeeded");
+        RunFloors.checkIf("words", live, words >= 1, "vacuous: no VRF word was fulfilled");
+        RunFloors.checkIf("flips", live, flips >= 5, "vacuous: mineFlip did not make progress");
         bool full = purchases >= 20 && whales >= 1 && words >= 1 && flips >= 5;
         uint256 runs = _acc("RUNS", 1);
         uint256 fullRuns = _acc("FULL", full ? 1 : 0);

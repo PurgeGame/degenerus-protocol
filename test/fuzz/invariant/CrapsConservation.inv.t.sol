@@ -6,6 +6,7 @@ import {CrapsPins} from "../../craps/CrapsPins.sol";
 import {CrapsBattle} from "../../../contracts/CrapsBattle.sol";
 import {CrapsLensReader} from "../../../contracts/CrapsLens.sol";
 import {CrapsFlowHandler} from "../handlers/CrapsFlowHandler.sol";
+import {RunFloors} from "../helpers/RunFloors.sol";
 
 contract InvHarness is CrapsViews {}
 
@@ -39,8 +40,9 @@ contract InvHarness is CrapsViews {}
 ///         fail on any lucky sequence.
 ///
 ///         NON-VACUITY. afterInvariant fails any campaign that did not actually exercise the
-///         surface: entries, day tickets, settled fields, opened days and keeper cranks must
-///         all have happened, so a green run can never be a run where nothing moved.
+///         surface: entries, settled fields, opened days, keeper cranks and pass awards must be
+///         reached in most runs (`RunFloors`), so a green campaign can never be one where nothing
+///         moved.
 ///
 ///         FALSIFIABILITY. Two focused tests seed the exact bug shapes: a progressive balance
 ///         inflated with no funding behind it (field-isolated store into `_progressive`,
@@ -146,17 +148,19 @@ contract CrapsConservationInv is CrapsPins {
     // ── Non-vacuity ─────────────────────────────────────────────────────────
 
     function afterInvariant() public {
-        assertGt(handler.ghost_entries(), 0, "vacuous: no entries happened");
-        assertGt(handler.ghost_settledFields(), 0, "vacuous: no field ever settled");
-        assertGt(handler.ghost_scheduledSettles(), 0, "vacuous: no SCHEDULED field ever settled");
-        assertGt(handler.openedDayCount(), 1, "vacuous: the campaign never left day one");
-        assertGt(handler.ghost_keeps(), 0, "vacuous: the keeper never cranked");
+        // `ghost_settledFields` counts the handler's own settle door, the only path that measures the
+        // repeat-settle credit; a run where the keeper settles every field first misses it.
+        RunFloors.check("entries", handler.ghost_entries() > 0, "vacuous: no entries happened");
+        RunFloors.check("settled", handler.ghost_settledFields() > 0, "vacuous: no field ever settled");
+        RunFloors.check("scheduled", handler.ghost_scheduledSettles() > 0, "vacuous: no SCHEDULED field ever settled");
+        RunFloors.check("days", handler.openedDayCount() > 1, "vacuous: the campaign never left day one");
+        RunFloors.check("keeps", handler.ghost_keeps() > 0, "vacuous: the keeper never cranked");
         // Banked-pass doors: the 21:1 conversion property and pass application are only reachable once a
         // pass award banks credits (the handler's deliverPasses). Measured over
         // 1,797 default-profile runs: at least 3 deliveries per run; a conversion in 95% of runs, a pass
         // application in 98%, a high seat in 93%. Accumulated over the process (unique CC_ prefix) and asserted
         // once MIN_RUNS runs have completed.
-        assertGe(handler.ghost_passDeliveries(), 1, "vacuous: no pass award was delivered in this run");
+        RunFloors.check("deliveries", handler.ghost_passDeliveries() > 0, "vacuous: no pass award was delivered");
         uint256 runs = _acc("CC_RUNS", 1);
         uint256 deliveries = _acc("CC_deliveries", handler.ghost_passDeliveries());
         uint256 applies = _acc("CC_applies", handler.ghost_passApplies());

@@ -160,6 +160,12 @@ invariant runs at depth 256; explicit per-test overrides apply. CI partitions ex
 `scripts/deep-invariant-matrix.py`, including twenty independently seeded AdvanceLiveness partitions
 of 50 runs each.
 Coverage guards and actual run/call counts matter as well as pass counts.
+Push, pull-request and manual runs replay the pinned seed `0xdeadbeef` in the standard groups; the
+weekly scheduled run fuzzes from a fresh seed, and the deep matrix derives its seeds from the run.
+A coverage guard that depends on the random calls is judged over the campaign, never on one run: a
+per-run progress floor goes through `test/fuzz/helpers/RunFloors.sol` (met in at least half of the
+runs once 16 have completed), and rarer events accumulate across runs behind a minimum run count. An
+idle random run therefore cannot fail a suite whose properties all held.
 
 Except in AnyInputSafety (with its Degenesis variant), AdvanceLiveness and DegenesisLiveness,
 stateful handlers route every `mineRun` they would otherwise swallow through `ChainCallJudge`, and

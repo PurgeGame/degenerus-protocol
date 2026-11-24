@@ -6,6 +6,7 @@ import {StdInvariant} from "forge-std/StdInvariant.sol";
 import {CohortRecyclingHarness} from "../RngCohortRecycling.t.sol";
 import {TicketRecyclingHarness} from "../TicketStorageRecycling.t.sol";
 import {ContractAddresses} from "../../../contracts/ContractAddresses.sol";
+import {RunFloors} from "../helpers/RunFloors.sol";
 
 /// @dev This storage model has no redemption consumer. The production completion
 /// check still queries its pinned external frontier, which must exist in the fixture.
@@ -190,9 +191,10 @@ contract StorageRecyclingReferenceInvariant is StdInvariant, Test {
         cohort.assertReference(); tickets.assertReference();
         // The floors above are exactly what setUp's four primed cycles produce, so they cannot tell an idle
         // campaign from a working one. Measured over 514 default-profile runs: every run sealed at least one
-        // more cohort (min 5 seals); campaign completions and retirements averaged 4 and 2 per run but can be
-        // absent from one run, so they are accumulated over the process (unique SR_ prefix).
-        assertGe(cohort.seals(), SETUP_CYCLES + 1, "vacuous: the campaign never sealed a cohort");
+        // more cohort (min 5 seals), judged over the campaign (`RunFloors`); campaign completions and
+        // retirements averaged 4 and 2 per run but can be absent from one run, so they are accumulated over
+        // the process (unique SR_ prefix).
+        RunFloors.check("seals", cohort.seals() >= SETUP_CYCLES + 1, "vacuous: the campaign never sealed a cohort");
         uint256 runs = _acc("SR_RUNS", 1);
         uint256 completions = _acc("SR_completions", cohort.completions() - SETUP_CYCLES);
         uint256 retirements = _acc("SR_retirements", tickets.retirements() - SETUP_CYCLES);

@@ -6,6 +6,7 @@ import {console} from "forge-std/console.sol";
 import {StdInvariant} from "forge-std/StdInvariant.sol";
 import {DeployProtocol} from "../helpers/DeployProtocol.sol";
 import {LoanAccountingHandler} from "../handlers/LoanAccountingHandler.sol";
+import {RunFloors} from "../helpers/RunFloors.sol";
 
 /// @title LoanAccounting -- account loans against an independent spec ledger (docs/ACCOUNT-LOANS.md)
 /// @notice After every step:
@@ -66,7 +67,8 @@ contract LoanAccountingInvariant is DeployProtocol {
         handler.checkOwnership();
     }
 
-    /// @notice Progress floor per run, plus a coverage report accumulated across runs.
+    /// @notice Progress floors judged over the campaign (`RunFloors`), plus a coverage report accumulated
+    ///         across runs.
     function afterInvariant() public {
         ChainCallTally.tally("LoanAccounting", handler);
         ChainStallProbe.check("LoanAccounting", address(game), mockVRF);
@@ -75,12 +77,12 @@ contract LoanAccountingInvariant is DeployProtocol {
             0,
             "the seeder had to finish a SeizeLoans worker that was given at least the admission minimum gas"
         );
-        assertGt(handler.ghost_borrows(), 0, "no borrow");
-        assertGt(handler.ghost_ticketBorrows(), 0, "no late-window borrow");
-        assertGt(handler.ghost_day20Borrows(), 0, "no borrow on the day-20 boundary");
-        assertGt(handler.ghost_repays(), 0, "no repayment");
-        assertGt(handler.ghost_autoRepays(), 0, "no auto-repayment");
-        assertGt(handler.ghost_seizures(), 0, "no seizure");
+        RunFloors.check("borrows", handler.ghost_borrows() > 0, "no borrow");
+        RunFloors.check("ticketBorrows", handler.ghost_ticketBorrows() > 0, "no late-window borrow");
+        RunFloors.check("day20Borrows", handler.ghost_day20Borrows() > 0, "no borrow on the day-20 boundary");
+        RunFloors.check("repays", handler.ghost_repays() > 0, "no repayment");
+        RunFloors.check("autoRepays", handler.ghost_autoRepays() > 0, "no auto-repayment");
+        RunFloors.check("seizures", handler.ghost_seizures() > 0, "no seizure");
 
         _bump("LA_RUNS", 1);
         _bump("LA_CALLS", handler.calls());

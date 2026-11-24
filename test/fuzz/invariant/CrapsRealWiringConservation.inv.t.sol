@@ -5,6 +5,7 @@ import {ChainCallTally, ChainStallProbe} from "../helpers/ChainCallJudge.sol";
 import {StdInvariant} from "forge-std/StdInvariant.sol";
 import {DeployProtocol} from "../helpers/DeployProtocol.sol";
 import {CrapsRngSealHandler} from "../handlers/CrapsRngSealHandler.sol";
+import {RunFloors} from "../helpers/RunFloors.sol";
 
 /// @title CrapsRealWiringConservation — the table's payout liability through the REAL ring.
 ///
@@ -93,13 +94,15 @@ contract CrapsRealWiringConservation is DeployProtocol {
     function afterInvariant() public {
         ChainCallTally.tally("CrapsRealWiringConservation", handler);
         ChainStallProbe.check("CrapsRealWiringConservation", address(game), mockVRF);
-        assertGt(handler.ghost_creditedOut(), 0, "vacuous: no settlement ever credited stake");
-        assertGt(handler.ghost_flipBurnedIn(), 0, "vacuous: no FLIP was ever burned into the table");
-        assertGt(handler.ghost_subsidies(), 0, "vacuous: no day ever opened with a budget");
-        assertGt(handler.ghost_compsGranted(), 0, "vacuous: the vault never granted a comp");
+        // Progress floors are judged over the campaign (`RunFloors`). `ghost_subsidies` counts a day's budget
+        // only when `advanceDay` opens it, so a run that opens every day through `fulfil` or `keep` misses it.
+        RunFloors.check("credited", handler.ghost_creditedOut() > 0, "vacuous: no settlement ever credited stake");
+        RunFloors.check("burned", handler.ghost_flipBurnedIn() > 0, "vacuous: no FLIP was ever burned into the table");
+        RunFloors.check("subsidies", handler.ghost_subsidies() > 0, "vacuous: no day ever opened with a budget");
+        RunFloors.check("comps", handler.ghost_compsGranted() > 0, "vacuous: the vault never granted a comp");
         // invariant_keeperNeverReverts needs the keeper to run (measured minimum: 47 keeps per run over 771
         // default-profile runs), and the ledger needs real entries (minimum 18 per run).
-        assertGe(handler.ghost_keeps(), 10, "vacuous: the keeper (almost) never ran");
-        assertGe(handler.ghost_entries(), 5, "vacuous: (almost) no craps entry bound");
+        RunFloors.check("keeps", handler.ghost_keeps() >= 10, "vacuous: the keeper (almost) never ran");
+        RunFloors.check("entries", handler.ghost_entries() >= 5, "vacuous: (almost) no craps entry bound");
     }
 }
