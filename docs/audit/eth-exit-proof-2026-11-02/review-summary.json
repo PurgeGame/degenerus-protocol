@@ -1,5 +1,5 @@
 {
-  "utc": "2026-11-24T12:29:20.906798+00:00",
+  "utc": "2026-11-24T17:30:31.841406+00:00",
   "concrete_test_executions": 155,
   "distinct_concrete_tests": 142,
   "symbolic_properties": 9,
@@ -13,7 +13,7 @@
       "failed": 0,
       "skipped": 0,
       "suites": 17,
-      "seconds": 2866.268,
+      "seconds": 2706.429,
       "fixture_contract_differences": []
     },
     "boundaries": {
@@ -22,7 +22,7 @@
       "failed": 0,
       "skipped": 0,
       "suites": 12,
-      "seconds": 274.824,
+      "seconds": 265.62,
       "fixture_contract_differences": []
     }
   }

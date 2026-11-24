@@ -318,6 +318,8 @@
     "--skip",
     "test/fuzz/CrapsCompLane.t.sol",
     "--skip",
+    "test/fuzz/CrapsFutureDayJoinQuest.t.sol",
+    "--skip",
     "test/fuzz/CrapsKeeperBudgetGas.t.sol",
     "--skip",
     "test/fuzz/CrapsOpenerFailOpen.t.sol",
@@ -1543,6 +1545,6 @@
     "test/fuzz/TerminalLoanSettlement.t.sol",
     "test/repro/VrfRotationMidDayReRoll.t.sol"
   ],
-  "input_manifest": "20261124T122420.775466Z-b05c05f8/focused-01-inputs.json",
-  "input_manifest_sha256": "1e3335001045f9542c21c4e0b58eec19ecf83aff14c739773b6ef62392102ba6"
+  "input_manifest": "20261124T172458.175911Z-f3c9d06d/focused-01-inputs.json",
+  "input_manifest_sha256": "2868953b47553275e6d61db881ede2a512c3da9653ccfbb1915ee58f6b90b05a"
 }

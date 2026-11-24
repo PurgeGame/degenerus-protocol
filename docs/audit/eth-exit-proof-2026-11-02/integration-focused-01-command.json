@@ -318,6 +318,8 @@
     "--skip",
     "test/fuzz/CrapsCompLane.t.sol",
     "--skip",
+    "test/fuzz/CrapsFutureDayJoinQuest.t.sol",
+    "--skip",
     "test/fuzz/CrapsKeeperBudgetGas.t.sol",
     "--skip",
     "test/fuzz/CrapsOpenerFailOpen.t.sol",
@@ -1536,6 +1538,6 @@
     "test/fuzz/invariant/RngWindowFreeze.inv.t.sol",
     "test/repro/MatureComposition.t.sol"
   ],
-  "input_manifest": "20261124T113634.539208Z-1520a6ee/focused-01-inputs.json",
-  "input_manifest_sha256": "1e3335001045f9542c21c4e0b58eec19ecf83aff14c739773b6ef62392102ba6"
+  "input_manifest": "20261124T163951.753676Z-a2f8757d/focused-01-inputs.json",
+  "input_manifest_sha256": "2868953b47553275e6d61db881ede2a512c3da9653ccfbb1915ee58f6b90b05a"
 }
