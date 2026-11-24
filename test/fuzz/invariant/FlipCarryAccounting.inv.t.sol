@@ -119,8 +119,11 @@ contract FlipCarryAccountingInvariant is FlipCarryBase {
     // ------------------------------------------------------------------ non-vacuity
 
     /// @dev Paths accumulated across runs (vm.setEnv; prefix unique to this suite, overridden by
-    ///      subclasses) and gated once MIN_RUNS runs completed. Index = FlipCarryHandler.H_*.
-    uint256 internal constant MIN_RUNS = 32;
+    ///      subclasses) and gated once MIN_RUNS runs completed. The rarest required path (a carry
+    ///      held through a frozen day) is reached in about one run in eight to thirteen, so the gate
+    ///      waits for 256 runs; a working campaign then misses a path with odds below 1e-8.
+    ///      Index = FlipCarryHandler.H_*.
+    uint256 internal constant MIN_RUNS = 256;
 
     function _prefix() internal pure virtual returns (string memory) {
         return "FCA_";

@@ -164,8 +164,11 @@ Push, pull-request and manual runs replay the pinned seed `0xdeadbeef` in the st
 weekly scheduled run fuzzes from a fresh seed, and the deep matrix derives its seeds from the run.
 A coverage guard that depends on the random calls is judged over the campaign, never on one run: a
 per-run progress floor goes through `test/fuzz/helpers/RunFloors.sol` (met in at least half of the
-runs once 16 have completed), and rarer events accumulate across runs behind a minimum run count. An
-idle random run therefore cannot fail a suite whose properties all held.
+runs once 16 have completed), and rarer events accumulate across runs behind a minimum run count. A
+suite's campaigns run in parallel and share one tally, so that count is sized to how often a working
+campaign reaches the event: FlipCarry's rarest required path appears in about one run in thirteen,
+and its gate waits for 256 runs. An idle random run therefore cannot fail a suite whose properties
+all held.
 
 Except in AnyInputSafety (with its Degenesis variant), AdvanceLiveness and DegenesisLiveness,
 stateful handlers route every `mineRun` they would otherwise swallow through `ChainCallJudge`, and
