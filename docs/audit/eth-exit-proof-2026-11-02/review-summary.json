@@ -1,7 +1,7 @@
 {
-  "utc": "2026-11-22T21:55:43.940423+00:00",
-  "concrete_test_executions": 143,
-  "distinct_concrete_tests": 136,
+  "utc": "2026-11-24T12:29:20.906798+00:00",
+  "concrete_test_executions": 155,
+  "distinct_concrete_tests": 142,
   "symbolic_properties": 9,
   "finite_loan_cases": 218000,
   "current_contracts_match_snapshot": true,
@@ -9,20 +9,20 @@
   "campaigns": {
     "integration": {
       "exit_code": 0,
-      "passed": 64,
+      "passed": 70,
       "failed": 0,
       "skipped": 0,
-      "suites": 16,
-      "seconds": 2747.265,
+      "suites": 17,
+      "seconds": 2866.268,
       "fixture_contract_differences": []
     },
     "boundaries": {
       "exit_code": 0,
-      "passed": 75,
+      "passed": 81,
       "failed": 0,
       "skipped": 0,
-      "suites": 11,
-      "seconds": 262.403,
+      "suites": 12,
+      "seconds": 274.824,
       "fixture_contract_differences": []
     }
   }

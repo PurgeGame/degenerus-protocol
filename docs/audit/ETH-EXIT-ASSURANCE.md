@@ -102,19 +102,19 @@ The integration campaign includes the following production-path suites:
 - terminal loan conservation, Degenesis solvency, Degenerette solvency;
 - mature-game loan/redemption/terminal composition.
 
-Campaign result: **59 passed, 0 failed, 0 skipped across 16 suites**, including seven helper/fixture
-checks. There are 20 invariant properties, each exercised for 256 runs × 128 calls. The ordinary
-fuzz default is 1,000 cases; the mature composition test uses 64 and the two V73 token-spin tests
-use 400 each. These are bounded tests, not universal proofs. Several suites require real progress
+Campaign result: **70 passed, 0 failed, 0 skipped across 17 suites**, including thirteen
+helper/fixture checks. There are 20 invariant properties, each exercised for 256 runs × 128 calls.
+The ordinary fuzz default is 1,000 cases; the mature composition test uses 64 and the two V73
+token-spin tests use 400 each. These are bounded tests, not universal proofs. Several suites require real progress
 and include deliberately broken-state checks to show their assertions can fail.
 
-A second campaign passed **75 tests across 11 suites**, covering actual ETH Degenerette
+A second campaign passed **81 tests across 12 suites**, covering actual ETH Degenerette
 caps/overflow and frozen resolution, dead-VRF endings (including payout weights above 64 bits),
 hard-stall loan settlement, stETH-loss liveness, and coordinator rotation after fulfillment. The
 stETH-loss and terminal-loan settlement fuzz tests each use 24 cases. The stETH-loss test's success
 permits claims to fail with the documented shortfall error; it establishes progress, not protection
 against asset loss. With repeated helper suites counted once and the four new concrete harness
-checks included, **131 distinct concrete tests passed** (138 executions). No test failed or was
+checks included, **142 distinct concrete tests passed** (155 executions). No test failed or was
 skipped in either completed campaign or the final helper run.
 
 The independent split-arithmetic checker passed 24 checks, including sensitivity controls. Those are

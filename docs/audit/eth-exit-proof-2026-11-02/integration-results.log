@@ -1,5 +1,5 @@
-Compiling 325 files with Solc 0.8.38
-Solc 0.8.38 finished in 188.24s
+Compiling 327 files with Solc 0.8.38
+Solc 0.8.38 finished in 255.49s
 Compiler run successful with warnings:
 Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
     --> lib/forge-std/src/Vm.sol:1339:9:
@@ -1383,12 +1383,12 @@ Warning (4591): There are more than 256 warnings. Ignoring the rest.
 Ran 2 tests for test/fuzz/DailyJackpotCommitmentFreeze.t.sol:DailyJackpotCommitmentFreezeTest
 [PASS] testDailyEthAndBothTicketLegsKeepCommittedOwners() (gas: 2828329739)
 [PASS] testIndependentOutcomeOracleRejectsWrongWord() (gas: 349577223)
-Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 1.99s (1.99s CPU time)
+Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 2.19s (2.18s CPU time)
 
 Ran 2 tests for test/fuzz/DegeneretteV73SolvencyFuzz.t.sol:DegeneretteV73SolvencyFuzz
 [PASS] testFuzz_v73_automaticWwxrpRig(uint8,uint256) (runs: 400, μ: 52792, ~: 52484)
 [PASS] testFuzz_v73_manualFlipSolvency(uint8,uint256) (runs: 400, μ: 996376, ~: 994743)
-Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 392.36ms (387.68ms CPU time)
+Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 481.91ms (476.71ms CPU time)
 
 Ran 4 tests for test/fuzz/DegenesisSolvencyVectors.t.sol:DegenesisSolvencyVectors
 [PASS] testFuzz_ExtremeLanesConserveAndSettleOnce(uint256) (runs: 1000, μ: 3836965, ~: 3838060)
@@ -1408,7 +1408,7 @@ Logs:
   day 7 paid: 5259416453
 
 [PASS] test_WhaleQuantityAboveThousandReverts() (gas: 2100788)
-Suite result: ok. 4 passed; 0 failed; 0 skipped; finished in 5.97s (5.96s CPU time)
+Suite result: ok. 4 passed; 0 failed; 0 skipped; finished in 6.44s (6.43s CPU time)
 
 Ran 6 tests for test/fuzz/invariant/EthSolvency.inv.t.sol:EthSolvencyInvariant
 [PASS] invariant_balanceReconciliation() (runs: 256, calls: 32768, reverts: 0)
@@ -1509,12 +1509,12 @@ Ran 6 tests for test/fuzz/invariant/EthSolvency.inv.t.sol:EthSolvencyInvariant
 
 [PASS] test_reconciliationAcrossPurchasesAndSettlement() (gas: 35009383)
 [PASS] test_reconciliationDetectsMissingWei() (gas: 713230)
-Suite result: ok. 6 passed; 0 failed; 0 skipped; finished in 47.03s (47.02s CPU time)
+Suite result: ok. 6 passed; 0 failed; 0 skipped; finished in 46.69s (46.69s CPU time)
 
 Ran 2 tests for test/fuzz/JackpotCommitmentFreeze.t.sol:JackpotCommitmentFreezeTest
 [PASS] test_RequestThroughFourChunksFreezesFieldAndReserveMiss() (gas: 192636668)
 [PASS] test_RequestThroughFourChunksFreezesFieldAndReserveWin() (gas: 119597870)
-Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 369.61ms (362.32ms CPU time)
+Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 391.55ms (383.80ms CPU time)
 
 Ran 5 tests for test/fuzz/invariant/LoanAccounting.inv.t.sol:LoanAccountingInvariant
 [PASS] invariant_borrowCredit() (runs: 256, calls: 32768, reverts: 0)
@@ -1528,26 +1528,26 @@ Ran 5 tests for test/fuzz/invariant/LoanAccounting.inv.t.sol:LoanAccountingInvar
 Logs:
   LA_REPORT LA_RUNS=257
   LA_REPORT LA_CALLS=32896
-  LA_REPORT LA_BORROWS=2930
-  LA_REPORT LA_TICKET_BORROWS=263
+  LA_REPORT LA_BORROWS=2935
+  LA_REPORT LA_TICKET_BORROWS=265
   LA_REPORT LA_DAY20_BORROWS=263
-  LA_REPORT LA_JACKPOT_BORROWS=703
-  LA_REPORT LA_VAULT_LOANS=2
-  LA_REPORT LA_REPAYS=1157
-  LA_REPORT LA_REPAYS_CLAIMABLE=341
-  LA_REPORT LA_REPAYS_AFKING=336
-  LA_REPORT LA_AUTO_REPAYS=792
-  LA_REPORT LA_SEIZURES=803
-  LA_REPORT LA_ORDINARY_SWEEP_REJECTS=1108
-  LA_REPORT LA_CHUNKED=703
-  LA_REPORT LA_SWEEPS=1114
-  LA_REPORT LA_CLAIMS=1957
-  LA_REPORT LA_GATE_REJECTS=4309
-  LA_REPORT LA_WORKER_ADEQUATE_GAS=355
+  LA_REPORT LA_JACKPOT_BORROWS=729
+  LA_REPORT LA_VAULT_LOANS=4
+  LA_REPORT LA_REPAYS=1180
+  LA_REPORT LA_REPAYS_CLAIMABLE=359
+  LA_REPORT LA_REPAYS_AFKING=342
+  LA_REPORT LA_AUTO_REPAYS=820
+  LA_REPORT LA_SEIZURES=735
+  LA_REPORT LA_ORDINARY_SWEEP_REJECTS=1081
+  LA_REPORT LA_CHUNKED=642
+  LA_REPORT LA_SWEEPS=1077
+  LA_REPORT LA_CLAIMS=1956
+  LA_REPORT LA_GATE_REJECTS=4363
+  LA_REPORT LA_WORKER_ADEQUATE_GAS=340
   LA_REPORT LA_WORKER_STARVED=0
   LA_REPORT LA_FALLBACK_ADEQUATE_GAS=0
   LA_REPORT LA_WORKER_CHUNK_CAP_HIT=0
-  LA_REPORT LA_CLOSED=2752
+  LA_REPORT LA_CLOSED=2735
 
 [PASS] invariant_closedLoansPaidSpecOrSeized() (runs: 256, calls: 32768, reverts: 0)
 
@@ -1560,26 +1560,26 @@ Logs:
 Logs:
   LA_REPORT LA_RUNS=514
   LA_REPORT LA_CALLS=65792
-  LA_REPORT LA_BORROWS=5852
-  LA_REPORT LA_TICKET_BORROWS=528
-  LA_REPORT LA_DAY20_BORROWS=523
-  LA_REPORT LA_JACKPOT_BORROWS=1405
-  LA_REPORT LA_VAULT_LOANS=4
-  LA_REPORT LA_REPAYS=2318
-  LA_REPORT LA_REPAYS_CLAIMABLE=685
-  LA_REPORT LA_REPAYS_AFKING=669
-  LA_REPORT LA_AUTO_REPAYS=1583
-  LA_REPORT LA_SEIZURES=1584
-  LA_REPORT LA_ORDINARY_SWEEP_REJECTS=2198
-  LA_REPORT LA_CHUNKED=1393
-  LA_REPORT LA_SWEEPS=2223
-  LA_REPORT LA_CLAIMS=3945
-  LA_REPORT LA_GATE_REJECTS=8634
-  LA_REPORT LA_WORKER_ADEQUATE_GAS=698
+  LA_REPORT LA_BORROWS=5869
+  LA_REPORT LA_TICKET_BORROWS=530
+  LA_REPORT LA_DAY20_BORROWS=527
+  LA_REPORT LA_JACKPOT_BORROWS=1440
+  LA_REPORT LA_VAULT_LOANS=8
+  LA_REPORT LA_REPAYS=2369
+  LA_REPORT LA_REPAYS_CLAIMABLE=745
+  LA_REPORT LA_REPAYS_AFKING=674
+  LA_REPORT LA_AUTO_REPAYS=1622
+  LA_REPORT LA_SEIZURES=1482
+  LA_REPORT LA_ORDINARY_SWEEP_REJECTS=2182
+  LA_REPORT LA_CHUNKED=1280
+  LA_REPORT LA_SWEEPS=2153
+  LA_REPORT LA_CLAIMS=3934
+  LA_REPORT LA_GATE_REJECTS=8696
+  LA_REPORT LA_WORKER_ADEQUATE_GAS=667
   LA_REPORT LA_WORKER_STARVED=0
   LA_REPORT LA_FALLBACK_ADEQUATE_GAS=0
   LA_REPORT LA_WORKER_CHUNK_CAP_HIT=0
-  LA_REPORT LA_CLOSED=5485
+  LA_REPORT LA_CLOSED=5473
 
 [PASS] invariant_lenderLedger() (runs: 256, calls: 32768, reverts: 0)
 
@@ -1592,26 +1592,26 @@ Logs:
 Logs:
   LA_REPORT LA_RUNS=771
   LA_REPORT LA_CALLS=98688
-  LA_REPORT LA_BORROWS=8771
-  LA_REPORT LA_TICKET_BORROWS=791
-  LA_REPORT LA_DAY20_BORROWS=788
-  LA_REPORT LA_JACKPOT_BORROWS=2106
-  LA_REPORT LA_VAULT_LOANS=5
-  LA_REPORT LA_REPAYS=3472
-  LA_REPORT LA_REPAYS_CLAIMABLE=1025
-  LA_REPORT LA_REPAYS_AFKING=1008
-  LA_REPORT LA_AUTO_REPAYS=2391
-  LA_REPORT LA_SEIZURES=2364
-  LA_REPORT LA_ORDINARY_SWEEP_REJECTS=3275
-  LA_REPORT LA_CHUNKED=2084
-  LA_REPORT LA_SWEEPS=3327
-  LA_REPORT LA_CLAIMS=5944
-  LA_REPORT LA_GATE_REJECTS=12952
-  LA_REPORT LA_WORKER_ADEQUATE_GAS=1043
+  LA_REPORT LA_BORROWS=8789
+  LA_REPORT LA_TICKET_BORROWS=795
+  LA_REPORT LA_DAY20_BORROWS=794
+  LA_REPORT LA_JACKPOT_BORROWS=2162
+  LA_REPORT LA_VAULT_LOANS=10
+  LA_REPORT LA_REPAYS=3533
+  LA_REPORT LA_REPAYS_CLAIMABLE=1095
+  LA_REPORT LA_REPAYS_AFKING=996
+  LA_REPORT LA_AUTO_REPAYS=2431
+  LA_REPORT LA_SEIZURES=2224
+  LA_REPORT LA_ORDINARY_SWEEP_REJECTS=3279
+  LA_REPORT LA_CHUNKED=1918
+  LA_REPORT LA_SWEEPS=3237
+  LA_REPORT LA_CLAIMS=5871
+  LA_REPORT LA_GATE_REJECTS=13037
+  LA_REPORT LA_WORKER_ADEQUATE_GAS=1001
   LA_REPORT LA_WORKER_STARVED=0
   LA_REPORT LA_FALLBACK_ADEQUATE_GAS=0
   LA_REPORT LA_WORKER_CHUNK_CAP_HIT=0
-  LA_REPORT LA_CLOSED=8227
+  LA_REPORT LA_CLOSED=8188
 
 [PASS] invariant_ownershipAndDueLists() (runs: 256, calls: 32768, reverts: 0)
 
@@ -1624,26 +1624,26 @@ Logs:
 Logs:
   LA_REPORT LA_RUNS=1028
   LA_REPORT LA_CALLS=131584
-  LA_REPORT LA_BORROWS=11713
-  LA_REPORT LA_TICKET_BORROWS=1055
-  LA_REPORT LA_DAY20_BORROWS=1053
-  LA_REPORT LA_JACKPOT_BORROWS=2807
-  LA_REPORT LA_VAULT_LOANS=7
-  LA_REPORT LA_REPAYS=4636
-  LA_REPORT LA_REPAYS_CLAIMABLE=1380
-  LA_REPORT LA_REPAYS_AFKING=1337
-  LA_REPORT LA_AUTO_REPAYS=3197
-  LA_REPORT LA_SEIZURES=3141
-  LA_REPORT LA_ORDINARY_SWEEP_REJECTS=4330
-  LA_REPORT LA_CHUNKED=2745
-  LA_REPORT LA_SWEEPS=4416
-  LA_REPORT LA_CLAIMS=7984
-  LA_REPORT LA_GATE_REJECTS=17293
-  LA_REPORT LA_WORKER_ADEQUATE_GAS=1384
+  LA_REPORT LA_BORROWS=11746
+  LA_REPORT LA_TICKET_BORROWS=1063
+  LA_REPORT LA_DAY20_BORROWS=1064
+  LA_REPORT LA_JACKPOT_BORROWS=2868
+  LA_REPORT LA_VAULT_LOANS=13
+  LA_REPORT LA_REPAYS=4716
+  LA_REPORT LA_REPAYS_CLAIMABLE=1461
+  LA_REPORT LA_REPAYS_AFKING=1339
+  LA_REPORT LA_AUTO_REPAYS=3264
+  LA_REPORT LA_SEIZURES=2979
+  LA_REPORT LA_ORDINARY_SWEEP_REJECTS=4404
+  LA_REPORT LA_CHUNKED=2591
+  LA_REPORT LA_SWEEPS=4334
+  LA_REPORT LA_CLAIMS=7875
+  LA_REPORT LA_GATE_REJECTS=17345
+  LA_REPORT LA_WORKER_ADEQUATE_GAS=1350
   LA_REPORT LA_WORKER_STARVED=0
   LA_REPORT LA_FALLBACK_ADEQUATE_GAS=0
   LA_REPORT LA_WORKER_CHUNK_CAP_HIT=0
-  LA_REPORT LA_CLOSED=10974
+  LA_REPORT LA_CLOSED=10959
 
 [PASS] invariant_solvency() (runs: 256, calls: 32768, reverts: 0)
 
@@ -1656,46 +1656,46 @@ Logs:
 Logs:
   LA_REPORT LA_RUNS=1285
   LA_REPORT LA_CALLS=164480
-  LA_REPORT LA_BORROWS=14631
-  LA_REPORT LA_TICKET_BORROWS=1320
-  LA_REPORT LA_DAY20_BORROWS=1317
-  LA_REPORT LA_JACKPOT_BORROWS=3513
-  LA_REPORT LA_VAULT_LOANS=7
-  LA_REPORT LA_REPAYS=5805
-  LA_REPORT LA_REPAYS_CLAIMABLE=1734
-  LA_REPORT LA_REPAYS_AFKING=1678
-  LA_REPORT LA_AUTO_REPAYS=3987
-  LA_REPORT LA_SEIZURES=3927
-  LA_REPORT LA_ORDINARY_SWEEP_REJECTS=5415
-  LA_REPORT LA_CHUNKED=3425
-  LA_REPORT LA_SWEEPS=5519
-  LA_REPORT LA_CLAIMS=9962
-  LA_REPORT LA_GATE_REJECTS=21554
-  LA_REPORT LA_WORKER_ADEQUATE_GAS=1721
+  LA_REPORT LA_BORROWS=14677
+  LA_REPORT LA_TICKET_BORROWS=1328
+  LA_REPORT LA_DAY20_BORROWS=1329
+  LA_REPORT LA_JACKPOT_BORROWS=3590
+  LA_REPORT LA_VAULT_LOANS=16
+  LA_REPORT LA_REPAYS=5886
+  LA_REPORT LA_REPAYS_CLAIMABLE=1825
+  LA_REPORT LA_REPAYS_AFKING=1685
+  LA_REPORT LA_AUTO_REPAYS=4067
+  LA_REPORT LA_SEIZURES=3741
+  LA_REPORT LA_ORDINARY_SWEEP_REJECTS=5453
+  LA_REPORT LA_CHUNKED=3248
+  LA_REPORT LA_SWEEPS=5419
+  LA_REPORT LA_CLAIMS=9837
+  LA_REPORT LA_GATE_REJECTS=21689
+  LA_REPORT LA_WORKER_ADEQUATE_GAS=1685
   LA_REPORT LA_WORKER_STARVED=0
   LA_REPORT LA_FALLBACK_ADEQUATE_GAS=0
   LA_REPORT LA_WORKER_CHUNK_CAP_HIT=0
-  LA_REPORT LA_CLOSED=13719
+  LA_REPORT LA_CLOSED=13694
 
-Suite result: ok. 5 passed; 0 failed; 0 skipped; finished in 959.44s (959.43s CPU time)
+Suite result: ok. 5 passed; 0 failed; 0 skipped; finished in 985.99s (985.98s CPU time)
 
 Ran 2 tests for test/repro/MatureComposition.t.sol:MatureCompositionTest
 [PASS] testFuzz_matureLoansRedemptionsAndTerminalConserve(uint256) (runs: 64, μ: 125228843, ~: 107892065)
 [PASS] test_matureQueuedWorkTerminal_21090() (gas: 103667992)
-Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 11.94s (10.80s CPU time)
+Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 12.22s (11.02s CPU time)
 
 Ran 3 tests for test/fuzz/helpers/NonceCheck.t.sol:NonceCheck
 [PASS] test_deployerIsTestContract() (gas: 379)
 [PASS] test_nonceIncrements() (gas: 47513)
 [PASS] test_startingNonce() (gas: 2555)
-Suite result: ok. 3 passed; 0 failed; 0 skipped; finished in 114.26µs (37.96µs CPU time)
+Suite result: ok. 3 passed; 0 failed; 0 skipped; finished in 114.77µs (30.56µs CPU time)
 
 Ran 4 tests for test/fuzz/OrdinaryLootboxCommitmentBinding.t.sol:OrdinaryLootboxCommitmentBindingTest
 [PASS] testDailyFlipAndPassBinding() (gas: 706107593)
 [PASS] testDailyTicketAndSequentialDgnrsBinding() (gas: 2135060909)
 [PASS] testMiddayFlipAndPassBinding() (gas: 31651447)
 [PASS] testMiddayTicketAndSequentialDgnrsBinding() (gas: 1385498906)
-Suite result: ok. 4 passed; 0 failed; 0 skipped; finished in 5.06s (5.04s CPU time)
+Suite result: ok. 4 passed; 0 failed; 0 skipped; finished in 5.19s (5.17s CPU time)
 
 Ran 5 tests for test/fuzz/invariant/PoolConservation.inv.t.sol:PoolConservation
 [PASS] invariant_noUnbackedCreditMinted() (runs: 256, calls: 32768, reverts: 0)
@@ -1742,30 +1742,30 @@ Ran 5 tests for test/fuzz/invariant/PoolConservation.inv.t.sol:PoolConservation
 
 [PASS] test_invariantIsFalsifiable_unbackedCreditMint() (gas: 115891)
 [PASS] test_poolTransfersExercised_nonVacuous() (gas: 8474128)
-Suite result: ok. 5 passed; 0 failed; 0 skipped; finished in 1127.28s (1127.27s CPU time)
+Suite result: ok. 5 passed; 0 failed; 0 skipped; finished in 1145.26s (1145.25s CPU time)
 
 Ran 4 tests for test/fuzz/RedemptionCommitmentBinding.t.sol:RedemptionCommitmentBindingTest
 [PASS] test_DelayedEvenWordCommitment() (gas: 47758539)
 [PASS] test_DelayedOddWordCommitment() (gas: 47635224)
 [PASS] test_NormalEvenWordCommitment() (gas: 49182289)
 [PASS] test_NormalOddWordCommitment() (gas: 48732548)
-Suite result: ok. 4 passed; 0 failed; 0 skipped; finished in 178.79ms (171.28ms CPU time)
+Suite result: ok. 4 passed; 0 failed; 0 skipped; finished in 198.52ms (190.62ms CPU time)
 
 Ran 15 tests for test/fuzz/invariant/RedemptionInvariants.inv.t.sol:RedemptionInvariants
-[PASS] invariant_ethSegregationSolvency() (runs: 256, calls: 32768, reverts: 1485)
+[PASS] invariant_ethSegregationSolvency() (runs: 256, calls: 32768, reverts: 1524)
 
 ╭--------------------+---------------------------------+-------+---------+----------╮
 | Contract           | Selector                        | Calls | Reverts | Discards |
 +===================================================================================+
-| RedemptionHandler  | action_advanceDay               | 2553  | 591     | 0        |
+| RedemptionHandler  | action_advanceDay               | 2553  | 600     | 0        |
 |--------------------+---------------------------------+-------+---------+----------|
 | RedemptionHandler  | action_burn                     | 2470  | 0       | 0        |
 |--------------------+---------------------------------+-------+---------+----------|
 | RedemptionHandler  | action_burnOnPreviousDay        | 2475  | 0       | 0        |
 |--------------------+---------------------------------+-------+---------+----------|
-| RedemptionHandler  | action_claim                    | 2488  | 294     | 0        |
+| RedemptionHandler  | action_claim                    | 2488  | 310     | 0        |
 |--------------------+---------------------------------+-------+---------+----------|
-| RedemptionHandler  | action_settle                   | 2531  | 600     | 0        |
+| RedemptionHandler  | action_settle                   | 2531  | 614     | 0        |
 |--------------------+---------------------------------+-------+---------+----------|
 | RedemptionHandler  | action_toggleStethFallback      | 2495  | 0       | 0        |
 |--------------------+---------------------------------+-------+---------+----------|
@@ -1784,20 +1784,20 @@ Ran 15 tests for test/fuzz/invariant/RedemptionInvariants.inv.t.sol:RedemptionIn
 | VRFHandler         | warpPastVrfTimeout              | 2431  | 0       | 0        |
 ╰--------------------+---------------------------------+-------+---------+----------╯
 
-[PASS] invariant_noDoubleClaim() (runs: 256, calls: 32768, reverts: 1439)
+[PASS] invariant_noDoubleClaim() (runs: 256, calls: 32768, reverts: 1421)
 
 ╭--------------------+---------------------------------+-------+---------+----------╮
 | Contract           | Selector                        | Calls | Reverts | Discards |
 +===================================================================================+
-| RedemptionHandler  | action_advanceDay               | 2553  | 588     | 0        |
+| RedemptionHandler  | action_advanceDay               | 2553  | 561     | 0        |
 |--------------------+---------------------------------+-------+---------+----------|
 | RedemptionHandler  | action_burn                     | 2470  | 0       | 0        |
 |--------------------+---------------------------------+-------+---------+----------|
 | RedemptionHandler  | action_burnOnPreviousDay        | 2475  | 0       | 0        |
 |--------------------+---------------------------------+-------+---------+----------|
-| RedemptionHandler  | action_claim                    | 2488  | 284     | 0        |
+| RedemptionHandler  | action_claim                    | 2488  | 285     | 0        |
 |--------------------+---------------------------------+-------+---------+----------|
-| RedemptionHandler  | action_settle                   | 2531  | 567     | 0        |
+| RedemptionHandler  | action_settle                   | 2531  | 575     | 0        |
 |--------------------+---------------------------------+-------+---------+----------|
 | RedemptionHandler  | action_toggleStethFallback      | 2495  | 0       | 0        |
 |--------------------+---------------------------------+-------+---------+----------|
@@ -1816,76 +1816,12 @@ Ran 15 tests for test/fuzz/invariant/RedemptionInvariants.inv.t.sol:RedemptionIn
 | VRFHandler         | warpPastVrfTimeout              | 2431  | 0       | 0        |
 ╰--------------------+---------------------------------+-------+---------+----------╯
 
-[PASS] invariant_poolBalanceConservation() (runs: 256, calls: 32768, reverts: 1544)
+[PASS] invariant_poolBalanceConservation() (runs: 256, calls: 32768, reverts: 1497)
 
 ╭--------------------+---------------------------------+-------+---------+----------╮
 | Contract           | Selector                        | Calls | Reverts | Discards |
 +===================================================================================+
-| RedemptionHandler  | action_advanceDay               | 2553  | 615     | 0        |
-|--------------------+---------------------------------+-------+---------+----------|
-| RedemptionHandler  | action_burn                     | 2470  | 0       | 0        |
-|--------------------+---------------------------------+-------+---------+----------|
-| RedemptionHandler  | action_burnOnPreviousDay        | 2475  | 0       | 0        |
-|--------------------+---------------------------------+-------+---------+----------|
-| RedemptionHandler  | action_claim                    | 2488  | 314     | 0        |
-|--------------------+---------------------------------+-------+---------+----------|
-| RedemptionHandler  | action_settle                   | 2531  | 615     | 0        |
-|--------------------+---------------------------------+-------+---------+----------|
-| RedemptionHandler  | action_toggleStethFallback      | 2495  | 0       | 0        |
-|--------------------+---------------------------------+-------+---------+----------|
-| RedemptionHandler  | action_triggerGameOverSometimes | 2533  | 0       | 0        |
-|--------------------+---------------------------------+-------+---------+----------|
-| WrapperPathHandler | tryBurnWrapped                  | 2554  | 0       | 0        |
-|--------------------+---------------------------------+-------+---------+----------|
-| WrapperPathHandler | tryPostGameOverBurn             | 2507  | 0       | 0        |
-|--------------------+---------------------------------+-------+---------+----------|
-| WrapperPathHandler | tryUnwrapTo                     | 2449  | 0       | 0        |
-|--------------------+---------------------------------+-------+---------+----------|
-| WrapperPathHandler | tryYearSweep                    | 2678  | 0       | 0        |
-|--------------------+---------------------------------+-------+---------+----------|
-| VRFHandler         | fulfillVrf                      | 2604  | 0       | 0        |
-|--------------------+---------------------------------+-------+---------+----------|
-| VRFHandler         | warpPastVrfTimeout              | 2431  | 0       | 0        |
-╰--------------------+---------------------------------+-------+---------+----------╯
-
-[PASS] invariant_rollBounds() (runs: 256, calls: 32768, reverts: 1383)
-
-╭--------------------+---------------------------------+-------+---------+----------╮
-| Contract           | Selector                        | Calls | Reverts | Discards |
-+===================================================================================+
-| RedemptionHandler  | action_advanceDay               | 2553  | 559     | 0        |
-|--------------------+---------------------------------+-------+---------+----------|
-| RedemptionHandler  | action_burn                     | 2470  | 0       | 0        |
-|--------------------+---------------------------------+-------+---------+----------|
-| RedemptionHandler  | action_burnOnPreviousDay        | 2475  | 0       | 0        |
-|--------------------+---------------------------------+-------+---------+----------|
-| RedemptionHandler  | action_claim                    | 2488  | 265     | 0        |
-|--------------------+---------------------------------+-------+---------+----------|
-| RedemptionHandler  | action_settle                   | 2531  | 559     | 0        |
-|--------------------+---------------------------------+-------+---------+----------|
-| RedemptionHandler  | action_toggleStethFallback      | 2495  | 0       | 0        |
-|--------------------+---------------------------------+-------+---------+----------|
-| RedemptionHandler  | action_triggerGameOverSometimes | 2533  | 0       | 0        |
-|--------------------+---------------------------------+-------+---------+----------|
-| WrapperPathHandler | tryBurnWrapped                  | 2554  | 0       | 0        |
-|--------------------+---------------------------------+-------+---------+----------|
-| WrapperPathHandler | tryPostGameOverBurn             | 2507  | 0       | 0        |
-|--------------------+---------------------------------+-------+---------+----------|
-| WrapperPathHandler | tryUnwrapTo                     | 2449  | 0       | 0        |
-|--------------------+---------------------------------+-------+---------+----------|
-| WrapperPathHandler | tryYearSweep                    | 2678  | 0       | 0        |
-|--------------------+---------------------------------+-------+---------+----------|
-| VRFHandler         | fulfillVrf                      | 2604  | 0       | 0        |
-|--------------------+---------------------------------+-------+---------+----------|
-| VRFHandler         | warpPastVrfTimeout              | 2431  | 0       | 0        |
-╰--------------------+---------------------------------+-------+---------+----------╯
-
-[PASS] invariant_supplyConsistency() (runs: 256, calls: 32768, reverts: 1510)
-
-╭--------------------+---------------------------------+-------+---------+----------╮
-| Contract           | Selector                        | Calls | Reverts | Discards |
-+===================================================================================+
-| RedemptionHandler  | action_advanceDay               | 2553  | 609     | 0        |
+| RedemptionHandler  | action_advanceDay               | 2553  | 595     | 0        |
 |--------------------+---------------------------------+-------+---------+----------|
 | RedemptionHandler  | action_burn                     | 2470  | 0       | 0        |
 |--------------------+---------------------------------+-------+---------+----------|
@@ -1893,7 +1829,7 @@ Ran 15 tests for test/fuzz/invariant/RedemptionInvariants.inv.t.sol:RedemptionIn
 |--------------------+---------------------------------+-------+---------+----------|
 | RedemptionHandler  | action_claim                    | 2488  | 303     | 0        |
 |--------------------+---------------------------------+-------+---------+----------|
-| RedemptionHandler  | action_settle                   | 2531  | 598     | 0        |
+| RedemptionHandler  | action_settle                   | 2531  | 599     | 0        |
 |--------------------+---------------------------------+-------+---------+----------|
 | RedemptionHandler  | action_toggleStethFallback      | 2495  | 0       | 0        |
 |--------------------+---------------------------------+-------+---------+----------|
@@ -1912,20 +1848,20 @@ Ran 15 tests for test/fuzz/invariant/RedemptionInvariants.inv.t.sol:RedemptionIn
 | VRFHandler         | warpPastVrfTimeout              | 2431  | 0       | 0        |
 ╰--------------------+---------------------------------+-------+---------+----------╯
 
-[PASS] invariant_wrapperBackingExact() (runs: 256, calls: 32768, reverts: 1448)
+[PASS] invariant_rollBounds() (runs: 256, calls: 32768, reverts: 1454)
 
 ╭--------------------+---------------------------------+-------+---------+----------╮
 | Contract           | Selector                        | Calls | Reverts | Discards |
 +===================================================================================+
-| RedemptionHandler  | action_advanceDay               | 2553  | 573     | 0        |
+| RedemptionHandler  | action_advanceDay               | 2553  | 587     | 0        |
 |--------------------+---------------------------------+-------+---------+----------|
 | RedemptionHandler  | action_burn                     | 2470  | 0       | 0        |
 |--------------------+---------------------------------+-------+---------+----------|
 | RedemptionHandler  | action_burnOnPreviousDay        | 2475  | 0       | 0        |
 |--------------------+---------------------------------+-------+---------+----------|
-| RedemptionHandler  | action_claim                    | 2488  | 292     | 0        |
+| RedemptionHandler  | action_claim                    | 2488  | 286     | 0        |
 |--------------------+---------------------------------+-------+---------+----------|
-| RedemptionHandler  | action_settle                   | 2531  | 583     | 0        |
+| RedemptionHandler  | action_settle                   | 2531  | 581     | 0        |
 |--------------------+---------------------------------+-------+---------+----------|
 | RedemptionHandler  | action_toggleStethFallback      | 2495  | 0       | 0        |
 |--------------------+---------------------------------+-------+---------+----------|
@@ -1944,20 +1880,84 @@ Ran 15 tests for test/fuzz/invariant/RedemptionInvariants.inv.t.sol:RedemptionIn
 | VRFHandler         | warpPastVrfTimeout              | 2431  | 0       | 0        |
 ╰--------------------+---------------------------------+-------+---------+----------╯
 
-[PASS] invariant_wrapperBackingSufficient() (runs: 256, calls: 32768, reverts: 1431)
+[PASS] invariant_supplyConsistency() (runs: 256, calls: 32768, reverts: 1468)
 
 ╭--------------------+---------------------------------+-------+---------+----------╮
 | Contract           | Selector                        | Calls | Reverts | Discards |
 +===================================================================================+
-| RedemptionHandler  | action_advanceDay               | 2553  | 583     | 0        |
+| RedemptionHandler  | action_advanceDay               | 2553  | 602     | 0        |
 |--------------------+---------------------------------+-------+---------+----------|
 | RedemptionHandler  | action_burn                     | 2470  | 0       | 0        |
 |--------------------+---------------------------------+-------+---------+----------|
 | RedemptionHandler  | action_burnOnPreviousDay        | 2475  | 0       | 0        |
 |--------------------+---------------------------------+-------+---------+----------|
-| RedemptionHandler  | action_claim                    | 2488  | 280     | 0        |
+| RedemptionHandler  | action_claim                    | 2488  | 277     | 0        |
 |--------------------+---------------------------------+-------+---------+----------|
-| RedemptionHandler  | action_settle                   | 2531  | 568     | 0        |
+| RedemptionHandler  | action_settle                   | 2531  | 589     | 0        |
+|--------------------+---------------------------------+-------+---------+----------|
+| RedemptionHandler  | action_toggleStethFallback      | 2495  | 0       | 0        |
+|--------------------+---------------------------------+-------+---------+----------|
+| RedemptionHandler  | action_triggerGameOverSometimes | 2533  | 0       | 0        |
+|--------------------+---------------------------------+-------+---------+----------|
+| WrapperPathHandler | tryBurnWrapped                  | 2554  | 0       | 0        |
+|--------------------+---------------------------------+-------+---------+----------|
+| WrapperPathHandler | tryPostGameOverBurn             | 2507  | 0       | 0        |
+|--------------------+---------------------------------+-------+---------+----------|
+| WrapperPathHandler | tryUnwrapTo                     | 2449  | 0       | 0        |
+|--------------------+---------------------------------+-------+---------+----------|
+| WrapperPathHandler | tryYearSweep                    | 2678  | 0       | 0        |
+|--------------------+---------------------------------+-------+---------+----------|
+| VRFHandler         | fulfillVrf                      | 2604  | 0       | 0        |
+|--------------------+---------------------------------+-------+---------+----------|
+| VRFHandler         | warpPastVrfTimeout              | 2431  | 0       | 0        |
+╰--------------------+---------------------------------+-------+---------+----------╯
+
+[PASS] invariant_wrapperBackingExact() (runs: 256, calls: 32768, reverts: 1487)
+
+╭--------------------+---------------------------------+-------+---------+----------╮
+| Contract           | Selector                        | Calls | Reverts | Discards |
++===================================================================================+
+| RedemptionHandler  | action_advanceDay               | 2553  | 599     | 0        |
+|--------------------+---------------------------------+-------+---------+----------|
+| RedemptionHandler  | action_burn                     | 2470  | 0       | 0        |
+|--------------------+---------------------------------+-------+---------+----------|
+| RedemptionHandler  | action_burnOnPreviousDay        | 2475  | 0       | 0        |
+|--------------------+---------------------------------+-------+---------+----------|
+| RedemptionHandler  | action_claim                    | 2488  | 293     | 0        |
+|--------------------+---------------------------------+-------+---------+----------|
+| RedemptionHandler  | action_settle                   | 2531  | 595     | 0        |
+|--------------------+---------------------------------+-------+---------+----------|
+| RedemptionHandler  | action_toggleStethFallback      | 2495  | 0       | 0        |
+|--------------------+---------------------------------+-------+---------+----------|
+| RedemptionHandler  | action_triggerGameOverSometimes | 2533  | 0       | 0        |
+|--------------------+---------------------------------+-------+---------+----------|
+| WrapperPathHandler | tryBurnWrapped                  | 2554  | 0       | 0        |
+|--------------------+---------------------------------+-------+---------+----------|
+| WrapperPathHandler | tryPostGameOverBurn             | 2507  | 0       | 0        |
+|--------------------+---------------------------------+-------+---------+----------|
+| WrapperPathHandler | tryUnwrapTo                     | 2449  | 0       | 0        |
+|--------------------+---------------------------------+-------+---------+----------|
+| WrapperPathHandler | tryYearSweep                    | 2678  | 0       | 0        |
+|--------------------+---------------------------------+-------+---------+----------|
+| VRFHandler         | fulfillVrf                      | 2604  | 0       | 0        |
+|--------------------+---------------------------------+-------+---------+----------|
+| VRFHandler         | warpPastVrfTimeout              | 2431  | 0       | 0        |
+╰--------------------+---------------------------------+-------+---------+----------╯
+
+[PASS] invariant_wrapperBackingSufficient() (runs: 256, calls: 32768, reverts: 1423)
+
+╭--------------------+---------------------------------+-------+---------+----------╮
+| Contract           | Selector                        | Calls | Reverts | Discards |
++===================================================================================+
+| RedemptionHandler  | action_advanceDay               | 2553  | 580     | 0        |
+|--------------------+---------------------------------+-------+---------+----------|
+| RedemptionHandler  | action_burn                     | 2470  | 0       | 0        |
+|--------------------+---------------------------------+-------+---------+----------|
+| RedemptionHandler  | action_burnOnPreviousDay        | 2475  | 0       | 0        |
+|--------------------+---------------------------------+-------+---------+----------|
+| RedemptionHandler  | action_claim                    | 2488  | 277     | 0        |
+|--------------------+---------------------------------+-------+---------+----------|
+| RedemptionHandler  | action_settle                   | 2531  | 566     | 0        |
 |--------------------+---------------------------------+-------+---------+----------|
 | RedemptionHandler  | action_toggleStethFallback      | 2495  | 0       | 0        |
 |--------------------+---------------------------------+-------+---------+----------|
@@ -1984,7 +1984,7 @@ Ran 15 tests for test/fuzz/invariant/RedemptionInvariants.inv.t.sol:RedemptionIn
 [PASS] test_yearSweepOpensExactlyOneYearAfterGameOver() (gas: 983743)
 [PASS] test_yearSweepTakesAllSdgnrsMoneyAndEndsClaims() (gas: 1057128)
 [PASS] test_yearSweepWaitsForTheGamesFinalSweep() (gas: 990247)
-Suite result: ok. 15 passed; 0 failed; 0 skipped; finished in 254.42s (254.41s CPU time)
+Suite result: ok. 15 passed; 0 failed; 0 skipped; finished in 265.02s (265.01s CPU time)
 
 Ran 5 tests for test/fuzz/invariant/RngWindowFreeze.inv.t.sol:RngWindowFreeze
 [PASS] invariant_inWindowSloadsFrozen() (runs: 256, calls: 32768, reverts: 0)
@@ -2017,20 +2017,29 @@ Ran 5 tests for test/fuzz/invariant/RngWindowFreeze.inv.t.sol:RngWindowFreeze
 [PASS] test_invariantCatchesSeededInWindowMutation() (gas: 1863173)
 [PASS] test_invariantCatchesSeededMidDayMutation() (gas: 1620121)
 [PASS] test_midDayWindowIsExercised_nonVacuous() (gas: 2044703)
-Suite result: ok. 5 passed; 0 failed; 0 skipped; finished in 136.30s (136.29s CPU time)
+Suite result: ok. 5 passed; 0 failed; 0 skipped; finished in 130.45s (130.43s CPU time)
+
+Ran 6 tests for test/fuzz/helpers/RunFloors.t.sol:RunFloorsTest
+[PASS] test_ContractsKeepSeparateTallies() (gas: 365631)
+[PASS] test_FloorMetInFewerThanHalfFails() (gas: 128566)
+[PASS] test_FloorMetInHalfTheRunsPasses() (gas: 244816)
+[PASS] test_FloorNeverMetFailsOnceJudged() (gas: 127716)
+[PASS] test_InapplicableRunsAreNotCounted() (gas: 194188)
+[PASS] test_OneIdleRunDoesNotFail() (gas: 478336)
+Suite result: ok. 6 passed; 0 failed; 0 skipped; finished in 2.96ms (2.84ms CPU time)
 
 Ran 1 test for test/fuzz/handlers/SolvencyActionHandler.t.sol:SolvencyActionHandlerDegenesis
 [PASS] testDegenesisBuyEarnsCreditAndSplitsAtTheDailyRequest() (gas: 6477429)
-Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 12.36ms (7.46ms CPU time)
+Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 13.19ms (7.92ms CPU time)
 
 Ran 3 tests for test/fuzz/handlers/SolvencyActionHandler.t.sol:SolvencyActionHandlerShape
 [PASS] testActorsAreInDisjointRange() (gas: 36953)
 [PASS] testGhostCountersStartZero() (gas: 20076)
 [PASS] testTrackedAddrsIsCompleteCover() (gas: 27934)
-Suite result: ok. 3 passed; 0 failed; 0 skipped; finished in 4.40ms (71.56µs CPU time)
+Suite result: ok. 3 passed; 0 failed; 0 skipped; finished in 4.66ms (79.14µs CPU time)
 
 Ran 1 test for test/fuzz/TerminalLoanConservation.t.sol:TerminalLoanConservationTest
 [PASS] testFuzz_SettlementMovesNoEth(uint256) (runs: 1000, μ: 9263030, ~: 9263002)
-Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 7.58s (7.58s CPU time)
+Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 8.07s (8.07s CPU time)
 
-Ran 16 test suites in 2557.97s (2557.97s CPU time): 64 tests passed, 0 failed, 0 skipped (64 total tests)
+Ran 17 test suites in 2608.61s (2608.60s CPU time): 70 tests passed, 0 failed, 0 skipped (70 total tests)
