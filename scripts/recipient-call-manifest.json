@@ -5987,7 +5987,7 @@
     "path": "contracts/modules/CrapsBattleCore.sol",
     "scope": "CrapsBattleCore.buyFutureCrapsDays",
     "kind": "recipient-helper",
-    "expression": "_burnForCraps( account, _tag( uint256(count) * (high ? _HIGH_FUTURE_DAY_PRICE : _NORMAL_FUTURE_DAY_PRICE), _CRAPS_FLAG_PASS ) )",
+    "expression": "_burnForCraps( account, _tag( uint256(count) * (high ? _HIGH_FUTURE_DAY_PRICE : _NORMAL_FUTURE_DAY_PRICE), _CRAPS_FLAG_PASS | _CRAPS_FLAG_JOIN ) )",
     "count": 1,
     "review": "P9_COMPONENT_ROUTE: Relocated table helper or explicit pure-engine boundary. Validated/frozen slip terms and word reach the same engine implementation; payout recipients remain wallet IDs resolved by the pinned protocol, and settlement checkpoints retain their credit tail."
   },
