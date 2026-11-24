@@ -213,7 +213,7 @@ contract CrapsWalletIdsTest is CrapsPins {
     function test_firstContactRegistersBeforeTheBurnOnEveryPayingDoor() public {
         _open();
         uint64 custom = _customSlot(true);
-        uint8[4] memory flags = [uint8(0x1), 0x1, 0x7, 0x2];
+        uint8[4] memory flags = [uint8(0x1), 0x1, 0x7, 0x3];
         for (uint256 door; door < 4; ++door) {
             address p = makeAddr(string.concat("first-contact-", vm.toString(door)));
             assertEq(game.walletIdOf_g3120(p), 0, "fixture: fresh wallet");

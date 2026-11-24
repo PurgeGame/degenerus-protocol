@@ -311,7 +311,10 @@ jackpot phase whose tickets route to the current level, the paired check a prima
 purchase runs measures a Degenerette ETH secondary at the routed ticket price, while a bet and the
 quest views measure it at the next level's price; a bet below the displayed target that meets the
 target at the routed price can be completed by that purchase. A craps join or day pass first settles
-the account's missed days by syncing the streak on the Game's logical day.
+the account's missed days by syncing the streak on the Game's logical day. A paid
+`buyFutureCrapsDays` purchase reports both, once per purchase whatever its day count: a day pass
+toward the level quest and a join toward the current day's join quest, so a wallet already seated
+for the whole day can still finish it. Comp future days and `applyCrapsPasses` report neither.
 
 The Vault (wallet ID 1) and sDGNRS (ID 2) subscribe in their constructors at quantity 1 in box mode,
 burn no seat and cannot use ticket mode. The Vault owner can pause and resume the Vault's run;

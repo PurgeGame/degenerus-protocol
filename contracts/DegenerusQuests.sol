@@ -982,9 +982,9 @@ contract DegenerusQuests is IDegenerusQuests {
 
         // Sync the day-lapse state ONCE, before either quest leg, on the Game's logical day.
         // `_handleLevelQuestProgress` credits the streak on completion and never syncs; the
-        // streak and join legs re-enter the same sync idempotently. Without this the pass-only
-        // path — a `buyFutureCrapsDays` burn — would bump a streak that a missed day should
-        // have reset.
+        // streak and join legs re-enter the same sync idempotently. Without this a
+        // `buyFutureCrapsDays` burn, whose level-quest leg runs before its join leg, would bump a
+        // streak that a missed day should have reset.
         // One Game day read serves every leg of this call.
         uint24 gameDay = _questGameDay();
         if (gameDay != 0) _questSyncState(_questsStorage().questPlayerState[id], id, gameDay);

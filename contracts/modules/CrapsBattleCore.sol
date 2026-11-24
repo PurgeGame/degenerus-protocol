@@ -1018,6 +1018,10 @@ abstract contract CrapsBattleCore is CrapsBattleStorage {
     ///      The burn goes FIRST and the run is vetted as it is written; a day the run cannot
     ///      take reverts the whole call and the burn unwinds with it, so a rejected range still
     ///      costs nothing.
+    ///
+    ///      The burn reports a day pass and a join. The join counts toward TODAY's join quest, once
+    ///      per purchase whatever `count` is, which gives a wallet already seated for the whole day
+    ///      a paid way to finish it. It carries neither whole-day streak flag.
     /// @param startDay The first day to reserve. Every day in the run must be within tomorrow..today+30.
     /// @param count    How many consecutive days, 1..255.
     /// @param high     Whether these are high-roller days.
@@ -1038,7 +1042,7 @@ abstract contract CrapsBattleCore is CrapsBattleStorage {
                 account,
                 _tag(
                     uint256(count) * (high ? _HIGH_FUTURE_DAY_PRICE : _NORMAL_FUTURE_DAY_PRICE),
-                    _CRAPS_FLAG_PASS
+                    _CRAPS_FLAG_PASS | _CRAPS_FLAG_JOIN
                 )
             );
         }

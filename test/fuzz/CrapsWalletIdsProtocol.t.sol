@@ -161,7 +161,7 @@ contract CrapsWalletIdsProtocolTest is DeployProtocol {
         crapsBattle.buyFutureCrapsDays(day, 1, false, BOARD);
         Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
         uint256 betId = ((uint256(day) * 8) << 64) | crapsBattle.daySeatNumberOf(day, bob);
-        _gradeFirstContact(bob, betId, acc, vm.getRecordedLogs(), 0x2);
+        _gradeFirstContact(bob, betId, acc, vm.getRecordedLogs(), 0x3);
     }
 
     function test_aBoardSaveRequiresAnExistingAccount() public {
